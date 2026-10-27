@@ -7,6 +7,9 @@ export const envSchema = z.object({
     .default('3000')
     .transform((val) => parseInt(val, 10))
     .pipe(z.number().int().min(1).max(65535)),
+  KAFKA_BROKERS: z.string().min(1).default('localhost:9092'),
+  KAFKA_CLIENT_ID: z.string().min(1).default('producer-api'),
+  PURCHASE_TOPIC: z.string().min(1).default('purchase.events'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

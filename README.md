@@ -94,4 +94,5 @@ pnpm kafka:down
 - [x] **P0-01: Workspace Setup** — Monorepo foundation, strict TypeScript, ESLint 9 flat config, Vitest multi-project, NestJS shell with injectable configuration, smoke unit tests.
 - [x] **P0-02: Local Kafka Environment** — Single-node KRaft broker RF1, Kafka UI, persistent named volume, health checks, topic lifecycle verification script.
 - [x] **P0-03: Contracts Foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer.
-- [ ] **P1-01: HTTP Producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via Kafka client, awaits ack, returns stable response.
+- [x] **P1-01: HTTP Producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS with `acks=-1`, awaits ack, returns 202 Accepted with Kafka metadata. Real Kafka record confirmed with `key=customerId`.
+- [ ] **P1-02: Loyalty Consumer** — Independent worker subscribing to `purchase.events` in group `loyalty-v1`, calculating loyalty points fixture.
