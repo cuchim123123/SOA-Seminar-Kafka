@@ -95,4 +95,5 @@ pnpm kafka:down
 - [x] **P0-02: Local Kafka Environment** — Single-node KRaft broker RF1, Kafka UI, persistent named volume, health checks, topic lifecycle verification script.
 - [x] **P0-03: Contracts Foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer.
 - [x] **P1-01: HTTP Producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS with `acks=-1`, awaits ack, returns 202 Accepted with Kafka metadata. Real Kafka record confirmed with `key=customerId`.
-- [ ] **P1-02: Loyalty Consumer** — Independent worker subscribing to `purchase.events` in group `loyalty-v1`, calculating loyalty points fixture.
+- [x] **P1-02: Loyalty Consumer** — Independent worker subscribing to `purchase.events` in group `loyalty-v1`, calculating loyalty points fixture ($120/$200/$100 -> 82 points). Live broker integration test verified.
+- [ ] **P1-03: Phase 1 Smoke Script** — Reproducible end-to-end startup, purchase production, consumer verification, and broker inspection.
