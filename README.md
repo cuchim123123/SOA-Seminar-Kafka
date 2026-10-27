@@ -93,6 +93,12 @@ pnpm demo:reset --confirm
 
 # Run automated multi-customer ordered workload and 82-point verification
 pnpm demo:workload
+
+# Inspect live broker partition metadata, group lag, and key distribution (CLI)
+pnpm demo:partitions
+
+# Query live Kafka broker topic telemetry via REST API
+curl -s http://localhost:3000/api/v1/ops/kafka/topics/purchase.events
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -114,7 +120,8 @@ pnpm demo:workload
 │   ├── verify-kafka.mjs       # Automated Kafka readiness and topic lifecycle verification
 │   ├── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
 │   ├── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
-│   └── generate-ordered-workload.mjs # Multi-customer ordered load generator and 82-point verification
+│   ├── generate-ordered-workload.mjs # Multi-customer ordered load generator and 82-point verification
+│   └── inspect-partitions.mjs # Live partition inspector reporting actual broker metadata and key distribution
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling

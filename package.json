@@ -28,6 +28,8 @@
     "demo:reset": "node scripts/reset-topic.mjs",
     "demo:workload": "node scripts/generate-ordered-workload.mjs",
     "demo:workload:p2": "node scripts/generate-ordered-workload.mjs",
+    "demo:partitions": "node scripts/inspect-partitions.mjs",
+    "demo:partitions:p2": "node scripts/inspect-partitions.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
