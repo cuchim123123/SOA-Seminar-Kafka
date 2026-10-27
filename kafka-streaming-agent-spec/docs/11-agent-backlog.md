@@ -16,7 +16,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 - [x] **P1-01 HTTP producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS, awaits ack, returns stable response. **Proof:** a real Kafka record exists with `key=customerId` and reported metadata.
 - [x] **P1-02 Loyalty consumer** — NestJS/Node independent worker subscribes to one topic/group and logs broker-supplied `{eventId,key,topic,partition,offset}`; pure loyalty function calculates fixture points. **Proof:** API request yields correlated received event.
-- [ ] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafka UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
+- [x] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafka UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
 
 ## Phase 2 — Partitioning and ordering
 

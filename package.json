@@ -23,6 +23,8 @@
     "kafka:logs": "docker compose logs -f kafka",
     "kafka:status": "docker compose ps",
     "kafka:verify": "node scripts/verify-kafka.mjs",
+    "demo:smoke": "node scripts/smoke-phase1.mjs",
+    "demo:smoke:p1": "node scripts/smoke-phase1.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
