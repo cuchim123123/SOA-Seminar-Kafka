@@ -1,0 +1,43 @@
+{
+  "name": "kafka-streaming-lab",
+  "version": "0.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,mjs,json}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,mjs,json}\" --ignore-path .gitignore",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:integration": "echo \"No integration tests yet — added in P4-01\"",
+    "test:watch": "vitest",
+    "kafka:up": "docker compose up -d",
+    "kafka:down": "docker compose down",
+    "kafka:logs": "docker compose logs -f kafka",
+    "kafka:status": "docker compose ps",
+    "kafka:verify": "node scripts/verify-kafka.mjs",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^9.18.0",
+    "@swc/core": "^1.10.7",
+    "@types/node": "^22.10.7",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.4.2",
+    "typescript": "~5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "unplugin-swc": "^1.5.1",
+    "vitest": "^2.1.8"
+  }
+}
