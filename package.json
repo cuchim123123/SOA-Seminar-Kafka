@@ -26,6 +26,8 @@
     "demo:smoke": "node scripts/smoke-phase1.mjs",
     "demo:smoke:p1": "node scripts/smoke-phase1.mjs",
     "demo:reset": "node scripts/reset-topic.mjs",
+    "demo:workload": "node scripts/generate-ordered-workload.mjs",
+    "demo:workload:p2": "node scripts/generate-ordered-workload.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

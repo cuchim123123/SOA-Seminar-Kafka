@@ -85,6 +85,16 @@ docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh \
   --group loyalty-v1
 ```
 
+### Phase 2: Partitioning & Ordering Demo
+
+```bash
+# Reset topic to 6 partitions (requires confirmation guardrail)
+pnpm demo:reset --confirm
+
+# Run automated multi-customer ordered workload and 82-point verification
+pnpm demo:workload
+```
+
 - **Kafka Broker (Host listener)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
 - **Kafka UI**: `http://localhost:8080`
@@ -103,7 +113,8 @@ docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 ├── scripts/
 │   ├── verify-kafka.mjs       # Automated Kafka readiness and topic lifecycle verification
 │   ├── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
-│   └── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
+│   ├── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
+│   └── generate-ordered-workload.mjs # Multi-customer ordered load generator and 82-point verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling

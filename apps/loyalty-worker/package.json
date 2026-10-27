@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.spec.ts\"",
-    "test:integration": "vitest run loyalty-consumer.integration.spec.ts",
+    "test:integration": "vitest run integration",
     "test:watch": "vitest"
   },
   "dependencies": {
