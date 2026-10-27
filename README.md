@@ -102,7 +102,8 @@ docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 │   └── contracts/             # Integration event schemas, Zod validation, factories, serializer
 ├── scripts/
 │   ├── verify-kafka.mjs       # Automated Kafka readiness and topic lifecycle verification
-│   └── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
+│   ├── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
+│   └── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
@@ -137,6 +138,6 @@ docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 - [x] **P1-03: Phase 1 Smoke Script** — Reproducible end-to-end startup, purchase production, consumer verification, and broker inspection (`pnpm demo:smoke`).
 
 ### Phase 2 — Partitioning and Ordering
-- [ ] **P2-01: Six-Partition Reset & Migration** — Explicit controlled reset recreating `purchase.events` with 6 partitions.
+- [x] **P2-01: Six-Partition Reset & Migration** — Explicit controlled reset recreating `purchase.events` with 6 partitions (`pnpm demo:reset -- --confirm`). Refuses unconfirmed reset.
 - [ ] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
 - [ ] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.

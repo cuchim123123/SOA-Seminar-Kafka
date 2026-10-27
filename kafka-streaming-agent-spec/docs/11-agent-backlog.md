@@ -20,7 +20,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 ## Phase 2 — Partitioning and ordering
 
-- [ ] **P2-01 Six-partition reset/migration** — Explicit destructive local reset and recreate `purchase.events` with six partitions, preserve stable key selection. **Proof:** metadata reports six; script refuses unconfirmed destructive reset.
+- [x] **P2-01 Six-partition reset/migration** — Explicit destructive local reset and recreate `purchase.events` with six partitions, preserve stable key selection. **Proof:** metadata reports six; script refuses unconfirmed destructive reset.
 - [ ] **P2-02 Ordered workload fixture** — Multi-customer load generator and stable per-customer sequences (in-memory/single instance clearly labelled Phase 2 limitation). **Proof:** U001 events all same partition in increasing offsets; calculated output 82.
 - [ ] **P2-03 Partition inspector** — CLI/API/compact dashboard section lists actual partitions, offsets and record-key distribution. **Proof:** live Kafka observations, no modulo guesses.
 
