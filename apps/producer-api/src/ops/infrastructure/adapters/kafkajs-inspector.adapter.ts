@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { StructuredLogger } from '@lab/observability';
 import { Admin, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
@@ -9,11 +10,15 @@ import {
 
 @Injectable()
 export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(KafkaJsInspectorAdapter.name);
+  private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly admin: Admin;
 
   constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {
+    this.logger = new StructuredLogger(KafkaJsInspectorAdapter.name, {
+      serviceName: 'producer-api',
+      format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
+    });
     this.kafka = new Kafka({
       clientId: `${this.config.kafkaClientId}-inspector`,
       brokers: this.config.kafkaBrokers,
@@ -22,15 +27,15 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
   }
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('Connecting KafkaJS admin client for ops inspection...');
+    this.logger.info('Connecting KafkaJS admin client for ops inspection...');
     await this.admin.connect();
-    this.logger.log('KafkaJS admin client connected');
+    this.logger.info('KafkaJS admin client connected');
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Disconnecting KafkaJS admin client...');
+    this.logger.info('Disconnecting KafkaJS admin client...');
     await this.admin.disconnect();
-    this.logger.log('KafkaJS admin client disconnected');
+    this.logger.info('KafkaJS admin client disconnected');
   }
 
   async inspectTopic(topic: string): Promise<TopicInspectionResult> {

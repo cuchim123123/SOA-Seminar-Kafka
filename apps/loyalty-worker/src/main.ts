@@ -1,18 +1,32 @@
 import 'reflect-metadata';
-import { Logger } from '@nestjs/common';
+import {
+  GlobalHttpExceptionFilter,
+  HttpLoggingInterceptor,
+  StructuredLogger,
+} from '@lab/observability';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { AppConfigService } from './config/app-config.service';
 
 async function bootstrap(): Promise<void> {
-  const logger = new Logger('LoyaltyWorkerBootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const config = app.get(AppConfigService);
 
+  const structuredLogger = new StructuredLogger('LoyaltyWorker', {
+    serviceName: 'loyalty-worker',
+    format: config.nodeEnv === 'production' ? 'json' : 'pretty',
+  });
+
+  app.useLogger(structuredLogger);
+  app.useGlobalFilters(new GlobalHttpExceptionFilter(structuredLogger));
+  app.useGlobalInterceptors(new HttpLoggingInterceptor(structuredLogger));
   app.enableShutdownHooks();
 
-  const config = app.get(AppConfigService);
   await app.listen(config.port);
-  logger.log(`Loyalty Worker listening on port ${config.port} in ${config.nodeEnv} mode`);
+  structuredLogger.info('Loyalty Worker started successfully', {
+    port: config.port,
+    environment: config.nodeEnv,
+  });
 }
 
 bootstrap().catch((err: unknown) => {

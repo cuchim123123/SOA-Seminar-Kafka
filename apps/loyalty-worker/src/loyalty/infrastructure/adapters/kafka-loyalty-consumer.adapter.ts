@@ -1,5 +1,6 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { deserializeEnvelope } from '@lab/contracts';
+import { processKafkaRecord, StructuredLogger } from '@lab/observability';
 import { Consumer, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import { ApplyPurchaseEventCommand } from '../../application/commands/apply-purchase-event.command';
@@ -7,7 +8,7 @@ import { ApplyPurchaseEventHandler } from '../../application/commands/apply-purc
 
 @Injectable()
 export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(KafkaLoyaltyConsumerAdapter.name);
+  private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   private readonly topic: string;
@@ -18,6 +19,10 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
     @Inject(ApplyPurchaseEventHandler)
     private readonly handler: ApplyPurchaseEventHandler,
   ) {
+    this.logger = new StructuredLogger(KafkaLoyaltyConsumerAdapter.name, {
+      serviceName: 'loyalty-worker',
+      format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
+    });
     this.topic = this.config.purchaseTopic;
     this.kafka = new Kafka({
       clientId: this.config.kafkaClientId,
@@ -29,65 +34,67 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
   }
 
   async onModuleInit(): Promise<void> {
-    this.logger.log(
-      `Connecting Loyalty consumer [groupId=${this.config.kafkaGroupId}] to brokers: ${this.config.kafkaBrokers.join(', ')}...`,
-    );
+    this.logger.info('Connecting Loyalty Kafka consumer to brokers...', {
+      brokers: this.config.kafkaBrokers,
+      groupId: this.config.kafkaGroupId,
+      topic: this.topic,
+    });
     await this.consumer.connect();
     await this.consumer.subscribe({
       topic: this.topic,
       fromBeginning: true,
     });
 
-    this.logger.log(
-      `Loyalty consumer subscribed to topic '${this.topic}' with groupId '${this.config.kafkaGroupId}'. Starting message consumption...`,
-    );
+    this.logger.info('Loyalty consumer subscribed and started message loop', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
 
     await this.consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        const rawValue = message.value?.toString();
-        const key = message.key?.toString() ?? '<null>';
-        const offset = message.offset;
-
-        if (!rawValue) {
-          this.logger.warn(
-            `Received empty message payload from topic=${topic} partition=${partition} offset=${offset}`,
-          );
-          return;
-        }
-
-        try {
-          const envelope = deserializeEnvelope(rawValue);
-
-          this.logger.log(
-            `[KafkaBrokerMetadata] Received record: key=${key}, topic=${topic}, partition=${partition}, offset=${offset}, eventId=${envelope.eventId}, eventType=${envelope.eventType}`,
-          );
-
-          if (envelope.eventType === 'PurchaseCompleted') {
-            const command = new ApplyPurchaseEventCommand({
-              eventId: envelope.eventId,
-              customerId: envelope.payload.customerId,
-              purchaseId: envelope.payload.purchaseId,
-              amountCents: envelope.payload.amountCents,
-              customerSequence: envelope.customerSequence,
-              correlationId: envelope.correlationId,
-            });
-            const result = await this.handler.execute(command);
-            this.logger.log(
-              `[KafkaLoyaltyConsumer] Applied event ${result.eventId} from topic=${topic} [p=${partition}, offset=${offset}]: customer=${result.customerId}, earned=${result.pointsEarned}, total=${result.totalPoints}`,
-            );
-          }
-        } catch (err: unknown) {
-          this.logger.error(
-            `Error processing message from topic=${topic} partition=${partition} offset=${offset}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
+        await processKafkaRecord({
+          topic,
+          partition,
+          offset: message.offset,
+          key: message.key?.toString(),
+          rawValue: message.value?.toString(),
+          logger: this.logger,
+          consumerGroupId: this.config.kafkaGroupId,
+          deserializer: deserializeEnvelope,
+          handler: async (envelope) => {
+            if (envelope.eventType === 'PurchaseCompleted') {
+              const command = new ApplyPurchaseEventCommand({
+                eventId: envelope.eventId,
+                customerId: envelope.payload.customerId,
+                purchaseId: envelope.payload.purchaseId,
+                amountCents: envelope.payload.amountCents,
+                customerSequence: envelope.customerSequence,
+                correlationId: envelope.correlationId,
+              });
+              const result = await this.handler.execute(command);
+              return {
+                eventId: result.eventId,
+                customerId: result.customerId,
+                pointsEarned: result.pointsEarned,
+                totalPoints: result.totalPoints,
+                currentTier: result.currentTier,
+              };
+            }
+            return {
+              eventType: (envelope as { eventType?: string }).eventType,
+              ignored: true,
+            };
+          },
+        });
       },
     });
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Disconnecting Loyalty Kafka consumer...');
+    this.logger.info('Disconnecting Loyalty Kafka consumer...', {
+      groupId: this.config.kafkaGroupId,
+    });
     await this.consumer.disconnect();
-    this.logger.log('Loyalty Kafka consumer disconnected');
+    this.logger.info('Loyalty Kafka consumer disconnected');
   }
 }

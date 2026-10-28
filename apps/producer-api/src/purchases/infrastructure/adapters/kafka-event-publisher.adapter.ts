@@ -1,10 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Kafka, Partitioners, Producer, RecordMetadata } from 'kafkajs';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   getEventPartitionKey,
   IntegrationEventEnvelopeV1,
   serializeEnvelope,
 } from '@lab/contracts';
+import { StructuredLogger } from '@lab/observability';
+import { Kafka, Partitioners, Producer, RecordMetadata } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import { EventPublisherPort, PublishResult } from '../../application/ports/event-publisher.port';
 
@@ -12,12 +13,16 @@ import { EventPublisherPort, PublishResult } from '../../application/ports/event
 export class KafkaEventPublisherAdapter
   implements EventPublisherPort, OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(KafkaEventPublisherAdapter.name);
+  private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly producer: Producer;
   private readonly topic: string;
 
   constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {
+    this.logger = new StructuredLogger(KafkaEventPublisherAdapter.name, {
+      serviceName: 'producer-api',
+      format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
+    });
     this.topic = this.config.purchaseTopic;
     this.kafka = new Kafka({
       clientId: this.config.kafkaClientId,
@@ -30,17 +35,18 @@ export class KafkaEventPublisherAdapter
   }
 
   async onModuleInit(): Promise<void> {
-    this.logger.log(
-      `Connecting Kafka producer to brokers: ${this.config.kafkaBrokers.join(', ')}...`,
-    );
+    this.logger.info('Connecting Kafka producer to brokers...', {
+      brokers: this.config.kafkaBrokers,
+      topic: this.topic,
+    });
     await this.producer.connect();
-    this.logger.log('Kafka producer connected successfully');
+    this.logger.info('Kafka producer connected successfully');
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Disconnecting Kafka producer...');
+    this.logger.info('Disconnecting Kafka producer...');
     await this.producer.disconnect();
-    this.logger.log('Kafka producer disconnected');
+    this.logger.info('Kafka producer disconnected');
   }
 
   async publish(envelope: IntegrationEventEnvelopeV1): Promise<PublishResult> {

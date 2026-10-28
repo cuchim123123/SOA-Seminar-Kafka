@@ -16,7 +16,7 @@ describe('LoyaltyController', () => {
 
   it('returns loyalty account DTO when customer exists', async () => {
     const repository = new InMemoryLoyaltyAccountRepositoryAdapter();
-    const account = LoyaltyAccount.initializeNew('U001');
+    const account = LoyaltyAccount.create('U001');
     account.applyPurchase(12_000);
     await repository.save(account);
 

@@ -8,7 +8,7 @@ describe('InMemoryLoyaltyAccountRepositoryAdapter', () => {
 
     expect(await adapter.findByCustomerId('CUST_99')).toBeNull();
 
-    const account = LoyaltyAccount.initializeNew('CUST_99');
+    const account = LoyaltyAccount.create('CUST_99');
     account.applyPurchase(15_000);
     await adapter.save(account);
 

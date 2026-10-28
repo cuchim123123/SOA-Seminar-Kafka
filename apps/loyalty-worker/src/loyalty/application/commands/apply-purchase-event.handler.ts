@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { LoyaltyAccount } from '../../domain/loyalty-account.entity';
 import {
   LOYALTY_ACCOUNT_REPOSITORY_PORT,
@@ -11,8 +11,6 @@ import {
 
 @Injectable()
 export class ApplyPurchaseEventHandler {
-  private readonly logger = new Logger(ApplyPurchaseEventHandler.name);
-
   constructor(
     @Inject(LOYALTY_ACCOUNT_REPOSITORY_PORT)
     private readonly repository: LoyaltyAccountRepositoryPort,
@@ -23,15 +21,11 @@ export class ApplyPurchaseEventHandler {
 
     let account = await this.repository.findByCustomerId(customerId);
     if (!account) {
-      account = LoyaltyAccount.initializeNew(customerId);
+      account = LoyaltyAccount.create(customerId);
     }
 
     const outcome = account.applyPurchase(amountCents);
     await this.repository.save(account);
-
-    this.logger.log(
-      `[LoyaltyWorker] Processed eventId=${eventId} for customer=${customerId} -> earnedPoints=${outcome.pointsEarned}, currentTier=${outcome.newTier}, totalPoints=${outcome.totalPoints}`,
-    );
 
     return {
       eventId,

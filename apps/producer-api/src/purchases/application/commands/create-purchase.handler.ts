@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createPurchaseCompletedEnvelope, uuidv7 } from '@lab/contracts';
 import { Purchase } from '../../domain/purchase.entity';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../ports/unit-of-work.port';
@@ -6,15 +6,13 @@ import { CreatePurchaseCommand, CreatePurchaseResult } from './create-purchase.c
 
 @Injectable()
 export class CreatePurchaseHandler {
-  private readonly logger = new Logger(CreatePurchaseHandler.name);
-
   constructor(
     @Inject(UNIT_OF_WORK_PORT)
     private readonly unitOfWork: UnitOfWorkPort,
   ) {}
 
   async execute(command: CreatePurchaseCommand): Promise<CreatePurchaseResult> {
-    const result = await this.unitOfWork.execute(async (ctx) => {
+    return await this.unitOfWork.execute(async (ctx) => {
       // 1. Monotonic customer sequence allocated under transactional lock
       const customerSequence = await ctx.sequenceGenerator.nextSequence(command.customerId);
 
@@ -65,11 +63,5 @@ export class CreatePurchaseHandler {
         ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
       };
     });
-
-    this.logger.log(
-      `Committed Purchase & Outbox [purchaseId=${result.purchaseId}, customer=${result.customerId}, seq=${result.customerSequence}, eventId=${result.eventId}]`,
-    );
-
-    return result;
   }
 }

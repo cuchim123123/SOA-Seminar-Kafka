@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { StructuredLogger } from '@lab/observability';
 import {
   OUTBOX_REPOSITORY_PORT,
   OutboxRepositoryPort,
@@ -16,7 +17,9 @@ import { OutboxRelayService } from '../services/outbox-relay.service';
 
 @Injectable()
 export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
-  private readonly logger = new Logger(InMemoryUnitOfWorkAdapter.name);
+  private readonly logger = new StructuredLogger(InMemoryUnitOfWorkAdapter.name, {
+    serviceName: 'producer-api',
+  });
 
   constructor(
     @Inject(PURCHASE_REPOSITORY_PORT)

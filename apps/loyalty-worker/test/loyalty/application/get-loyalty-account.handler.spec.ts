@@ -16,7 +16,7 @@ describe('GetLoyaltyAccountHandler', () => {
 
   it('returns account details when account exists', async () => {
     const repository = new InMemoryLoyaltyAccountRepositoryAdapter();
-    const account = LoyaltyAccount.initializeNew('U001');
+    const account = LoyaltyAccount.create('U001');
     account.applyPurchase(12_000); // 12 points, SILVER
     await repository.save(account);
 

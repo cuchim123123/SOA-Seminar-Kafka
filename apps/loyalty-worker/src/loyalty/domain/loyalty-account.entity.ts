@@ -25,7 +25,7 @@ function assertNonEmptyCustomerId(customerId: string | undefined | null): string
 export class LoyaltyAccount {
   private constructor(private readonly props: LoyaltyAccountProps) {}
 
-  public static initializeNew(customerId: string): LoyaltyAccount {
+  public static create(customerId: string): LoyaltyAccount {
     return new LoyaltyAccount({
       customerId: assertNonEmptyCustomerId(customerId),
       tier: 'BRONZE',

@@ -6,7 +6,7 @@ import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.enti
 
 describe('ApplyPurchaseEventHandler', () => {
   it('loads existing account, calculates points, and persists updated state', async () => {
-    const existingAccount = LoyaltyAccount.initializeNew('U001');
+    const existingAccount = LoyaltyAccount.create('U001');
     existingAccount.applyPurchase(12_000); // 12 pts, Silver
 
     const mockRepo: LoyaltyAccountRepositoryPort = {

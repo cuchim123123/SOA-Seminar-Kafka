@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { StructuredLogger } from '@lab/observability';
 import {
   EVENT_PUBLISHER_PORT,
   EventPublisherPort,
@@ -10,7 +11,9 @@ import {
 
 @Injectable()
 export class OutboxRelayService {
-  private readonly logger = new Logger(OutboxRelayService.name);
+  private readonly logger = new StructuredLogger(OutboxRelayService.name, {
+    serviceName: 'producer-api',
+  });
   private isProcessing = false;
 
   constructor(
@@ -38,15 +41,23 @@ export class OutboxRelayService {
           await this.outboxRepository.markPublished(record.eventId, new Date().toISOString());
           processedCount++;
 
-          this.logger.log(
-            `Relayed Outbox event [eventId=${record.eventId}, aggregateId=${record.aggregateId}, seq=${record.customerSequence}] -> topic=${result.topic}, partition=${result.partition}, offset=${result.offset}`,
-          );
+          this.logger.info('Outbox event relayed successfully', {
+            eventId: record.eventId,
+            aggregateId: record.aggregateId,
+            customerSequence: record.customerSequence,
+            topic: result.topic,
+            partition: result.partition,
+            offset: result.offset,
+          });
         } catch (err: unknown) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           await this.outboxRepository.markFailed(record.eventId, errorMessage);
-          this.logger.error(
-            `Failed to relay Outbox event [eventId=${record.eventId}]: ${errorMessage}`,
-          );
+          this.logger.error('Failed to relay outbox event to Kafka broker', err, {
+            eventId: record.eventId,
+            aggregateId: record.aggregateId,
+            customerSequence: record.customerSequence,
+            error: errorMessage,
+          });
           // Stop processing further events to preserve sequential ordering invariant
           break;
         }

@@ -19,7 +19,8 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@lab/contracts": ["packages/contracts/src/index.ts"]
+      "@lab/contracts": ["packages/contracts/src/index.ts"],
+      "@lab/observability": ["packages/observability/src/index.ts"]
     }
   }
 }

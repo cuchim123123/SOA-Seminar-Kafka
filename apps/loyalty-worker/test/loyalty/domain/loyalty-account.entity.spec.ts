@@ -3,7 +3,7 @@ import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.enti
 
 describe('LoyaltyAccount Domain Entity', () => {
   it('correctly calculates canonical seminar fixture (U001: $120, $200, $100 -> 82 points)', () => {
-    const account = LoyaltyAccount.initializeNew('U001');
+    const account = LoyaltyAccount.create('U001');
     expect(account.tier).toBe('BRONZE');
     expect(account.pointsBalance).toBe(0);
     expect(account.totalEligibleSpendCents).toBe(0);
@@ -38,7 +38,7 @@ describe('LoyaltyAccount Domain Entity', () => {
   });
 
   it('rejects empty customerId on initialization', () => {
-    expect(() => LoyaltyAccount.initializeNew('')).toThrowError(/customerId must not be empty/);
-    expect(() => LoyaltyAccount.initializeNew('   ')).toThrowError(/customerId must not be empty/);
+    expect(() => LoyaltyAccount.create('')).toThrowError(/customerId must not be empty/);
+    expect(() => LoyaltyAccount.create('   ')).toThrowError(/customerId must not be empty/);
   });
 });
