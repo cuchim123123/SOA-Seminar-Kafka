@@ -19,22 +19,24 @@ export class ApplyPurchaseEventHandler {
   ) {}
 
   async execute(command: ApplyPurchaseEventCommand): Promise<ApplyPurchaseEventResult> {
-    let account = await this.repository.findByCustomerId(command.customerId);
+    const { customerId, amountCents, eventId, purchaseId } = command.data;
+
+    let account = await this.repository.findByCustomerId(customerId);
     if (!account) {
-      account = LoyaltyAccount.initializeNew(command.customerId);
+      account = LoyaltyAccount.initializeNew(customerId);
     }
 
-    const outcome = account.applyPurchase(command.amountCents);
+    const outcome = account.applyPurchase(amountCents);
     await this.repository.save(account);
 
     this.logger.log(
-      `[LoyaltyWorker] Processed eventId=${command.eventId} for customer=${command.customerId} -> earnedPoints=${outcome.pointsEarned}, currentTier=${outcome.newTier}, totalPoints=${outcome.totalPoints}`,
+      `[LoyaltyWorker] Processed eventId=${eventId} for customer=${customerId} -> earnedPoints=${outcome.pointsEarned}, currentTier=${outcome.newTier}, totalPoints=${outcome.totalPoints}`,
     );
 
     return {
-      eventId: command.eventId,
-      customerId: command.customerId,
-      purchaseId: command.purchaseId,
+      eventId,
+      customerId,
+      purchaseId,
       pointsEarned: outcome.pointsEarned,
       currentTier: outcome.newTier,
       totalPoints: outcome.totalPoints,

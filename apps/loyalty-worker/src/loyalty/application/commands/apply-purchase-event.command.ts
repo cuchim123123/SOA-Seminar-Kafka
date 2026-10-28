@@ -1,14 +1,16 @@
 import { Tier } from '../../domain/loyalty-policy';
 
+export interface ApplyPurchaseEventInput {
+  readonly eventId: string;
+  readonly customerId: string;
+  readonly purchaseId: string;
+  readonly amountCents: number;
+  readonly customerSequence: number;
+  readonly correlationId: string;
+}
+
 export class ApplyPurchaseEventCommand {
-  constructor(
-    public readonly eventId: string,
-    public readonly customerId: string,
-    public readonly purchaseId: string,
-    public readonly amountCents: number,
-    public readonly customerSequence: number,
-    public readonly correlationId: string,
-  ) {}
+  constructor(public readonly data: ApplyPurchaseEventInput) {}
 }
 
 export interface ApplyPurchaseEventResult {

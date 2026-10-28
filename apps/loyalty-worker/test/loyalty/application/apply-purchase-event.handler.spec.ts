@@ -15,14 +15,14 @@ describe('ApplyPurchaseEventHandler', () => {
     };
 
     const handler = new ApplyPurchaseEventHandler(mockRepo);
-    const command = new ApplyPurchaseEventCommand(
-      'evt_002',
-      'U001',
-      'pur_002',
-      20_000,
-      2,
-      'corr_002',
-    );
+    const command = new ApplyPurchaseEventCommand({
+      eventId: 'evt_002',
+      customerId: 'U001',
+      purchaseId: 'pur_002',
+      amountCents: 20_000,
+      customerSequence: 2,
+      correlationId: 'corr_002',
+    });
 
     const result = await handler.execute(command);
 
@@ -44,14 +44,14 @@ describe('ApplyPurchaseEventHandler', () => {
     };
 
     const handler = new ApplyPurchaseEventHandler(mockRepo);
-    const command = new ApplyPurchaseEventCommand(
-      'evt_001',
-      'U002',
-      'pur_001',
-      5_000,
-      1,
-      'corr_001',
-    );
+    const command = new ApplyPurchaseEventCommand({
+      eventId: 'evt_001',
+      customerId: 'U002',
+      purchaseId: 'pur_001',
+      amountCents: 5_000,
+      customerSequence: 1,
+      correlationId: 'corr_001',
+    });
 
     const result = await handler.execute(command);
 
