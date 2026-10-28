@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LoyaltyAccountRepositoryPort } from '../../application/ports/loyalty-account-repository.port';
-import { LoyaltyAccount } from '../../domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../domain/loyalty-account.entity';
 
 /**
  * In-memory loyalty account repository for Phase 1-3.

@@ -1,11 +1,9 @@
 import { pointsForPurchase, Tier, tierForEligibleSpend } from './loyalty-policy';
-
-export interface LoyaltyAccountProps {
-  readonly customerId: string;
-  tier: Tier;
-  totalEligibleSpendCents: number;
-  pointsBalance: number;
-}
+import {
+  customerIdSchema,
+  LoyaltyAccountProps,
+  loyaltyAccountPropsSchema,
+} from './loyalty-account.schema';
 
 export interface ApplyPurchaseResult {
   readonly pointsEarned: number;
@@ -18,20 +16,29 @@ export interface ApplyPurchaseResult {
 export class LoyaltyAccount {
   private constructor(private readonly props: LoyaltyAccountProps) {}
 
-  public static initializeNew(customerId: string): LoyaltyAccount {
-    if (!customerId || customerId.trim().length === 0) {
-      throw new Error('Loyalty account customerId must not be empty');
+  public static initializeNew(rawCustomerId: string): LoyaltyAccount {
+    const parseResult = customerIdSchema.safeParse(rawCustomerId);
+    if (!parseResult.success) {
+      const issue = parseResult.error.errors[0];
+      throw new Error(issue?.message ?? 'Loyalty account customerId must not be empty');
     }
+
     return new LoyaltyAccount({
-      customerId,
+      customerId: parseResult.data,
       tier: 'BRONZE',
       totalEligibleSpendCents: 0,
       pointsBalance: 0,
     });
   }
 
-  public static reconstitute(props: LoyaltyAccountProps): LoyaltyAccount {
-    return new LoyaltyAccount({ ...props });
+  public static reconstitute(rawProps: LoyaltyAccountProps): LoyaltyAccount {
+    const parseResult = loyaltyAccountPropsSchema.safeParse(rawProps);
+    if (!parseResult.success) {
+      const issue = parseResult.error.errors[0];
+      throw new Error(issue?.message ?? 'Invalid loyalty account properties');
+    }
+
+    return new LoyaltyAccount({ ...parseResult.data });
   }
 
   get customerId(): string {

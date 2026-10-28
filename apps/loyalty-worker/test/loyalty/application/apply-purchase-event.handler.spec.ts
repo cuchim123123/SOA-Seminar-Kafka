@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApplyPurchaseEventCommand } from '../../../src/loyalty/application/commands/apply-purchase-event.command';
 import { ApplyPurchaseEventHandler } from '../../../src/loyalty/application/commands/apply-purchase-event.handler';
 import { LoyaltyAccountRepositoryPort } from '../../../src/loyalty/application/ports/loyalty-account-repository.port';
-import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.entity';
 
 describe('ApplyPurchaseEventHandler', () => {
   it('loads existing account, calculates points, and persists updated state', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.entity';
 
-describe('LoyaltyAccount Domain Model', () => {
+describe('LoyaltyAccount Domain Entity', () => {
   it('correctly calculates canonical seminar fixture (U001: $120, $200, $100 -> 82 points)', () => {
     const account = LoyaltyAccount.initializeNew('U001');
     expect(account.tier).toBe('BRONZE');

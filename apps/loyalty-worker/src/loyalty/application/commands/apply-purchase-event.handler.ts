@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { LoyaltyAccount } from '../../domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../domain/loyalty-account.entity';
 import {
   LOYALTY_ACCOUNT_REPOSITORY_PORT,
   LoyaltyAccountRepositoryPort,

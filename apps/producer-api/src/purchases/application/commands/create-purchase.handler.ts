@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { createPurchaseCompletedEnvelope } from '@lab/contracts';
-import { Purchase } from '../../domain/purchase.model';
+import { Purchase } from '../../domain/purchase.entity';
 import { EVENT_PUBLISHER_PORT, EventPublisherPort } from '../ports/event-publisher.port';
 import { SEQUENCE_GENERATOR_PORT, SequenceGeneratorPort } from '../ports/sequence-generator.port';
 import { CreatePurchaseCommand, CreatePurchaseResult } from './create-purchase.command';

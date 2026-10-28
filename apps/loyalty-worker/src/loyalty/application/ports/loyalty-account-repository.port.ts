@@ -1,4 +1,4 @@
-import { LoyaltyAccount } from '../../domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../domain/loyalty-account.entity';
 
 export const LOYALTY_ACCOUNT_REPOSITORY_PORT = Symbol('LOYALTY_ACCOUNT_REPOSITORY_PORT');
 

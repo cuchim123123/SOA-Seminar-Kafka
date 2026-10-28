@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.model';
+import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.entity';
 import { InMemoryLoyaltyAccountRepositoryAdapter } from '../../../src/loyalty/infrastructure/adapters/in-memory-loyalty-account-repository.adapter';
 
 describe('InMemoryLoyaltyAccountRepositoryAdapter', () => {

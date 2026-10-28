@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Purchase } from '../../../src/purchases/domain/purchase.model';
+import { Purchase } from '../../../src/purchases/domain/purchase.entity';
 
-describe('Purchase Domain Model', () => {
+describe('Purchase Domain Entity', () => {
   it('creates a valid purchase when all invariants are satisfied', () => {
     const purchase = Purchase.create({
       purchaseId: 'pur_123',
