@@ -1,9 +1,11 @@
 import { pointsForPurchase, Tier, tierForEligibleSpend } from './loyalty-policy';
-import {
-  customerIdSchema,
-  LoyaltyAccountProps,
-  loyaltyAccountPropsSchema,
-} from './loyalty-account.schema';
+
+export interface LoyaltyAccountProps {
+  readonly customerId: string;
+  tier: Tier;
+  totalEligibleSpendCents: number;
+  pointsBalance: number;
+}
 
 export interface ApplyPurchaseResult {
   readonly pointsEarned: number;
@@ -13,32 +15,32 @@ export interface ApplyPurchaseResult {
   readonly totalPoints: number;
 }
 
+function assertNonEmptyCustomerId(customerId: string | undefined | null): string {
+  if (!customerId || customerId.trim().length === 0) {
+    throw new Error('Loyalty account customerId must not be empty');
+  }
+  return customerId.trim();
+}
+
 export class LoyaltyAccount {
   private constructor(private readonly props: LoyaltyAccountProps) {}
 
-  public static initializeNew(rawCustomerId: string): LoyaltyAccount {
-    const parseResult = customerIdSchema.safeParse(rawCustomerId);
-    if (!parseResult.success) {
-      const issue = parseResult.error.errors[0];
-      throw new Error(issue?.message ?? 'Loyalty account customerId must not be empty');
-    }
-
+  public static initializeNew(customerId: string): LoyaltyAccount {
     return new LoyaltyAccount({
-      customerId: parseResult.data,
+      customerId: assertNonEmptyCustomerId(customerId),
       tier: 'BRONZE',
       totalEligibleSpendCents: 0,
       pointsBalance: 0,
     });
   }
 
-  public static reconstitute(rawProps: LoyaltyAccountProps): LoyaltyAccount {
-    const parseResult = loyaltyAccountPropsSchema.safeParse(rawProps);
-    if (!parseResult.success) {
-      const issue = parseResult.error.errors[0];
-      throw new Error(issue?.message ?? 'Invalid loyalty account properties');
-    }
-
-    return new LoyaltyAccount({ ...parseResult.data });
+  public static reconstitute(props: LoyaltyAccountProps): LoyaltyAccount {
+    return new LoyaltyAccount({
+      customerId: assertNonEmptyCustomerId(props.customerId),
+      tier: props.tier,
+      totalEligibleSpendCents: props.totalEligibleSpendCents,
+      pointsBalance: props.pointsBalance,
+    });
   }
 
   get customerId(): string {
