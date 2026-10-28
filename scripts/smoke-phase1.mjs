@@ -138,18 +138,22 @@ async function main() {
       throw new Error(`Expected requestStatus 'ACCEPTED', got '${responseBody.requestStatus}'`);
     }
 
-    // 6. Inspect Kafka record using Kafka CLI
+    // 6. Inspect Kafka record using Kafka CLI directly on the broker
     console.log(
-      `[Smoke P1] Verifying record on Kafka broker partition ${responseBody.partition} offset ${responseBody.offset}...`,
+      `[Smoke P1] Verifying record on Kafka broker for eventId '${responseBody.eventId}'...`,
     );
     const { stdout: recordOutput } = await execAsync(
-      `docker compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic ${TOPIC} --partition ${responseBody.partition} --offset ${responseBody.offset} --max-messages 1 --property print.key=true --property key.separator=" | "`,
+      `docker compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic ${TOPIC} --from-beginning --max-messages 50 --property print.key=true --property key.separator=" | "`,
     );
 
-    console.log(`[Smoke P1] Broker record output: ${recordOutput.trim()}`);
-    if (!recordOutput.includes(testCustomerId)) {
-      throw new Error(`Kafka record key does not contain expected customerId '${testCustomerId}'`);
+    if (!recordOutput.includes(testCustomerId) || !recordOutput.includes(responseBody.eventId)) {
+      throw new Error(
+        `Kafka record key does not contain expected customerId '${testCustomerId}' or eventId '${responseBody.eventId}'`,
+      );
     }
+    console.log(
+      `[Smoke P1] Verified event '${responseBody.eventId}' reached Kafka broker topic '${TOPIC}' with key '${testCustomerId}'.`,
+    );
 
     // 7. Inspect Loyalty Consumer Group status on broker
     console.log('[Smoke P1] Inspecting consumer group offset progress on broker...');

@@ -1,5 +1,6 @@
 import { spawn, exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Kafka } from 'kafkajs';
 
 const execAsync = promisify(exec);
 
@@ -172,8 +173,70 @@ async function main() {
     u001Events.push(resp3);
     allRecords.push({ customerId: targetCustomer, ...resp3 });
 
-    // 4. Assert & Display Proof 1 & 2: Same partition & ascending offsets for U001
-    console.log('\n--- VERIFICATION 1: Ordered Sequence for U001 ---');
+    // 4. Inspect Kafka Broker for Emitted Events
+    console.log(
+      '\n[Workload P2] Querying Kafka broker directly to inspect assigned partitions and offsets...',
+    );
+    const kafka = new Kafka({
+      clientId: `workload-verifier-${Date.now()}`,
+      brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',').map((b) => b.trim()),
+    });
+    const verifierConsumer = kafka.consumer({
+      groupId: `workload-verifier-${Date.now()}`,
+      maxWaitTimeInMs: 100,
+    });
+    await verifierConsumer.connect();
+    await verifierConsumer.subscribe({ topic: TOPIC, fromBeginning: true });
+
+    const eventIdMap = new Map();
+    const targetEventIds = new Set(allRecords.map((r) => r.eventId));
+
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 6000);
+      verifierConsumer
+        .run({
+          eachMessage: async ({ partition, message }) => {
+            try {
+              const parsed = JSON.parse(message.value.toString('utf-8'));
+              if (targetEventIds.has(parsed.eventId)) {
+                eventIdMap.set(parsed.eventId, {
+                  partition,
+                  offset: message.offset,
+                  key: message.key?.toString() ?? '',
+                });
+                if (eventIdMap.size >= targetEventIds.size) {
+                  clearTimeout(timer);
+                  resolve();
+                }
+              }
+            } catch {
+              // ignore unparseable
+            }
+          },
+        })
+        .catch(() => resolve());
+    });
+
+    await verifierConsumer.disconnect();
+
+    // Enrich u001Events and allRecords with broker metadata
+    for (const evt of u001Events) {
+      const broker = eventIdMap.get(evt.eventId);
+      if (broker) {
+        evt.partition = broker.partition;
+        evt.offset = broker.offset;
+      }
+    }
+    for (const rec of allRecords) {
+      const broker = eventIdMap.get(rec.eventId);
+      if (broker) {
+        rec.partition = broker.partition;
+        rec.offset = broker.offset;
+      }
+    }
+
+    // 5. Assert & Display Proof 1 & 2: Same partition & ascending offsets for U001
+    console.log('\n--- VERIFICATION 1: Ordered Sequence for U001 (Broker Observed) ---');
     console.table(
       u001Events.map((evt, idx) => ({
         Sequence: idx + 1,

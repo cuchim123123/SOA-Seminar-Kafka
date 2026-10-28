@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, HttpStatus, Inject, Post, UsePipes } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Post,
+  UsePipes,
+} from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CreatePurchaseCommand } from '../../application/commands/create-purchase.command';
 import { CreatePurchaseHandler } from '../../application/commands/create-purchase.handler';
@@ -15,8 +24,17 @@ export class PurchasesController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @UsePipes(new ZodValidationPipe(createPurchaseSchema))
-  async createPurchase(@Body() dto: CreatePurchaseDto): Promise<PurchaseAcceptedResponseDto> {
-    const command = new CreatePurchaseCommand(dto.customerId, dto.amountCents, dto.correlationId);
+  async createPurchase(
+    @Body() dto: CreatePurchaseDto,
+    @Headers('idempotency-key') idempotencyKeyHeader?: string,
+  ): Promise<PurchaseAcceptedResponseDto> {
+    const idempotencyKey = idempotencyKeyHeader ?? dto.idempotencyKey;
+    const command = new CreatePurchaseCommand(
+      dto.customerId,
+      dto.amountCents,
+      dto.correlationId,
+      idempotencyKey,
+    );
     const result = await this.createPurchaseHandler.execute(command);
 
     return {
@@ -24,8 +42,6 @@ export class PurchasesController {
       requestStatus: 'ACCEPTED',
       eventId: result.eventId,
       correlationId: result.correlationId,
-      partition: result.kafkaMetadata.partition,
-      offset: result.kafkaMetadata.offset,
     };
   }
 }

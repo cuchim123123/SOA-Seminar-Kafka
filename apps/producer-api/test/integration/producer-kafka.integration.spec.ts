@@ -88,21 +88,26 @@ describe('Kafka Producer Integration Test', () => {
       amountCents: testAmountCents,
     });
 
-    // Verify HTTP 202 Accepted response shape
+    // Verify HTTP 202 Accepted response shape (decoupled from Kafka transport internals)
     expect(response.requestStatus).toBe('ACCEPTED');
-    expect(response.purchaseId).toMatch(/^pur_/);
-    expect(typeof response.eventId).toBe('string');
-    expect(typeof response.correlationId).toBe('string');
-    expect(typeof response.partition).toBe('number');
-    expect(typeof response.offset).toBe('string');
+    expect(response.purchaseId).toMatch(
+      /^pur_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(response.eventId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(response.correlationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
 
     // Await message confirmation from Kafka consumer
     const receivedRecord = await receivedRecordPromise;
 
-    // Invariant Proof: Kafka key equals customerId
+    // Invariant Proof: Kafka key equals customerId and broker assigned partition/offset
     expect(receivedRecord.key).toBe(testCustomerId);
-    expect(receivedRecord.partition).toBe(response.partition);
-    expect(receivedRecord.offset).toBe(response.offset);
+    expect(typeof receivedRecord.partition).toBe('number');
+    expect(typeof receivedRecord.offset).toBe('string');
+    expect(BigInt(receivedRecord.offset)).toBeGreaterThanOrEqual(0n);
 
     // Invariant Proof: Payload and envelope deserialization
     const envelope = deserializeEnvelope(receivedRecord.value);

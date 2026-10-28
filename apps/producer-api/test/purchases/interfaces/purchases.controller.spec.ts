@@ -15,34 +15,36 @@ describe('PurchasesController & ZodValidationPipe', () => {
           customerId: cmd.customerId,
           amountCents: cmd.amountCents,
           customerSequence: 1,
-          eventId: 'evt_123',
+          eventId: '01a18192-9c94-7d7b-952b-02265a63bac4',
           correlationId: cmd.correlationId ?? 'cor_123',
-          kafkaMetadata: {
-            topic: 'purchase.events',
-            partition: 0,
-            offset: '5',
-          },
+          idempotencyKey: cmd.idempotencyKey,
         })),
       } as unknown as CreatePurchaseHandler;
 
       const controller = new PurchasesController(mockHandler);
-      const response = await controller.createPurchase({
-        customerId: 'CUST_1',
-        amountCents: 2000,
-        correlationId: '11111111-1111-4111-8111-111111111111',
-      });
+      const response = await controller.createPurchase(
+        {
+          customerId: 'CUST_1',
+          amountCents: 2000,
+          correlationId: '01a18192-9c94-7d7b-952b-02265a63bac4',
+        },
+        'idem-header-001',
+      );
 
       expect(mockHandler.execute).toHaveBeenCalledWith(
-        new CreatePurchaseCommand('CUST_1', 2000, '11111111-1111-4111-8111-111111111111'),
+        new CreatePurchaseCommand(
+          'CUST_1',
+          2000,
+          '01a18192-9c94-7d7b-952b-02265a63bac4',
+          'idem-header-001',
+        ),
       );
 
       expect(response).toEqual({
         purchaseId: 'pur_xyz',
         requestStatus: 'ACCEPTED',
-        eventId: 'evt_123',
-        correlationId: '11111111-1111-4111-8111-111111111111',
-        partition: 0,
-        offset: '5',
+        eventId: '01a18192-9c94-7d7b-952b-02265a63bac4',
+        correlationId: '01a18192-9c94-7d7b-952b-02265a63bac4',
       });
     });
   });
