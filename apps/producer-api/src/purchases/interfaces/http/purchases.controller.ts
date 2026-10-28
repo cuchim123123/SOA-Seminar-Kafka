@@ -29,12 +29,12 @@ export class PurchasesController {
     @Headers('idempotency-key') idempotencyKeyHeader?: string,
   ): Promise<PurchaseAcceptedResponseDto> {
     const idempotencyKey = idempotencyKeyHeader ?? dto.idempotencyKey;
-    const command = new CreatePurchaseCommand(
-      dto.customerId,
-      dto.amountCents,
-      dto.correlationId,
+    const command = new CreatePurchaseCommand({
+      customerId: dto.customerId,
+      amountCents: dto.amountCents,
+      correlationId: dto.correlationId,
       idempotencyKey,
-    );
+    });
     const result = await this.createPurchaseHandler.execute(command);
 
     return {

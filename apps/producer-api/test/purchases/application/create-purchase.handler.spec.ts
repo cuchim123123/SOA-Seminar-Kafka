@@ -52,7 +52,10 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
 
     const handler = new CreatePurchaseHandler(mockUnitOfWork);
 
-    const command = new CreatePurchaseCommand('CUST_U001', 3500);
+    const command = new CreatePurchaseCommand({
+      customerId: 'CUST_U001',
+      amountCents: 3500,
+    });
     const result = await handler.execute(command);
 
     const UUIDV7_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -132,12 +135,12 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
 
     const handler = new CreatePurchaseHandler(mockUnitOfWork);
 
-    const command = new CreatePurchaseCommand(
-      'CUST_U002',
-      1200,
-      fixedCorrelationId,
+    const command = new CreatePurchaseCommand({
+      customerId: 'CUST_U002',
+      amountCents: 1200,
+      correlationId: fixedCorrelationId,
       idempotencyKey,
-    );
+    });
     const result = await handler.execute(command);
 
     expect(result.correlationId).toBe(fixedCorrelationId);

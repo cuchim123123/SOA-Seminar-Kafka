@@ -12,12 +12,12 @@ describe('PurchasesController & ZodValidationPipe', () => {
       const mockHandler = {
         execute: vi.fn(async (cmd: CreatePurchaseCommand) => ({
           purchaseId: 'pur_xyz',
-          customerId: cmd.customerId,
-          amountCents: cmd.amountCents,
+          customerId: cmd.data.customerId,
+          amountCents: cmd.data.amountCents,
           customerSequence: 1,
           eventId: '01a18192-9c94-7d7b-952b-02265a63bac4',
-          correlationId: cmd.correlationId ?? 'cor_123',
-          idempotencyKey: cmd.idempotencyKey,
+          correlationId: cmd.data.correlationId ?? 'cor_123',
+          idempotencyKey: cmd.data.idempotencyKey,
         })),
       } as unknown as CreatePurchaseHandler;
 
@@ -32,12 +32,12 @@ describe('PurchasesController & ZodValidationPipe', () => {
       );
 
       expect(mockHandler.execute).toHaveBeenCalledWith(
-        new CreatePurchaseCommand(
-          'CUST_1',
-          2000,
-          '01a18192-9c94-7d7b-952b-02265a63bac4',
-          'idem-header-001',
-        ),
+        new CreatePurchaseCommand({
+          customerId: 'CUST_1',
+          amountCents: 2000,
+          correlationId: '01a18192-9c94-7d7b-952b-02265a63bac4',
+          idempotencyKey: 'idem-header-001',
+        }),
       );
 
       expect(response).toEqual({

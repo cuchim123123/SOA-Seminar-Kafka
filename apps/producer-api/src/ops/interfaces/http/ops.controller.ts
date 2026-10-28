@@ -12,6 +12,6 @@ export class OpsController {
 
   @Get('kafka/topics/:topic')
   async inspectTopic(@Param('topic') topic: string): Promise<TopicInspectionResult> {
-    return this.inspectTopicHandler.execute(new InspectTopicQuery(topic));
+    return this.inspectTopicHandler.execute(new InspectTopicQuery({ topic }));
   }
 }

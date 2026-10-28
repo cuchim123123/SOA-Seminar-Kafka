@@ -14,6 +14,6 @@ export class InspectTopicHandler {
   ) {}
 
   async execute(query: InspectTopicQuery): Promise<TopicInspectionResult> {
-    return this.inspector.inspectTopic(query.topic);
+    return this.inspector.inspectTopic(query.data.topic);
   }
 }

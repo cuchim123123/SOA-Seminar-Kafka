@@ -9,7 +9,9 @@ describe('GetLoyaltyAccountHandler', () => {
     const repository = new InMemoryLoyaltyAccountRepositoryAdapter();
     const handler = new GetLoyaltyAccountHandler(repository);
 
-    const result = await handler.execute(new GetLoyaltyAccountQuery('NON_EXISTENT'));
+    const result = await handler.execute(
+      new GetLoyaltyAccountQuery({ customerId: 'NON_EXISTENT' }),
+    );
 
     expect(result).toBeNull();
   });
@@ -21,7 +23,7 @@ describe('GetLoyaltyAccountHandler', () => {
     await repository.save(account);
 
     const handler = new GetLoyaltyAccountHandler(repository);
-    const result = await handler.execute(new GetLoyaltyAccountQuery('U001'));
+    const result = await handler.execute(new GetLoyaltyAccountQuery({ customerId: 'U001' }));
 
     expect(result).not.toBeNull();
     expect(result?.customerId).toBe('U001');

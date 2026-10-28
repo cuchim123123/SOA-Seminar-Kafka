@@ -12,19 +12,21 @@ export class CreatePurchaseHandler {
   ) {}
 
   async execute(command: CreatePurchaseCommand): Promise<CreatePurchaseResult> {
+    const { customerId, amountCents, correlationId, idempotencyKey } = command.data;
+
     return await this.unitOfWork.execute(async (ctx) => {
       // 1. Monotonic customer sequence allocated under transactional lock
-      const customerSequence = await ctx.sequenceGenerator.nextSequence(command.customerId);
+      const customerSequence = await ctx.sequenceGenerator.nextSequence(customerId);
 
       const purchaseId = `pur_${uuidv7()}`;
       const eventId = uuidv7();
-      const correlationId = command.correlationId ?? uuidv7();
+      const resolvedCorrelationId = correlationId ?? uuidv7();
 
       // 2. Instantiate and validate domain entity invariants
       const purchase = Purchase.create({
         purchaseId,
-        customerId: command.customerId,
-        amountCents: command.amountCents,
+        customerId,
+        amountCents,
         customerSequence,
       });
 
@@ -35,7 +37,7 @@ export class CreatePurchaseHandler {
         purchaseId: purchase.purchaseId,
         amountCents: purchase.amountCents,
         customerSequence: purchase.customerSequence,
-        correlationId,
+        correlationId: resolvedCorrelationId,
       });
 
       // 4. Atomically persist Purchase entity inside Unit of Work
@@ -59,8 +61,8 @@ export class CreatePurchaseHandler {
         amountCents: purchase.amountCents,
         customerSequence: purchase.customerSequence,
         eventId,
-        correlationId,
-        ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
+        correlationId: resolvedCorrelationId,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       };
     });
   }

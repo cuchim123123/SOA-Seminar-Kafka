@@ -1,10 +1,12 @@
+export interface CreatePurchaseInput {
+  readonly customerId: string;
+  readonly amountCents: number;
+  readonly correlationId?: string;
+  readonly idempotencyKey?: string;
+}
+
 export class CreatePurchaseCommand {
-  constructor(
-    public readonly customerId: string,
-    public readonly amountCents: number,
-    public readonly correlationId?: string,
-    public readonly idempotencyKey?: string,
-  ) {}
+  constructor(public readonly data: CreatePurchaseInput) {}
 }
 
 export interface CreatePurchaseResult {

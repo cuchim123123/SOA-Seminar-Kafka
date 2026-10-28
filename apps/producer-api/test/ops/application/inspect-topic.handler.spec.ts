@@ -32,7 +32,7 @@ describe('InspectTopicHandler', () => {
     };
 
     const handler = new InspectTopicHandler(mockInspector);
-    const result = await handler.execute(new InspectTopicQuery('purchase.events'));
+    const result = await handler.execute(new InspectTopicQuery({ topic: 'purchase.events' }));
 
     expect(result).toEqual(mockResult);
   });

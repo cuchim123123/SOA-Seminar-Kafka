@@ -15,7 +15,7 @@ export class LoyaltyController {
     @Param('customerId') customerId: string,
   ): Promise<LoyaltyAccountResponseDto> {
     const result = await this.getLoyaltyAccountHandler.execute(
-      new GetLoyaltyAccountQuery(customerId),
+      new GetLoyaltyAccountQuery({ customerId }),
     );
 
     if (!result) {
