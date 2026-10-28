@@ -28,7 +28,7 @@ export class ApplyPurchaseEventHandler {
     await this.repository.save(account);
 
     this.logger.log(
-      `[LoyaltyWorker] Processed eventId=${command.eventId} for customer=${command.customerId} from topic=${command.topic} [p=${command.partition}, offset=${command.offset}] -> earnedPoints=${outcome.pointsEarned}, currentTier=${outcome.newTier}, totalPoints=${outcome.totalPoints}`,
+      `[LoyaltyWorker] Processed eventId=${command.eventId} for customer=${command.customerId} -> earnedPoints=${outcome.pointsEarned}, currentTier=${outcome.newTier}, totalPoints=${outcome.totalPoints}`,
     );
 
     return {
@@ -39,11 +39,6 @@ export class ApplyPurchaseEventHandler {
       currentTier: outcome.newTier,
       totalPoints: outcome.totalPoints,
       totalSpendCents: outcome.totalSpendCents,
-      kafkaMetadata: {
-        topic: command.topic,
-        partition: command.partition,
-        offset: command.offset,
-      },
     };
   }
 }

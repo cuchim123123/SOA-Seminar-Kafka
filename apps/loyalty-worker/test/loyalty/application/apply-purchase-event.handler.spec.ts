@@ -22,9 +22,6 @@ describe('ApplyPurchaseEventHandler', () => {
       20_000,
       2,
       'corr_002',
-      'purchase.events',
-      0,
-      '15',
     );
 
     const result = await handler.execute(command);
@@ -35,11 +32,6 @@ describe('ApplyPurchaseEventHandler', () => {
     expect(result.pointsEarned).toBe(40);
     expect(result.currentTier).toBe('GOLD');
     expect(result.totalPoints).toBe(52);
-    expect(result.kafkaMetadata).toEqual({
-      topic: 'purchase.events',
-      partition: 0,
-      offset: '15',
-    });
   });
 
   it('creates new account on first purchase for a customer', async () => {
@@ -59,9 +51,6 @@ describe('ApplyPurchaseEventHandler', () => {
       5_000,
       1,
       'corr_001',
-      'purchase.events',
-      0,
-      '1',
     );
 
     const result = await handler.execute(command);

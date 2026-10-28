@@ -8,9 +8,6 @@ export class ApplyPurchaseEventCommand {
     public readonly amountCents: number,
     public readonly customerSequence: number,
     public readonly correlationId: string,
-    public readonly topic: string,
-    public readonly partition: number,
-    public readonly offset: string,
   ) {}
 }
 
@@ -22,9 +19,4 @@ export interface ApplyPurchaseEventResult {
   readonly currentTier: Tier;
   readonly totalPoints: number;
   readonly totalSpendCents: number;
-  readonly kafkaMetadata: {
-    readonly topic: string;
-    readonly partition: number;
-    readonly offset: string;
-  };
 }

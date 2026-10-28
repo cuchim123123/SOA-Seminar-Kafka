@@ -63,18 +63,17 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
           );
 
           if (envelope.eventType === 'PurchaseCompleted') {
-            await this.handler.execute(
-              new ApplyPurchaseEventCommand(
-                envelope.eventId,
-                envelope.payload.customerId,
-                envelope.payload.purchaseId,
-                envelope.payload.amountCents,
-                envelope.customerSequence,
-                envelope.correlationId,
-                topic,
-                partition,
-                offset,
-              ),
+            const command = new ApplyPurchaseEventCommand(
+              envelope.eventId,
+              envelope.payload.customerId,
+              envelope.payload.purchaseId,
+              envelope.payload.amountCents,
+              envelope.customerSequence,
+              envelope.correlationId,
+            );
+            const result = await this.handler.execute(command);
+            this.logger.log(
+              `[KafkaLoyaltyConsumer] Applied event ${result.eventId} from topic=${topic} [p=${partition}, offset=${offset}]: customer=${result.customerId}, earned=${result.pointsEarned}, total=${result.totalPoints}`,
             );
           }
         } catch (err: unknown) {

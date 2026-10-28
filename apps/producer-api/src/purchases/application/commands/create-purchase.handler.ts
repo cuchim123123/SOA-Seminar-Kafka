@@ -14,7 +14,7 @@ export class CreatePurchaseHandler {
   ) {}
 
   async execute(command: CreatePurchaseCommand): Promise<CreatePurchaseResult> {
-    return await this.unitOfWork.execute(async (ctx) => {
+    const result = await this.unitOfWork.execute(async (ctx) => {
       // 1. Monotonic customer sequence allocated under transactional lock
       const customerSequence = await ctx.sequenceGenerator.nextSequence(command.customerId);
 
@@ -55,10 +55,6 @@ export class CreatePurchaseHandler {
         createdAt: new Date().toISOString(),
       });
 
-      this.logger.log(
-        `Committed Purchase & Outbox [purchaseId=${purchaseId}, customer=${purchase.customerId}, seq=${customerSequence}, eventId=${eventId}]`,
-      );
-
       return {
         purchaseId: purchase.purchaseId,
         customerId: purchase.customerId,
@@ -69,5 +65,11 @@ export class CreatePurchaseHandler {
         ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
       };
     });
+
+    this.logger.log(
+      `Committed Purchase & Outbox [purchaseId=${result.purchaseId}, customer=${result.customerId}, seq=${result.customerSequence}, eventId=${result.eventId}]`,
+    );
+
+    return result;
   }
 }
