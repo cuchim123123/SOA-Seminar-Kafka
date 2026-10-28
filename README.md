@@ -101,6 +101,16 @@ pnpm demo:partitions
 curl -s http://localhost:3000/api/v1/ops/kafka/topics/purchase.events
 ```
 
+### Phase 3: Consumer Groups & Offsets Demo
+
+```bash
+# Start Analytics Worker manually (Port 3002, Group analytics-v1)
+pnpm start:analytics
+
+# Run automated independent consumer group demonstration and verification
+pnpm demo:groups
+```
+
 - **Kafka Broker (Host listener)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
 - **Kafka UI**: `http://localhost:8080`
@@ -113,15 +123,18 @@ curl -s http://localhost:3000/api/v1/ops/kafka/topics/purchase.events
 .
 ├── apps/
 │   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Kafka Publisher
-│   └── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
+│   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
+│   └── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
 ├── packages/
-│   └── contracts/             # Integration event schemas, Zod validation, factories, serializer
+│   ├── contracts/             # Integration event schemas, Zod validation, factories, serializer
+│   └── observability/         # Structured logger, unified Kafka execution coordinator, error hierarchy
 ├── scripts/
 │   ├── verify-kafka.mjs       # Automated Kafka readiness and topic lifecycle verification
 │   ├── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
 │   ├── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
 │   ├── generate-ordered-workload.mjs # Multi-customer ordered load generator and 82-point verification
-│   └── inspect-partitions.mjs # Live partition inspector reporting actual broker metadata and key distribution
+│   ├── inspect-partitions.mjs # Live partition inspector reporting actual broker metadata and key distribution
+│   └── verify-consumer-groups.mjs    # Multi-group independent stream consumption verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
@@ -157,5 +170,10 @@ curl -s http://localhost:3000/api/v1/ops/kafka/topics/purchase.events
 
 ### Phase 2 — Partitioning and Ordering
 - [x] **P2-01: Six-Partition Reset & Migration** — Explicit controlled reset recreating `purchase.events` with 6 partitions (`pnpm demo:reset -- --confirm`). Refuses unconfirmed reset.
-- [ ] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
-- [ ] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.
+- [x] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
+- [x] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.
+
+### Phase 3 — Consumer Groups and Offsets
+- [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
+- [ ] **P3-02: Manual Commit + Lag Reader** — Explicit offset commit and Admin-derived next-committed/log-end lag per partition.
+- [ ] **P3-03: Pause/Resume Scenario** — CLI or allowlisted control to pause Analytics and later catch up.

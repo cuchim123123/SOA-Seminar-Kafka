@@ -13,6 +13,7 @@
     "build": "pnpm -r --if-present run build",
     "start:producer": "pnpm --filter @lab/producer-api start",
     "start:loyalty": "pnpm --filter @lab/loyalty-worker start",
+    "start:analytics": "pnpm --filter @lab/analytics-worker start",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.spec.ts\"",
@@ -30,6 +31,8 @@
     "demo:workload:p2": "node scripts/generate-ordered-workload.mjs",
     "demo:partitions": "node scripts/inspect-partitions.mjs",
     "demo:partitions:p2": "node scripts/inspect-partitions.mjs",
+    "demo:groups": "node scripts/verify-consumer-groups.mjs",
+    "demo:groups:p3": "node scripts/verify-consumer-groups.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

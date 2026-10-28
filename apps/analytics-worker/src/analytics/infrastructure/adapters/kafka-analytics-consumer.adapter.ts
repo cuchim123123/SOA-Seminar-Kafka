@@ -1,0 +1,99 @@
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { deserializeEnvelope } from '@lab/contracts';
+import { processKafkaRecord, StructuredLogger } from '@lab/observability';
+import { Consumer, Kafka } from 'kafkajs';
+import { AppConfigService } from '../../../config/app-config.service';
+import { ApplySalesEventCommand } from '../../application/commands/apply-sales-event.command';
+import { ApplySalesEventHandler } from '../../application/commands/apply-sales-event.handler';
+
+@Injectable()
+export class KafkaAnalyticsConsumerAdapter implements OnModuleInit, OnModuleDestroy {
+  private readonly logger: StructuredLogger;
+  private readonly kafka: Kafka;
+  private readonly consumer: Consumer;
+  private readonly topic: string;
+
+  constructor(
+    @Inject(AppConfigService)
+    private readonly config: AppConfigService,
+    @Inject(ApplySalesEventHandler)
+    private readonly handler: ApplySalesEventHandler,
+  ) {
+    this.logger = new StructuredLogger(KafkaAnalyticsConsumerAdapter.name, {
+      serviceName: 'analytics-worker',
+      format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
+    });
+    this.topic = this.config.purchaseTopic;
+    this.kafka = new Kafka({
+      clientId: this.config.kafkaClientId,
+      brokers: this.config.kafkaBrokers,
+    });
+    this.consumer = this.kafka.consumer({
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  async onModuleInit(): Promise<void> {
+    this.logger.info('Connecting Analytics Kafka consumer to brokers...', {
+      brokers: this.config.kafkaBrokers,
+      groupId: this.config.kafkaGroupId,
+      topic: this.topic,
+    });
+    await this.consumer.connect();
+    await this.consumer.subscribe({
+      topic: this.topic,
+      fromBeginning: true,
+    });
+
+    this.logger.info('Analytics consumer subscribed and started message loop', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
+
+    await this.consumer.run({
+      eachMessage: async ({ topic, partition, message }) => {
+        await processKafkaRecord({
+          topic,
+          partition,
+          offset: message.offset,
+          key: message.key?.toString(),
+          rawValue: message.value?.toString(),
+          logger: this.logger,
+          consumerGroupId: this.config.kafkaGroupId,
+          deserializer: deserializeEnvelope,
+          handler: async (envelope) => {
+            if (envelope.eventType === 'PurchaseCompleted') {
+              const command = new ApplySalesEventCommand({
+                eventId: envelope.eventId,
+                customerId: envelope.payload.customerId,
+                purchaseId: envelope.payload.purchaseId,
+                amountCents: envelope.payload.amountCents,
+                customerSequence: envelope.customerSequence,
+                correlationId: envelope.correlationId,
+              });
+              const result = await this.handler.execute(command);
+              return {
+                eventId: result.eventId,
+                totalRevenueCents: result.totalRevenueCents,
+                purchaseCount: result.purchaseCount,
+                uniqueCustomerCount: result.uniqueCustomerCount,
+              };
+            }
+            return {
+              eventType: (envelope as { eventType?: string }).eventType,
+              ignored: true,
+            };
+          },
+        });
+      },
+    });
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.logger.info('Disconnecting Analytics Kafka consumer...', {
+      groupId: this.config.kafkaGroupId,
+    });
+    await this.consumer.disconnect();
+    this.logger.info('Analytics Kafka consumer disconnected');
+  }
+}
