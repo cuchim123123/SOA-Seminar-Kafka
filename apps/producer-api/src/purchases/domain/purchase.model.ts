@@ -1,27 +1,36 @@
-export interface PurchaseProps {
-  readonly purchaseId: string;
-  readonly customerId: string;
-  readonly amountCents: number;
-  readonly customerSequence: number;
-}
+import { z } from 'zod';
+
+export const purchasePropsSchema = z.object({
+  purchaseId: z
+    .string({ required_error: 'Purchase purchaseId must not be empty' })
+    .trim()
+    .min(1, 'Purchase purchaseId must not be empty'),
+  customerId: z
+    .string({ required_error: 'Purchase customerId must not be empty' })
+    .trim()
+    .min(1, 'Purchase customerId must not be empty'),
+  amountCents: z
+    .number({ required_error: 'Purchase amountCents must be a positive integer' })
+    .int('Purchase amountCents must be a positive integer')
+    .positive('Purchase amountCents must be a positive integer'),
+  customerSequence: z
+    .number({ required_error: 'Purchase customerSequence must be a positive integer' })
+    .int('Purchase customerSequence must be a positive integer')
+    .positive('Purchase customerSequence must be a positive integer'),
+});
+
+export type PurchaseProps = z.infer<typeof purchasePropsSchema>;
 
 export class Purchase {
   private constructor(private readonly props: PurchaseProps) {}
 
-  public static create(props: PurchaseProps): Purchase {
-    if (!props.customerId || props.customerId.trim().length === 0) {
-      throw new Error('Purchase customerId must not be empty');
+  public static create(rawProps: PurchaseProps): Purchase {
+    const parseResult = purchasePropsSchema.safeParse(rawProps);
+    if (!parseResult.success) {
+      const issue = parseResult.error.errors[0];
+      throw new Error(issue?.message ?? 'Invalid purchase properties');
     }
-    if (!props.purchaseId || props.purchaseId.trim().length === 0) {
-      throw new Error('Purchase purchaseId must not be empty');
-    }
-    if (!Number.isInteger(props.amountCents) || props.amountCents <= 0) {
-      throw new Error('Purchase amountCents must be a positive integer');
-    }
-    if (!Number.isInteger(props.customerSequence) || props.customerSequence <= 0) {
-      throw new Error('Purchase customerSequence must be a positive integer');
-    }
-    return new Purchase(props);
+    return new Purchase(parseResult.data);
   }
 
   get purchaseId(): string {
