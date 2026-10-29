@@ -10,6 +10,7 @@ This document is authoritative for any AI coding agent working on this repositor
 4. Run relevant format, lint, typecheck, unit tests, and the current phase's integration/smoke test. If Docker or a dependency is unavailable, disclose what could not be verified.
 5. End with changed paths, commands actually run, results, operational instructions, and remaining risks. Do not claim success for unrun tests or invent benchmark scores.
 6. Never silently skip a failed phase gate or change the architecture. If a design needs changing, update `docs/12-architecture-decisions.md` first.
+7. **In case of uncertainty on any architectural decision, do not assume — always ask the user.** Pause, outline the design options and trade-offs, and consult the user rather than making unilateral assumptions.
 
 ## Non-negotiable architecture rules
 

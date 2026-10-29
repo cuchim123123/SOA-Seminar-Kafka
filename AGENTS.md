@@ -50,6 +50,10 @@
   - No hardcoded ports, hostnames, credentials, cluster IDs, or topic configurations.
   - Every variable must be parameterized through documented environment variables in `.env.example` with validated defaults.
 
+### Architectural Uncertainty & Decision Protocol
+- **NEVER Assume on Ambiguity**: In case of any uncertainty regarding architectural design, technology choices, bounded context boundaries, database schema strategies, or operational mechanics, the agent **must never assume or silently guess**.
+- **Mandatory User Consultation**: Always pause and explicitly ask the user for clarification, presenting options and trade-offs before proceeding with any implementation.
+
 ---
 
 ## 3. Kafka Correctness & Safety Rules
