@@ -14,7 +14,8 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1)
-    .default('postgresql://localhost:5432/kafka_streaming_lab?schema=public'),
+    .default('postgresql://postgres:postgres@localhost:5432/loyalty_db?schema=public'),
+  LOYALTY_DATABASE_URL: z.string().optional(),
   FAULT_INJECTION_POINT: z.enum(['NONE', 'AFTER_DB_COMMIT_BEFORE_OFFSET_COMMIT']).default('NONE'),
   FAULT_TRIGGER_EVENT_ID: z.string().optional(),
 });

@@ -44,7 +44,7 @@ export class AppConfigService implements IAppConfig {
   }
 
   get databaseUrl(): string {
-    return this.config.DATABASE_URL;
+    return this.config.LOYALTY_DATABASE_URL || this.config.DATABASE_URL;
   }
 
   get faultInjectionPoint(): string {

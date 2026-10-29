@@ -95,4 +95,39 @@ describe('Purchase Domain Entity', () => {
       }),
     ).toThrowError(/customerSequence must be a positive integer/);
   });
+
+  describe('invalidate()', () => {
+    it('transitions status from COMPLETED to INVALIDATED', () => {
+      const purchase = Purchase.create({
+        purchaseId: 'pur_123',
+        customerId: 'cust_abc',
+        amountCents: 2500,
+        customerSequence: 1,
+      });
+
+      expect(purchase.status).toBe('COMPLETED');
+
+      const invalidated = purchase.invalidate();
+
+      expect(invalidated.status).toBe('INVALIDATED');
+      expect(invalidated.purchaseId).toBe('pur_123');
+      expect(invalidated.customerId).toBe('cust_abc');
+      expect(invalidated.amountCents).toBe(2500);
+      expect(invalidated.customerSequence).toBe(1);
+    });
+
+    it('returns the same instance if already INVALIDATED (idempotency)', () => {
+      const purchase = Purchase.create({
+        purchaseId: 'pur_123',
+        customerId: 'cust_abc',
+        amountCents: 2500,
+        customerSequence: 1,
+        status: 'INVALIDATED',
+      });
+
+      const invalidated = purchase.invalidate();
+      expect(invalidated).toBe(purchase);
+      expect(invalidated.status).toBe('INVALIDATED');
+    });
+  });
 });

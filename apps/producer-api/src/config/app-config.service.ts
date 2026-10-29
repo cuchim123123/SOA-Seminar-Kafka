@@ -38,7 +38,7 @@ export class AppConfigService implements IAppConfig {
   }
 
   get databaseUrl(): string {
-    return this.config.DATABASE_URL;
+    return this.config.PURCHASES_DATABASE_URL || this.config.DATABASE_URL;
   }
 
   get outboxRelayInProcess(): boolean {

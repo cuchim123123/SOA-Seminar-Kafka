@@ -144,10 +144,20 @@ pnpm demo:analytics-dedup
 pnpm demo:faults
 ```
 
+### Phase 5: Replay & Stream Correction Demo
+
+```bash
+# Run automated purchase invalidation event flow verification (P5-01)
+pnpm demo:invalidation
+```
+
 - **Kafka Broker (Host listener)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
 - **Kafka UI**: `http://localhost:8080`
-- **PostgreSQL DB**: `localhost:5432` (`postgres:16-alpine`, database: `kafka_streaming_lab`)
+- **PostgreSQL Multi-DB Cluster**: `localhost:5432` (`postgres:16-alpine`)
+  - `purchases_db`: `purchases`, `purchase_customers`, `outbox_events`, `http_idempotency_keys`
+  - `loyalty_db`: `loyalty_accounts`, `processed_events`
+  - `analytics_db`: `analytics_summary`, `processed_events`
 
 ---
 

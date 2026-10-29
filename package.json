@@ -50,6 +50,8 @@
     "demo:analytics-dedup:p4": "node scripts/verify-durable-analytics.mjs",
     "demo:faults": "node scripts/verify-fault-injection.mjs",
     "demo:fault-injection:p4": "node scripts/verify-fault-injection.mjs",
+    "demo:invalidation": "node scripts/verify-purchase-invalidation.mjs",
+    "demo:invalidation:p5": "node scripts/verify-purchase-invalidation.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

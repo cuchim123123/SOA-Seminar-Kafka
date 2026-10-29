@@ -71,4 +71,14 @@ export class Purchase {
   get createdAt(): string {
     return this.props.createdAt;
   }
+
+  public invalidate(): Purchase {
+    if (this.props.status === 'INVALIDATED') {
+      return this;
+    }
+    return new Purchase({
+      ...this.props,
+      status: 'INVALIDATED',
+    });
+  }
 }

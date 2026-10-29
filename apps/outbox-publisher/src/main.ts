@@ -1,3 +1,15 @@
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    try {
+      process.loadEnvFile('../../.env');
+    } catch {
+      // Ignore if .env is missing in environment
+    }
+  }
+}
+
 import 'reflect-metadata';
 import {
   GlobalHttpExceptionFilter,

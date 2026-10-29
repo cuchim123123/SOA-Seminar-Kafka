@@ -3,9 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "build": "prisma generate && tsc -p tsconfig.build.json",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
+    "build": "node --env-file=../../.env node_modules/prisma/build/index.js generate && tsc -p tsconfig.build.json",
+    "prisma:generate": "node --env-file=../../.env node_modules/prisma/build/index.js generate",
+    "prisma:migrate": "node --env-file=../../.env node_modules/prisma/build/index.js migrate deploy",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ZodValidationPipe } from '../../../src/common/pipes/zod-validation.pipe';
 import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase.command';
 import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase.handler';
+import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase.handler';
 import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase.handler';
 import { createPurchaseSchema } from '../../../src/purchases/interfaces/http/dto/create-purchase.dto';
 import { PurchasesController } from '../../../src/purchases/interfaces/http/purchases.controller';
@@ -22,11 +23,19 @@ describe('PurchasesController & ZodValidationPipe', () => {
         })),
       } as unknown as CreatePurchaseHandler;
 
+      const mockInvalidateHandler = {
+        execute: vi.fn(),
+      } as unknown as InvalidateSyntheticPurchaseHandler;
+
       const mockGetHandler = {
         execute: vi.fn(),
       } as unknown as GetPurchaseHandler;
 
-      const controller = new PurchasesController(mockHandler, mockGetHandler);
+      const controller = new PurchasesController(
+        mockHandler,
+        mockInvalidateHandler,
+        mockGetHandler,
+      );
       const response = await controller.createPurchase(
         {
           customerId: 'CUST_1',
@@ -53,8 +62,46 @@ describe('PurchasesController & ZodValidationPipe', () => {
       });
     });
 
+    it('dispatches invalidate command to handler and returns HTTP 200 response shape', async () => {
+      const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockInvalidateHandler = {
+        execute: vi.fn(async () => ({
+          purchaseId: 'pur_xyz',
+          customerId: 'CUST_1',
+          status: 'INVALIDATED' as const,
+          customerSequence: 4,
+          eventId: 'evt_inv_123',
+          reason: 'DEMO_INVALIDATION' as const,
+          isAlreadyInvalidated: false,
+        })),
+      } as unknown as InvalidateSyntheticPurchaseHandler;
+      const mockGetHandler = {} as unknown as GetPurchaseHandler;
+
+      const controller = new PurchasesController(
+        mockCreateHandler,
+        mockInvalidateHandler,
+        mockGetHandler,
+      );
+
+      const response = await controller.invalidatePurchase('pur_xyz', {
+        reason: 'DEMO_INVALIDATION',
+      });
+
+      expect(mockInvalidateHandler.execute).toHaveBeenCalled();
+      expect(response).toEqual({
+        purchaseId: 'pur_xyz',
+        customerId: 'CUST_1',
+        status: 'INVALIDATED',
+        customerSequence: 4,
+        eventId: 'evt_inv_123',
+        reason: 'DEMO_INVALIDATION',
+        isAlreadyInvalidated: false,
+      });
+    });
+
     it('returns purchase read model when found', async () => {
       const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockInvalidateHandler = {} as unknown as InvalidateSyntheticPurchaseHandler;
       const mockGetHandler = {
         execute: vi.fn(async () => ({
           purchaseId: 'pur_xyz',
@@ -69,7 +116,11 @@ describe('PurchasesController & ZodValidationPipe', () => {
         })),
       } as unknown as GetPurchaseHandler;
 
-      const controller = new PurchasesController(mockCreateHandler, mockGetHandler);
+      const controller = new PurchasesController(
+        mockCreateHandler,
+        mockInvalidateHandler,
+        mockGetHandler,
+      );
       const result = await controller.getPurchase('pur_xyz');
 
       expect(mockGetHandler.execute).toHaveBeenCalled();
@@ -79,11 +130,16 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
     it('throws NotFoundException when purchase does not exist', async () => {
       const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockInvalidateHandler = {} as unknown as InvalidateSyntheticPurchaseHandler;
       const mockGetHandler = {
         execute: vi.fn(async () => null),
       } as unknown as GetPurchaseHandler;
 
-      const controller = new PurchasesController(mockCreateHandler, mockGetHandler);
+      const controller = new PurchasesController(
+        mockCreateHandler,
+        mockInvalidateHandler,
+        mockGetHandler,
+      );
       await expect(controller.getPurchase('pur_unknown')).rejects.toThrow();
     });
   });

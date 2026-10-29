@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CreatePurchaseHandler } from './application/commands/create-purchase.handler';
+import { InvalidateSyntheticPurchaseHandler } from './application/commands/invalidate-synthetic-purchase.handler';
 import { EVENT_PUBLISHER_PORT } from './application/ports/event-publisher.port';
 import { HTTP_IDEMPOTENCY_REPOSITORY_PORT } from './application/ports/http-idempotency-repository.port';
 import { OUTBOX_REPOSITORY_PORT } from './application/ports/outbox-repository.port';
@@ -22,6 +23,7 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
   controllers: [PurchasesController],
   providers: [
     CreatePurchaseHandler,
+    InvalidateSyntheticPurchaseHandler,
     GetPurchaseHandler,
     OutboxRelayService,
     PostgresPurchaseRepositoryAdapter,
@@ -61,6 +63,7 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
   ],
   exports: [
     CreatePurchaseHandler,
+    InvalidateSyntheticPurchaseHandler,
     GetPurchaseHandler,
     UNIT_OF_WORK_PORT,
     PURCHASE_REPOSITORY_PORT,

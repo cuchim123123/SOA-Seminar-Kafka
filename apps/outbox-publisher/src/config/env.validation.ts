@@ -13,7 +13,8 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1)
-    .default('postgresql://localhost:5432/kafka_streaming_lab?schema=public'),
+    .default('postgresql://postgres:postgres@localhost:5432/purchases_db?schema=public'),
+  PURCHASES_DATABASE_URL: z.string().optional(),
   POLL_INTERVAL_MS: z
     .string()
     .default('250')

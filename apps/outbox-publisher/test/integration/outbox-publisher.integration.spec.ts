@@ -51,6 +51,9 @@ describe('OutboxPublisher Integration Test (P4-03)', () => {
     const customerA = `U_PUB_A_${Date.now()}`;
     const customerB = `U_PUB_B_${Date.now()}`;
 
+    // Clean up any leftover pending events from earlier disconnected outbox tests
+    await prisma.outboxEvent.deleteMany({ where: { status: 'PENDING' } });
+
     // 1. Seed pending outbox records directly into PostgreSQL
     const envA1 = createPurchaseCompletedEnvelope({
       customerId: customerA,

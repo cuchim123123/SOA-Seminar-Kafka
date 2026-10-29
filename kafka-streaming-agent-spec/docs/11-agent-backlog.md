@@ -41,7 +41,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 ## Phase 5 — Replay
 
-- [ ] **P5-01 Purchase invalidation event** — Transactional status transition and next customer sequence, outbox event. **Proof:** replay fixture has seq1/2/3 completed + seq4 invalidated.
+- [x] **P5-01 Purchase invalidation event** — Transactional status transition and next customer sequence, outbox event. **Proof:** replay fixture has seq1/2/3 completed + seq4 invalidated.
 - [ ] **P5-02 Replay group + fixed boundary** — On-demand unique group, capture log-end high-watermarks, scan retained records, isolated staging. **Proof:** original groups' offsets unchanged, replay tracks its own offsets.
 - [ ] **P5-03 Two-pass correction calculation** — Collect invalid IDs; compute historical points in customer sequence order, 82→40. **Proof:** unit+integration fixture, no outward effects.
 - [ ] **P5-04 Retention failure reporting** — Detect insufficient retained history, fail clearly. **Proof:** controlled short-retention fixture produces explicit failure.

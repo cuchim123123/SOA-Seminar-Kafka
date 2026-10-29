@@ -37,6 +37,7 @@ describe('Ordered Workload & Multi-Partition Integration Test (P2-02)', () => {
         KAFKA_GROUP_ID: uniqueGroupId,
         PURCHASE_TOPIC: 'purchase.events',
         DATABASE_URL: process.env.DATABASE_URL,
+        LOYALTY_DATABASE_URL: process.env.LOYALTY_DATABASE_URL,
       })
       .compile();
 

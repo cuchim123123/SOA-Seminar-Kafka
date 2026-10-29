@@ -14,7 +14,8 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1)
-    .default('postgresql://localhost:5432/kafka_streaming_lab?schema=public'),
+    .default('postgresql://postgres:postgres@localhost:5432/analytics_db?schema=public'),
+  ANALYTICS_DATABASE_URL: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
