@@ -15,6 +15,7 @@
     "start:publisher": "pnpm --filter @lab/outbox-publisher start",
     "start:loyalty": "pnpm --filter @lab/loyalty-worker start",
     "start:analytics": "pnpm --filter @lab/analytics-worker start",
+    "start:replay": "pnpm --filter @lab/replay-worker start",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.spec.ts\"",
@@ -52,6 +53,8 @@
     "demo:fault-injection:p4": "node scripts/verify-fault-injection.mjs",
     "demo:invalidation": "node scripts/verify-purchase-invalidation.mjs",
     "demo:invalidation:p5": "node scripts/verify-purchase-invalidation.mjs",
+    "demo:replay": "node scripts/verify-replay-boundary.mjs",
+    "demo:replay:p5": "node scripts/verify-replay-boundary.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

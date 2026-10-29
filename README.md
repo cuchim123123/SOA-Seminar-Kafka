@@ -149,6 +149,9 @@ pnpm demo:faults
 ```bash
 # Run automated purchase invalidation event flow verification (P5-01)
 pnpm demo:invalidation
+
+# Run automated bounded replay & fixed boundary verification (P5-02)
+pnpm demo:replay
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -156,7 +159,7 @@ pnpm demo:invalidation
 - **Kafka UI**: `http://localhost:8080`
 - **PostgreSQL Multi-DB Cluster**: `localhost:5432` (`postgres:16-alpine`)
   - `purchases_db`: `purchases`, `purchase_customers`, `outbox_events`, `http_idempotency_keys`
-  - `loyalty_db`: `loyalty_accounts`, `processed_events`
+  - `loyalty_db`: `loyalty_accounts`, `processed_events`, `replay_runs`, `replay_staging`
   - `analytics_db`: `analytics_summary`, `processed_events`
 
 ---
@@ -171,8 +174,10 @@ pnpm demo:invalidation
 │   ├── outbox-publisher/      # NestJS Outbox Publisher: single ordered daemon -> Kafka
 │   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
-│   └── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
-│       └── prisma/            # Prisma schema and PostgreSQL migrations
+│   ├── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
+│   │   └── prisma/            # Prisma schema and PostgreSQL migrations
+│   └── replay-worker/         # NestJS Worker: On-demand unique consumer group replay & isolated staging
+│       └── prisma/            # Prisma schema and client for replay staging
 ├── packages/
 │   ├── contracts/             # Integration event schemas, Zod validation, factories, serializer
 │   └── observability/         # Structured logger, unified Kafka execution coordinator, error hierarchy

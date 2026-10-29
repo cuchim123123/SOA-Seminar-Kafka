@@ -14,7 +14,7 @@ export class AppConfigService {
   }
 
   get port(): number {
-    return this.config.PORT;
+    return this.config.PUBLISHER_PORT ?? this.config.PORT;
   }
 
   get kafkaBrokers(): string[] {

@@ -8,6 +8,11 @@ export interface HealthResponse {
 
 @Controller('health')
 export class HealthController {
+  @Get()
+  getRoot(): HealthResponse {
+    return this.getLive();
+  }
+
   @Get('live')
   getLive(): HealthResponse {
     return {

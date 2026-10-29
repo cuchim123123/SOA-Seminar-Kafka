@@ -7,6 +7,11 @@ export const envSchema = z.object({
     .default('3003')
     .transform((val) => parseInt(val, 10))
     .pipe(z.number().int().min(1).max(65535)),
+  PUBLISHER_PORT: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : undefined))
+    .pipe(z.number().int().min(1).max(65535).optional()),
   KAFKA_BROKERS: z.string().min(1).default('localhost:9092'),
   KAFKA_CLIENT_ID: z.string().min(1).default('outbox-publisher-client'),
   PURCHASE_TOPIC: z.string().min(1).default('purchase.events'),

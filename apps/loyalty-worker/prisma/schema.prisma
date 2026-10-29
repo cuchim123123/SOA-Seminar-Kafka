@@ -27,3 +27,37 @@ model ProcessedEvent {
   @@id([consumerName, eventId])
   @@map("processed_events")
 }
+
+model ReplayRun {
+  id             String                @id @map("id")
+  groupId        String                @map("group_id")
+  topic          String                @default("purchase.events") @map("topic")
+  status         String                @default("PENDING") @map("status")
+  startOffsets   Json                  @map("start_offsets")
+  highWatermarks Json                  @map("high_watermarks")
+  scannedCount   Int                   @default(0) @map("scanned_count")
+  errorMessage   String?               @map("error_message")
+  startedAt      DateTime?             @map("started_at") @db.Timestamptz
+  completedAt    DateTime?             @map("completed_at") @db.Timestamptz
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+  stagingRecords ReplayStagingRecord[]
+
+  @@map("replay_runs")
+}
+
+model ReplayStagingRecord {
+  id                   String    @id @map("id")
+  runId                String    @map("run_id")
+  customerId           String    @map("customer_id")
+  points               BigInt    @default(0) @map("points")
+  tier                 String    @default("BRONZE") @map("tier")
+  eligibleSpendCents   BigInt    @default(0) @map("eligible_spend_cents")
+  scannedEventCount    Int       @default(0) @map("scanned_event_count")
+  lastCustomerSequence BigInt    @default(0) @map("last_customer_sequence")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  run                  ReplayRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, customerId])
+  @@map("replay_staging")
+}
