@@ -1,4 +1,9 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
+import {
+  CutoverReplayRunCommand,
+  CutoverReplayRunResult,
+} from '../../application/commands/cutover-replay-run.command';
+import { CutoverReplayRunHandler } from '../../application/commands/cutover-replay-run.handler';
 import { StartBoundedReplayCommand } from '../../application/commands/start-bounded-replay.command';
 import { StartBoundedReplayHandler } from '../../application/commands/start-bounded-replay.handler';
 import {
@@ -27,6 +32,8 @@ export class ReplayController {
     private readonly stagingHandler: GetReplayStagingHandler,
     @Inject(CompareReplayWithLiveHandler)
     private readonly comparisonHandler: CompareReplayWithLiveHandler,
+    @Inject(CutoverReplayRunHandler)
+    private readonly cutoverHandler: CutoverReplayRunHandler,
   ) {}
 
   @Post('runs')
@@ -88,5 +95,10 @@ export class ReplayController {
     @Param('customerId') customerId: string,
   ): Promise<CustomerLiveStagingComparisonDto> {
     return this.comparisonHandler.execute(new CompareReplayWithLiveQuery(runId, customerId));
+  }
+
+  @Post('runs/:runId/cutover')
+  async cutoverReplayRun(@Param('runId') runId: string): Promise<CutoverReplayRunResult> {
+    return this.cutoverHandler.execute(new CutoverReplayRunCommand(runId));
   }
 }

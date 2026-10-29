@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CutoverReplayRunHandler } from '../../../src/replay/application/commands/cutover-replay-run.handler';
 import { StartBoundedReplayHandler } from '../../../src/replay/application/commands/start-bounded-replay.handler';
 import { CompareReplayWithLiveHandler } from '../../../src/replay/application/queries/compare-replay-with-live.handler';
 import { GetReplayRunHandler } from '../../../src/replay/application/queries/get-replay-run.handler';
@@ -22,23 +23,17 @@ describe('ReplayController', () => {
       }),
     } as unknown as StartBoundedReplayHandler;
 
-    const mockGetHandler = {
-      execute: vi.fn(),
-    } as unknown as GetReplayRunHandler;
-
-    const mockStagingHandler = {
-      execute: vi.fn(),
-    } as unknown as GetReplayStagingHandler;
-
-    const mockComparisonHandler = {
-      execute: vi.fn(),
-    } as unknown as CompareReplayWithLiveHandler;
+    const mockGetHandler = { execute: vi.fn() } as unknown as GetReplayRunHandler;
+    const mockStagingHandler = { execute: vi.fn() } as unknown as GetReplayStagingHandler;
+    const mockComparisonHandler = { execute: vi.fn() } as unknown as CompareReplayWithLiveHandler;
+    const mockCutoverHandler = { execute: vi.fn() } as unknown as CutoverReplayRunHandler;
 
     const controller = new ReplayController(
       mockStartHandler,
       mockGetHandler,
       mockStagingHandler,
       mockComparisonHandler,
+      mockCutoverHandler,
     );
     const response = await controller.startReplay({ runId: 'run-xyz' });
 
@@ -50,10 +45,7 @@ describe('ReplayController', () => {
   });
 
   it('retrieves replay run details via getHandler', async () => {
-    const mockStartHandler = {
-      execute: vi.fn(),
-    } as unknown as StartBoundedReplayHandler;
-
+    const mockStartHandler = { execute: vi.fn() } as unknown as StartBoundedReplayHandler;
     const mockGetHandler = {
       execute: vi.fn().mockResolvedValue({
         id: 'run-xyz',
@@ -71,19 +63,16 @@ describe('ReplayController', () => {
       }),
     } as unknown as GetReplayRunHandler;
 
-    const mockStagingHandler = {
-      execute: vi.fn(),
-    } as unknown as GetReplayStagingHandler;
-
-    const mockComparisonHandler = {
-      execute: vi.fn(),
-    } as unknown as CompareReplayWithLiveHandler;
+    const mockStagingHandler = { execute: vi.fn() } as unknown as GetReplayStagingHandler;
+    const mockComparisonHandler = { execute: vi.fn() } as unknown as CompareReplayWithLiveHandler;
+    const mockCutoverHandler = { execute: vi.fn() } as unknown as CutoverReplayRunHandler;
 
     const controller = new ReplayController(
       mockStartHandler,
       mockGetHandler,
       mockStagingHandler,
       mockComparisonHandler,
+      mockCutoverHandler,
     );
     const response = await controller.getReplayRun('run-xyz');
 
@@ -111,12 +100,14 @@ describe('ReplayController', () => {
       ]),
     } as unknown as GetReplayStagingHandler;
     const mockComparisonHandler = {} as unknown as CompareReplayWithLiveHandler;
+    const mockCutoverHandler = {} as unknown as CutoverReplayRunHandler;
 
     const controller = new ReplayController(
       mockStartHandler,
       mockGetHandler,
       mockStagingHandler,
       mockComparisonHandler,
+      mockCutoverHandler,
     );
     const staging = await controller.getStagingRecords('run-xyz');
 
@@ -154,12 +145,14 @@ describe('ReplayController', () => {
         },
       }),
     } as unknown as CompareReplayWithLiveHandler;
+    const mockCutoverHandler = {} as unknown as CutoverReplayRunHandler;
 
     const controller = new ReplayController(
       mockStartHandler,
       mockGetHandler,
       mockStagingHandler,
       mockComparisonHandler,
+      mockCutoverHandler,
     );
     const comparison = await controller.compareWithLive('run-xyz', 'U001');
 
@@ -168,5 +161,34 @@ describe('ReplayController', () => {
     expect(comparison.discrepancy.pointsDifference).toBe(-42);
     expect(comparison.live?.points).toBe(82);
     expect(comparison.staged?.points).toBe(40);
+  });
+
+  it('executes cutover via cutoverHandler', async () => {
+    const mockStartHandler = {} as unknown as StartBoundedReplayHandler;
+    const mockGetHandler = {} as unknown as GetReplayRunHandler;
+    const mockStagingHandler = {} as unknown as GetReplayStagingHandler;
+    const mockComparisonHandler = {} as unknown as CompareReplayWithLiveHandler;
+    const mockCutoverHandler = {
+      execute: vi.fn().mockResolvedValue({
+        runId: 'run-xyz',
+        status: 'CUTOVER_COMPLETED',
+        appliedCustomersCount: 1,
+        cutoverAt: '2026-10-30T01:00:00.000Z',
+      }),
+    } as unknown as CutoverReplayRunHandler;
+
+    const controller = new ReplayController(
+      mockStartHandler,
+      mockGetHandler,
+      mockStagingHandler,
+      mockComparisonHandler,
+      mockCutoverHandler,
+    );
+    const result = await controller.cutoverReplayRun('run-xyz');
+
+    expect(mockCutoverHandler.execute).toHaveBeenCalled();
+    expect(result.runId).toBe('run-xyz');
+    expect(result.status).toBe('CUTOVER_COMPLETED');
+    expect(result.appliedCustomersCount).toBe(1);
   });
 });

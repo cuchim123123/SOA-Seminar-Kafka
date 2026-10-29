@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { api } from '../api/client';
 import type { CustomerComparisonDto, ReplayRunDto, StagingCustomerRecord } from '../api/client';
 
-export const ReplayStudio: React.FC = () => {
+export interface ReplayStudioProps {
+  onCutoverCompleted?: () => void;
+}
+
+export const ReplayStudio: React.FC<ReplayStudioProps> = ({ onCutoverCompleted }) => {
   const [running, setRunning] = useState<boolean>(false);
   const [replayRun, setReplayRun] = useState<ReplayRunDto | null>(null);
   const [comparison, setComparison] = useState<CustomerComparisonDto | null>(null);
@@ -10,6 +14,8 @@ export const ReplayStudio: React.FC = () => {
   const [stagingRecords, setStagingRecords] = useState<StagingCustomerRecord[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [comparing, setComparing] = useState<boolean>(false);
+  const [isCuttingOver, setIsCuttingOver] = useState<boolean>(false);
+  const [cutoverSuccess, setCutoverSuccess] = useState<string | null>(null);
 
   const fetchCustomerComparison = async (runId: string, customerId: string) => {
     setComparing(true);
@@ -26,6 +32,7 @@ export const ReplayStudio: React.FC = () => {
   const handleStartReplay = async (simulateRetentionFailure: boolean = false) => {
     setRunning(true);
     setErrorMessage(null);
+    setCutoverSuccess(null);
     setReplayRun(null);
     setComparison(null);
     setStagingRecords([]);
@@ -40,7 +47,7 @@ export const ReplayStudio: React.FC = () => {
       const run = await api.startReplay(options);
       setReplayRun(run);
 
-      if (run.status === 'COMPLETED') {
+      if (run.status === 'COMPLETED' || run.status === 'CUTOVER_COMPLETED') {
         // Fetch comparison for target customer
         await fetchCustomerComparison(run.id, targetCustomer.trim() || 'U001');
 
@@ -56,6 +63,29 @@ export const ReplayStudio: React.FC = () => {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleCutover = async () => {
+    if (!replayRun?.id) return;
+    setIsCuttingOver(true);
+    setErrorMessage(null);
+    setCutoverSuccess(null);
+    try {
+      const res = await api.cutoverReplayRun(replayRun.id);
+      setCutoverSuccess(
+        `✓ Controlled Cutover Completed! Successfully promoted staged corrections for ${res.appliedCustomersCount} customer(s) into live PostgreSQL loyalty_accounts. Correction flag cleared and live projection reconciled.`,
+      );
+      // Refresh comparison to reflect updated live projection (0 discrepancy)
+      await fetchCustomerComparison(replayRun.id, targetCustomer.trim() || 'U001');
+      if (onCutoverCompleted) {
+        onCutoverCompleted();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorMessage(msg);
+    } finally {
+      setIsCuttingOver(false);
     }
   };
 
@@ -327,6 +357,93 @@ export const ReplayStudio: React.FC = () => {
             ) : (
               <div style={{ padding: '18px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', background: '#ffffff', borderRadius: 'var(--radius-sm)' }}>
                 No events found for customer <strong>{targetCustomer}</strong> in this replay staging run. Select another customer above.
+              </div>
+            )}
+
+            {/* Controlled Cutover Action Card */}
+            {comparison && (
+              <div
+                style={{
+                  marginTop: '14px',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  background:
+                    comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired
+                      ? '#ecfdf5'
+                      : '#f8fafc',
+                  border:
+                    comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired
+                      ? '1px solid #a7f3d0'
+                      : '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      color:
+                        comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired
+                          ? '#065f46'
+                          : 'var(--text-body)',
+                    }}
+                  >
+                    {comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired
+                      ? '⚡ Ready for Controlled Cutover: Promote Staged Corrections to Live Database'
+                      : '✓ Live Projection Reconciled with Staged Historical Replay'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired
+                      ? 'Clicking Cutover writes recomputed points and eligible spend to live loyalty_accounts in PostgreSQL and clears the correction flag.'
+                      : 'Live database matches replayed Kafka historical truth. Discrepancy is 0.'}
+                  </div>
+                </div>
+
+                {(comparison.discrepancy.pointsDifference !== 0 || comparison.live?.correctionRequired) && (
+                  <button
+                    type="button"
+                    disabled={isCuttingOver}
+                    onClick={handleCutover}
+                    style={{
+                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '7px 16px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: isCuttingOver ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+                    }}
+                  >
+                    {isCuttingOver ? 'Applying Cutover...' : '✓ Cutover / Save to Live DB'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {cutoverSuccess && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: '#ecfdf5',
+                  border: '1px solid #6ee7b7',
+                  color: '#065f46',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                }}
+              >
+                {cutoverSuccess}
               </div>
             )}
           </div>

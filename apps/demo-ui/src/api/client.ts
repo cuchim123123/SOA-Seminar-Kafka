@@ -77,7 +77,7 @@ export interface ReplayRunDto {
   id: string;
   groupId: string;
   topic: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'CUTOVER_COMPLETED' | 'FAILED';
   startOffsets: Record<number, string>;
   highWatermarks: Record<number, string>;
   scannedCount: number;
@@ -120,6 +120,13 @@ export interface StagingCustomerRecord {
   scannedEventCount: number;
   lastCustomerSequence: number;
   createdAt: string;
+}
+
+export interface CutoverResult {
+  runId: string;
+  status: 'CUTOVER_COMPLETED';
+  appliedCustomersCount: number;
+  cutoverAt: string;
 }
 
 export interface ServiceHealthStatus {
@@ -362,6 +369,12 @@ export const api = {
 
   getStagingRecords: async (runId: string): Promise<StagingCustomerRecord[]> => {
     return request<StagingCustomerRecord[]>(`/api/replay/api/v1/replay/runs/${runId}/staging`);
+  },
+
+  cutoverReplayRun: async (runId: string): Promise<CutoverResult> => {
+    return request<CutoverResult>(`/api/replay/api/v1/replay/runs/${runId}/cutover`, {
+      method: 'POST',
+    });
   },
 
   // 5. Cluster Health Checks

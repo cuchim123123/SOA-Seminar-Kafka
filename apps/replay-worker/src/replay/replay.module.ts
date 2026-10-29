@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CutoverReplayRunHandler } from './application/commands/cutover-replay-run.handler';
 import { StartBoundedReplayHandler } from './application/commands/start-bounded-replay.handler';
 import { BOUNDED_REPLAY_SCANNER_PORT } from './application/ports/bounded-replay-scanner.port';
 import { REPLAY_RUN_REPOSITORY_PORT } from './application/ports/replay-run-repository.port';
@@ -20,6 +21,7 @@ import { ReplayController } from './interfaces/http/replay.controller';
     GetReplayRunHandler,
     GetReplayStagingHandler,
     CompareReplayWithLiveHandler,
+    CutoverReplayRunHandler,
     {
       provide: REPLAY_RUN_REPOSITORY_PORT,
       useClass: PostgresReplayRunRepositoryAdapter,
@@ -42,6 +44,7 @@ import { ReplayController } from './interfaces/http/replay.controller';
     GetReplayRunHandler,
     GetReplayStagingHandler,
     CompareReplayWithLiveHandler,
+    CutoverReplayRunHandler,
     REPLAY_RUN_REPOSITORY_PORT,
     REPLAY_STAGING_REPOSITORY_PORT,
   ],

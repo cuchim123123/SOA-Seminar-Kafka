@@ -181,7 +181,7 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'replay' && (
-          <ReplayStudio />
+          <ReplayStudio onCutoverCompleted={fetchTelemetry} />
         )}
 
         {activeTab === 'guide' && (
