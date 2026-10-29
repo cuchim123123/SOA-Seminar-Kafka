@@ -9,6 +9,8 @@ export interface IAppConfig {
   readonly kafkaGroupId: string;
   readonly purchaseTopic: string;
   readonly databaseUrl: string;
+  readonly faultInjectionPoint: string;
+  readonly faultTriggerEventId?: string;
 }
 
 @Injectable()
@@ -43,5 +45,13 @@ export class AppConfigService implements IAppConfig {
 
   get databaseUrl(): string {
     return this.config.DATABASE_URL;
+  }
+
+  get faultInjectionPoint(): string {
+    return this.config.FAULT_INJECTION_POINT;
+  }
+
+  get faultTriggerEventId(): string | undefined {
+    return this.config.FAULT_TRIGGER_EVENT_ID;
   }
 }

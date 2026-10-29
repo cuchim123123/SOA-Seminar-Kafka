@@ -139,6 +139,28 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         for (const record of records) {
           try {
             const result = await this.eventPublisher.publish(record.envelope);
+
+            // Fault injection hook (P4-06): simulate crash AFTER broker ACK and BEFORE outbox status mark
+            if (
+              this.config.faultInjectionPoint === 'AFTER_KAFKA_ACK_BEFORE_OUTBOX_MARK' &&
+              (!this.config.faultTriggerEventId ||
+                this.config.faultTriggerEventId === record.eventId)
+            ) {
+              this.logger.warn(
+                '[FaultInjection] Triggering process exit AFTER broker ACK and BEFORE outbox mark!',
+                {
+                  eventId: record.eventId,
+                  aggregateId: record.aggregateId,
+                  customerSequence: record.customerSequence,
+                  topic: result.topic,
+                  partition: result.partition,
+                  offset: result.offset,
+                  exitCode: 43,
+                },
+              );
+              process.exit(43);
+            }
+
             const publishedAt = new Date().toISOString();
             await this.outboxRepository.markPublished(record.eventId, publishedAt);
 

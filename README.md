@@ -139,6 +139,9 @@ pnpm demo:loyalty-dedup
 
 # Run automated durable analytics processing & consumer idempotency verification (P4-05)
 pnpm demo:analytics-dedup
+
+# Run automated fault injection integration suite: consumer crash & publisher crash (P4-06)
+pnpm demo:faults
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -176,7 +179,8 @@ pnpm demo:analytics-dedup
 │   ├── verify-outbox-offline.mjs     # Transactional outbox persistence and offline Kafka survival verification
 │   ├── verify-outbox-publisher.mjs   # Standalone ordered outbox publisher worker verification
 │   ├── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
-│   └── verify-durable-analytics.mjs  # Durable analytics processing and consumer deduplication verification
+│   ├── verify-durable-analytics.mjs  # Durable analytics processing and consumer deduplication verification
+│   └── verify-fault-injection.mjs    # Fault injection integration suite (D4 consumer crash & D5 publisher crash)
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling

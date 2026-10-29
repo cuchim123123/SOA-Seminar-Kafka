@@ -48,6 +48,8 @@
     "demo:loyalty-dedup:p4": "node scripts/verify-durable-loyalty.mjs",
     "demo:analytics-dedup": "node scripts/verify-durable-analytics.mjs",
     "demo:analytics-dedup:p4": "node scripts/verify-durable-analytics.mjs",
+    "demo:faults": "node scripts/verify-fault-injection.mjs",
+    "demo:fault-injection:p4": "node scripts/verify-fault-injection.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

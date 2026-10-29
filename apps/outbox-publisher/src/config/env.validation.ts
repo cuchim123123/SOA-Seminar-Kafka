@@ -34,6 +34,8 @@ export const envSchema = z.object({
     .default('5000')
     .transform((val) => parseInt(val, 10))
     .pipe(z.number().int().min(100).max(60000)),
+  FAULT_INJECTION_POINT: z.enum(['NONE', 'AFTER_KAFKA_ACK_BEFORE_OUTBOX_MARK']).default('NONE'),
+  FAULT_TRIGGER_EVENT_ID: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

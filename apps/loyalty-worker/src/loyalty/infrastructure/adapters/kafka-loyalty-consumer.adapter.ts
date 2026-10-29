@@ -53,6 +53,8 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
     await this.consumer.run({
       autoCommit: false,
       eachMessage: async ({ topic, partition, message }) => {
+        let processedEventId: string | undefined;
+
         await processKafkaRecord({
           topic,
           partition,
@@ -63,6 +65,7 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
           consumerGroupId: this.config.kafkaGroupId,
           deserializer: deserializeEnvelope,
           handler: async (envelope) => {
+            processedEventId = envelope.eventId;
             if (envelope.eventType === 'PurchaseCompleted') {
               const command = new ApplyPurchaseEventCommand({
                 eventId: envelope.eventId,
@@ -88,6 +91,24 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
             };
           },
         });
+
+        // Fault injection hook (P4-06): simulate crash AFTER DB commit and BEFORE Kafka offset commit
+        if (
+          this.config.faultInjectionPoint === 'AFTER_DB_COMMIT_BEFORE_OFFSET_COMMIT' &&
+          (!this.config.faultTriggerEventId || this.config.faultTriggerEventId === processedEventId)
+        ) {
+          this.logger.warn(
+            '[FaultInjection] Triggering process exit AFTER DB commit and BEFORE offset commit!',
+            {
+              eventId: processedEventId,
+              topic,
+              partition,
+              offset: message.offset,
+              exitCode: 42,
+            },
+          );
+          process.exit(42);
+        }
 
         // Explicit manual commit discipline: Consumed offset N is committed as N + 1
         const nextOffset = (BigInt(message.offset) + 1n).toString();

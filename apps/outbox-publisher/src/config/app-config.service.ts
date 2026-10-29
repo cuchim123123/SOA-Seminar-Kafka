@@ -48,4 +48,12 @@ export class AppConfigService {
   get maxBackoffMs(): number {
     return this.config.MAX_BACKOFF_MS;
   }
+
+  get faultInjectionPoint(): string {
+    return this.config.FAULT_INJECTION_POINT;
+  }
+
+  get faultTriggerEventId(): string | undefined {
+    return this.config.FAULT_TRIGGER_EVENT_ID;
+  }
 }
