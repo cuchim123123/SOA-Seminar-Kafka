@@ -1,5 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { createPurchaseInvalidatedEnvelope, uuidv7 } from '@lab/contracts';
+import {
+  createPurchaseInvalidatedEnvelope,
+  PurchaseInvalidatedReasonV1,
+  uuidv7,
+} from '@lab/contracts';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../ports/unit-of-work.port';
 import {
   InvalidateSyntheticPurchaseCommand,
@@ -20,21 +24,21 @@ export class InvalidateSyntheticPurchaseHandler {
     const resolvedCorrelationId = correlationId ?? uuidv7();
 
     return await this.unitOfWork.execute(async (ctx) => {
-      // 1. Find existing purchase
-      const purchase = await ctx.purchaseRepository.findById(purchaseId);
+      // 1. Find existing purchase under exclusive row lock (FOR UPDATE) to serialize concurrent invalidations
+      const purchase = await ctx.purchaseRepository.findById(purchaseId, { forUpdate: true });
       if (!purchase) {
         throw new NotFoundException(`Purchase with ID '${purchaseId}' not found`);
       }
 
-      // 2. Check if already invalidated (Idempotency guarantee)
+      // 2. Check if already invalidated (Idempotency guarantee with original event metadata)
       if (purchase.status === 'INVALIDATED') {
         return {
           purchaseId: purchase.purchaseId,
           customerId: purchase.customerId,
           status: 'INVALIDATED',
-          customerSequence: purchase.customerSequence,
-          eventId: purchase.purchaseId,
-          reason,
+          customerSequence: purchase.invalidationSequence ?? purchase.customerSequence,
+          eventId: purchase.invalidationEventId ?? purchase.purchaseId,
+          reason: (purchase.invalidationReason as PurchaseInvalidatedReasonV1) ?? reason,
           isAlreadyInvalidated: true,
         };
       }
@@ -42,11 +46,7 @@ export class InvalidateSyntheticPurchaseHandler {
       // 3. Allocate the next monotonic customer sequence under row lock
       const customerSequence = await ctx.sequenceGenerator.nextSequence(purchase.customerId);
 
-      // 4. Invalidate domain entity and persist to database
-      const invalidatedPurchase = purchase.invalidate();
-      await ctx.purchaseRepository.save(invalidatedPurchase);
-
-      // 5. Create typed integration envelope via contracts single-source-of-truth factory
+      // 4. Create typed integration envelope via contracts single-source-of-truth factory
       const eventId = uuidv7();
       const envelope = createPurchaseInvalidatedEnvelope({
         eventId,
@@ -56,6 +56,14 @@ export class InvalidateSyntheticPurchaseHandler {
         customerSequence,
         correlationId: resolvedCorrelationId,
       });
+
+      // 5. Invalidate domain entity with complete audit details and persist to database
+      const invalidatedPurchase = purchase.invalidate({
+        sequence: customerSequence,
+        eventId,
+        reason,
+      });
+      await ctx.purchaseRepository.save(invalidatedPurchase);
 
       // 6. Atomically append to Outbox inside Unit of Work
       await ctx.outboxRepository.save({

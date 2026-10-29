@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Purchase } from '../../domain/purchase.entity';
-import { PurchaseRepositoryPort } from '../../application/ports/purchase-repository.port';
+import {
+  FindPurchaseOptions,
+  PurchaseRepositoryPort,
+} from '../../application/ports/purchase-repository.port';
 
 @Injectable()
 export class InMemoryPurchaseRepositoryAdapter implements PurchaseRepositoryPort {
@@ -10,7 +13,7 @@ export class InMemoryPurchaseRepositoryAdapter implements PurchaseRepositoryPort
     this.purchases.set(purchase.purchaseId, purchase);
   }
 
-  async findById(purchaseId: string): Promise<Purchase | null> {
+  async findById(purchaseId: string, _options?: FindPurchaseOptions): Promise<Purchase | null> {
     return this.purchases.get(purchaseId) ?? null;
   }
 

@@ -1,11 +1,20 @@
 export type PurchaseStatus = 'COMPLETED' | 'INVALIDATED';
 
+export interface InvalidationDetails {
+  readonly sequence: number;
+  readonly eventId: string;
+  readonly reason: string;
+}
+
 export interface PurchaseProps {
   readonly purchaseId: string;
   readonly customerId: string;
   readonly amountCents: number;
   readonly customerSequence: number;
   readonly status?: PurchaseStatus;
+  readonly invalidationSequence?: number;
+  readonly invalidationEventId?: string;
+  readonly invalidationReason?: string;
   readonly createdAt?: string;
 }
 
@@ -38,6 +47,9 @@ export class Purchase {
       amountCents: assertPositiveInteger(props.amountCents, 'amountCents'),
       customerSequence: assertPositiveInteger(props.customerSequence, 'customerSequence'),
       status: props.status ?? 'COMPLETED',
+      invalidationSequence: props.invalidationSequence,
+      invalidationEventId: props.invalidationEventId,
+      invalidationReason: props.invalidationReason,
       createdAt: props.createdAt ?? new Date().toISOString(),
     });
   }
@@ -68,17 +80,32 @@ export class Purchase {
     return this.props.status;
   }
 
+  get invalidationSequence(): number | undefined {
+    return this.props.invalidationSequence;
+  }
+
+  get invalidationEventId(): string | undefined {
+    return this.props.invalidationEventId;
+  }
+
+  get invalidationReason(): string | undefined {
+    return this.props.invalidationReason;
+  }
+
   get createdAt(): string {
     return this.props.createdAt;
   }
 
-  public invalidate(): Purchase {
+  public invalidate(details?: InvalidationDetails): Purchase {
     if (this.props.status === 'INVALIDATED') {
       return this;
     }
     return new Purchase({
       ...this.props,
       status: 'INVALIDATED',
+      invalidationSequence: details?.sequence ?? this.props.invalidationSequence,
+      invalidationEventId: details?.eventId ?? this.props.invalidationEventId,
+      invalidationReason: details?.reason ?? this.props.invalidationReason,
     });
   }
 }

@@ -17,14 +17,17 @@ model PurchaseCustomer {
 }
 
 model Purchase {
-  purchaseId         String           @id @map("purchase_id")
-  customerId         String           @map("customer_id")
-  amountCents        BigInt           @map("amount_cents")
-  status             String           @map("status")
-  completionSequence BigInt           @map("completion_sequence")
-  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  purchaseId           String           @id @map("purchase_id")
+  customerId           String           @map("customer_id")
+  amountCents          BigInt           @map("amount_cents")
+  status               String           @map("status")
+  completionSequence   BigInt           @map("completion_sequence")
+  invalidationSequence BigInt?          @map("invalidation_sequence")
+  invalidationEventId  String?          @map("invalidation_event_id")
+  invalidationReason   String?          @map("invalidation_reason")
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
 
-  customer           PurchaseCustomer @relation(fields: [customerId], references: [customerId])
+  customer             PurchaseCustomer @relation(fields: [customerId], references: [customerId])
 
   @@unique([customerId, completionSequence])
   @@map("purchases")

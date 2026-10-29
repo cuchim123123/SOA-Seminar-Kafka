@@ -116,6 +116,30 @@ describe('Purchase Domain Entity', () => {
       expect(invalidated.customerSequence).toBe(1);
     });
 
+    it('transitions status from COMPLETED to INVALIDATED with invalidation details', () => {
+      const purchase = Purchase.create({
+        purchaseId: 'pur_123',
+        customerId: 'cust_abc',
+        amountCents: 2500,
+        customerSequence: 1,
+      });
+
+      expect(purchase.status).toBe('COMPLETED');
+      expect(purchase.invalidationSequence).toBeUndefined();
+
+      const invalidated = purchase.invalidate({
+        sequence: 4,
+        eventId: 'evt-inv-123',
+        reason: 'FRAUD_CONFIRMED',
+      });
+
+      expect(invalidated.status).toBe('INVALIDATED');
+      expect(invalidated.customerSequence).toBe(1); // completion sequence preserved
+      expect(invalidated.invalidationSequence).toBe(4);
+      expect(invalidated.invalidationEventId).toBe('evt-inv-123');
+      expect(invalidated.invalidationReason).toBe('FRAUD_CONFIRMED');
+    });
+
     it('returns the same instance if already INVALIDATED (idempotency)', () => {
       const purchase = Purchase.create({
         purchaseId: 'pur_123',
@@ -123,11 +147,20 @@ describe('Purchase Domain Entity', () => {
         amountCents: 2500,
         customerSequence: 1,
         status: 'INVALIDATED',
+        invalidationSequence: 4,
+        invalidationEventId: 'evt-inv-123',
+        invalidationReason: 'FRAUD_CONFIRMED',
       });
 
-      const invalidated = purchase.invalidate();
+      const invalidated = purchase.invalidate({
+        sequence: 5,
+        eventId: 'evt-inv-999',
+        reason: 'DEMO_INVALIDATION',
+      });
       expect(invalidated).toBe(purchase);
       expect(invalidated.status).toBe('INVALIDATED');
+      expect(invalidated.invalidationSequence).toBe(4);
+      expect(invalidated.invalidationEventId).toBe('evt-inv-123');
     });
   });
 });

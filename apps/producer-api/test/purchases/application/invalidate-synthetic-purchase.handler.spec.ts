@@ -82,7 +82,7 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
 
     // Unit of work invoked
     expect(executeSpy).toHaveBeenCalledTimes(1);
-    expect(mockPurchaseRepo.findById).toHaveBeenCalledWith('pur_test_101');
+    expect(mockPurchaseRepo.findById).toHaveBeenCalledWith('pur_test_101', { forUpdate: true });
     expect(mockSequenceGenerator.nextSequence).toHaveBeenCalledWith('CUST_U001');
 
     // Return value
@@ -99,6 +99,9 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
     expect(savedPurchase).toBeDefined();
     expect(savedPurchase?.status).toBe('INVALIDATED');
     expect(savedPurchase?.purchaseId).toBe('pur_test_101');
+    expect(savedPurchase?.invalidationSequence).toBe(4);
+    expect(savedPurchase?.invalidationEventId).toBe(result.eventId);
+    expect(savedPurchase?.invalidationReason).toBe('FRAUD_CONFIRMED');
 
     // Outbox record appended
     expect(mockOutboxRepo.save).toHaveBeenCalledTimes(1);
@@ -117,13 +120,16 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
     });
   });
 
-  it('idempotently returns existing state when purchase is already INVALIDATED', async () => {
+  it('idempotently returns existing invalidation sequence and event ID when purchase is already INVALIDATED', async () => {
     const alreadyInvalidatedPurchase = Purchase.create({
       purchaseId: 'pur_already_inv',
       customerId: 'CUST_U001',
       amountCents: 5000,
-      customerSequence: 2,
+      customerSequence: 1, // original completion sequence was 1
       status: 'INVALIDATED',
+      invalidationSequence: 4, // invalidation assigned sequence 4
+      invalidationEventId: '0192d478-f7ef-7b33-912a-3652d3a95d77',
+      invalidationReason: 'FRAUD_CONFIRMED',
     });
 
     const mockPurchaseRepo: PurchaseRepositoryPort = {
@@ -170,6 +176,10 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
     expect(result.purchaseId).toBe('pur_already_inv');
     expect(result.status).toBe('INVALIDATED');
     expect(result.isAlreadyInvalidated).toBe(true);
+    expect(result.customerSequence).toBe(4); // Must return the invalidation sequence (4), NOT completion sequence (1)
+    expect(result.eventId).toBe('0192d478-f7ef-7b33-912a-3652d3a95d77'); // Must return the original invalidation event ID
+    expect(result.reason).toBe('FRAUD_CONFIRMED');
+    expect(mockPurchaseRepo.findById).toHaveBeenCalledWith('pur_already_inv', { forUpdate: true });
     expect(mockSequenceGenerator.nextSequence).not.toHaveBeenCalled();
     expect(mockPurchaseRepo.save).not.toHaveBeenCalled();
     expect(mockOutboxRepo.save).not.toHaveBeenCalled();

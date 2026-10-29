@@ -63,6 +63,13 @@ describe('Two-Pass Correction Integration Test (P5-03)', () => {
   }, 30000);
 
   afterAll(async () => {
+    if (prisma) {
+      await prisma.loyaltyAccount
+        .deleteMany({
+          where: { customerId: { startsWith: 'U_CORRECTION_' } },
+        })
+        .catch(() => {});
+    }
     if (producer) await producer.disconnect();
     if (admin) await admin.disconnect();
     if (app) await app.close();
