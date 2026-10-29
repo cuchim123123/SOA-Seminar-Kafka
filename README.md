@@ -122,6 +122,7 @@ pnpm demo:pause-resume
 ```bash
 # Apply Prisma database migrations to PostgreSQL
 pnpm --filter @lab/producer-api prisma:migrate
+pnpm --filter @lab/loyalty-worker prisma:migrate
 
 # Run automated concurrent customer sequence locking verification (P4-01)
 pnpm demo:concurrency
@@ -131,6 +132,9 @@ pnpm demo:outbox
 
 # Run automated standalone ordered outbox publisher worker verification (P4-03)
 pnpm demo:publisher
+
+# Run automated durable loyalty processing & consumer idempotency verification (P4-04)
+pnpm demo:loyalty-dedup
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -162,7 +166,10 @@ pnpm demo:publisher
 │   ├── verify-consumer-groups.mjs    # Multi-group independent stream consumption verification
 │   ├── verify-lag.mjs                # Manual offset commit N + 1 and UNCOMMITTED lag reader verification
 │   ├── demo-pause-resume.mjs         # Consumer pause, lag accumulation, and catch-up verification
-│   └── verify-postgres-concurrency.mjs # Concurrent customer sequence row locking and PostgreSQL verification
+│   ├── verify-postgres-concurrency.mjs # Concurrent customer sequence row locking and PostgreSQL verification
+│   ├── verify-outbox-offline.mjs     # Transactional outbox persistence and offline Kafka survival verification
+│   ├── verify-outbox-publisher.mjs   # Standalone ordered outbox publisher worker verification
+│   └── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling

@@ -5,6 +5,8 @@ export interface LoyaltyAccountProps {
   tier: Tier;
   totalEligibleSpendCents: number;
   pointsBalance: number;
+  lastCustomerSequence: number;
+  correctionRequired: boolean;
 }
 
 export interface ApplyPurchaseResult {
@@ -13,6 +15,7 @@ export interface ApplyPurchaseResult {
   readonly newTier: Tier;
   readonly totalSpendCents: number;
   readonly totalPoints: number;
+  readonly lastCustomerSequence: number;
 }
 
 function assertNonEmptyCustomerId(customerId: string | undefined | null): string {
@@ -31,6 +34,8 @@ export class LoyaltyAccount {
       tier: 'BRONZE',
       totalEligibleSpendCents: 0,
       pointsBalance: 0,
+      lastCustomerSequence: 0,
+      correctionRequired: false,
     });
   }
 
@@ -40,6 +45,8 @@ export class LoyaltyAccount {
       tier: props.tier,
       totalEligibleSpendCents: props.totalEligibleSpendCents,
       pointsBalance: props.pointsBalance,
+      lastCustomerSequence: props.lastCustomerSequence,
+      correctionRequired: props.correctionRequired,
     });
   }
 
@@ -59,14 +66,38 @@ export class LoyaltyAccount {
     return this.props.pointsBalance;
   }
 
+  get lastCustomerSequence(): number {
+    return this.props.lastCustomerSequence;
+  }
+
+  get correctionRequired(): boolean {
+    return this.props.correctionRequired;
+  }
+
+  markCorrectionRequired(): void {
+    this.props.correctionRequired = true;
+  }
+
   /**
    * Applies a purchase to the loyalty account according to domain rules:
-   * 1. Points are calculated based on CURRENT tier.
-   * 2. Eligible spend is incremented.
-   * 3. Tier is recomputed for subsequent purchases.
-   * 4. Points balance is credited.
+   * 1. Validates strictly incrementing sequence if provided.
+   * 2. Points are calculated based on CURRENT tier.
+   * 3. Eligible spend is incremented.
+   * 4. Tier is recomputed for subsequent purchases.
+   * 5. Points balance is credited.
+   * 6. Last sequence is updated.
    */
-  applyPurchase(amountCents: number): ApplyPurchaseResult {
+  applyPurchase(amountCents: number, sequence?: number): ApplyPurchaseResult {
+    if (sequence !== undefined) {
+      const expectedSequence = this.props.lastCustomerSequence + 1;
+      if (sequence !== expectedSequence) {
+        throw new Error(
+          `Sequence gap or out-of-order event for customer ${this.props.customerId}: expected ${expectedSequence}, received ${sequence}`,
+        );
+      }
+      this.props.lastCustomerSequence = sequence;
+    }
+
     const previousTier = this.props.tier;
     const pointsEarned = pointsForPurchase(amountCents, previousTier);
 
@@ -80,6 +111,7 @@ export class LoyaltyAccount {
       newTier: this.props.tier,
       totalSpendCents: this.props.totalEligibleSpendCents,
       totalPoints: this.props.pointsBalance,
+      lastCustomerSequence: this.props.lastCustomerSequence,
     };
   }
 }

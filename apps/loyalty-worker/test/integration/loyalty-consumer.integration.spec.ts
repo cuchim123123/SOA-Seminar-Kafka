@@ -36,6 +36,7 @@ describe('Loyalty Consumer Kafka Integration Test', () => {
         KAFKA_CLIENT_ID: `loyalty-integ-client-${Date.now()}`,
         KAFKA_GROUP_ID: uniqueGroupId,
         PURCHASE_TOPIC: 'purchase.events',
+        DATABASE_URL: process.env.DATABASE_URL,
       })
       .compile();
 

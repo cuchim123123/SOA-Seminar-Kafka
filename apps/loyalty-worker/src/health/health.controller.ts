@@ -9,6 +9,16 @@ export interface HealthResponse {
 
 @Controller('health')
 export class HealthController {
+  @Get()
+  getHealth(): HealthResponse {
+    return {
+      status: 'ok',
+      service: 'loyalty-worker',
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Get('live')
   getLive(): HealthResponse {
     return {

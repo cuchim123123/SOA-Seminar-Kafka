@@ -79,6 +79,7 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
                 pointsEarned: result.pointsEarned,
                 totalPoints: result.totalPoints,
                 currentTier: result.currentTier,
+                isDuplicate: result.isDuplicate,
               };
             }
             return {

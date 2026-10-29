@@ -42,6 +42,8 @@ export class InMemoryLoyaltyAccountRepositoryAdapter
       tier: found.tier,
       totalEligibleSpendCents: found.totalEligibleSpendCents,
       pointsBalance: found.pointsBalance,
+      lastCustomerSequence: found.lastCustomerSequence,
+      correctionRequired: found.correctionRequired,
     });
   }
 

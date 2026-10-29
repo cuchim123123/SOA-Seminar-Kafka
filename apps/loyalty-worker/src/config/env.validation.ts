@@ -11,6 +11,10 @@ export const envSchema = z.object({
   KAFKA_CLIENT_ID: z.string().min(1).default('loyalty-worker'),
   KAFKA_GROUP_ID: z.string().min(1).default('loyalty-v1'),
   PURCHASE_TOPIC: z.string().min(1).default('purchase.events'),
+  DATABASE_URL: z
+    .string()
+    .min(1)
+    .default('postgresql://localhost:5432/kafka_streaming_lab?schema=public'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

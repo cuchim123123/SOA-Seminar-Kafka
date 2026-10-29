@@ -21,4 +21,5 @@ export interface ApplyPurchaseEventResult {
   readonly currentTier: Tier;
   readonly totalPoints: number;
   readonly totalSpendCents: number;
+  readonly isDuplicate?: boolean;
 }
