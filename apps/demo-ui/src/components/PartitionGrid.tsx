@@ -38,7 +38,17 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
   const [sortField, setSortField] = useState<'offset' | 'key' | 'sequence'>('offset');
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
 
-  // 4. Partition Scaling State
+  // 4. Invalidation & Message Tick-Selection State
+  const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<string[]>([]);
+  const [invalidationReason, setInvalidationReason] = useState<string>('DEMO_INVALIDATION');
+  const [isInvalidating, setIsInvalidating] = useState<boolean>(false);
+  const [invalidationStatus, setInvalidationStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    items?: Array<{ purchaseId: string; customerId: string; sequence: number }>;
+  } | null>(null);
+
+  // 5. Partition Scaling State
   const [showScaleModal, setShowScaleModal] = useState<boolean>(false);
   const [targetPartitionCount, setTargetPartitionCount] = useState<number>(partitionCount + 2);
   const [scaling, setScaling] = useState<boolean>(false);
@@ -201,6 +211,157 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
     }
     return { completed, invalidated, total: messages.length };
   }, [messages]);
+
+  // Extract purchase details from envelope
+  const getPurchaseDetails = (msg: BrokerMessageRecord) => {
+    if (!msg.payload || typeof msg.payload !== 'object') {
+      return {
+        purchaseId: null,
+        eventType: 'RawMessage',
+        isInvalidated: false,
+        customerSeq: null,
+        amountCents: null,
+        reason: null,
+      };
+    }
+    const p = msg.payload as Record<string, unknown>;
+    const eventType = typeof p.eventType === 'string' ? p.eventType : 'RawMessage';
+    const isInvalidated = eventType === 'PurchaseInvalidated';
+    const innerPayload =
+      p.payload && typeof p.payload === 'object'
+        ? (p.payload as Record<string, unknown>)
+        : undefined;
+
+    const purchaseId =
+      innerPayload && typeof innerPayload.purchaseId === 'string'
+        ? innerPayload.purchaseId
+        : typeof p.purchaseId === 'string'
+          ? (p.purchaseId as string)
+          : null;
+
+    const customerSeq =
+      p.customerSequence !== undefined
+        ? String(p.customerSequence)
+        : innerPayload?.customerSequence !== undefined
+          ? String(innerPayload.customerSequence)
+          : null;
+
+    const amountCents =
+      innerPayload && innerPayload.amountCents !== undefined
+        ? Number(innerPayload.amountCents)
+        : null;
+
+    const reason =
+      innerPayload && typeof innerPayload.reason === 'string'
+        ? innerPayload.reason
+        : null;
+
+    return { purchaseId, eventType, isInvalidated, customerSeq, amountCents, reason };
+  };
+
+  // Computes selectable purchases from current processed messages
+  const selectablePurchases = useMemo(() => {
+    const list: string[] = [];
+    for (const msg of processedMessages) {
+      const { purchaseId, isInvalidated } = getPurchaseDetails(msg);
+      if (purchaseId && !isInvalidated && !list.includes(purchaseId)) {
+        list.push(purchaseId);
+      }
+    }
+    return list;
+  }, [processedMessages]);
+
+  const allSelectableChecked =
+    selectablePurchases.length > 0 &&
+    selectablePurchases.every((id) => selectedPurchaseIds.includes(id));
+
+  const toggleSelectAll = () => {
+    if (allSelectableChecked) {
+      setSelectedPurchaseIds([]);
+    } else {
+      setSelectedPurchaseIds([...selectablePurchases]);
+    }
+  };
+
+  const toggleSelectPurchase = (purchaseId: string) => {
+    setSelectedPurchaseIds((prev) =>
+      prev.includes(purchaseId) ? prev.filter((id) => id !== purchaseId) : [...prev, purchaseId],
+    );
+  };
+
+  // Clear selection on partition change
+  useEffect(() => {
+    setSelectedPurchaseIds([]);
+    setInvalidationStatus(null);
+  }, [selectedPartition]);
+
+  // Batch invalidation handler
+  const handleBatchInvalidate = async () => {
+    if (selectedPurchaseIds.length === 0) return;
+    setIsInvalidating(true);
+    setInvalidationStatus(null);
+    const results: Array<{ purchaseId: string; customerId: string; sequence: number }> = [];
+    const errors: string[] = [];
+
+    try {
+      for (const pid of selectedPurchaseIds) {
+        try {
+          const res = await api.invalidatePurchase(pid, invalidationReason);
+          results.push({
+            purchaseId: pid,
+            customerId: res.customerId,
+            sequence: res.customerSequence,
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errors.push(`${pid.slice(0, 10)}...: ${msg}`);
+        }
+      }
+
+      if (results.length > 0) {
+        setInvalidationStatus({
+          type: 'success',
+          message: `✓ Successfully emitted compensation for ${results.length} purchase${results.length > 1 ? 's' : ''}!`,
+          items: results,
+        });
+        setSelectedPurchaseIds([]);
+        await fetchBrokerMessages(selectedPartition, peekLimit);
+        if (onMetadataChanged) onMetadataChanged();
+      } else {
+        setInvalidationStatus({
+          type: 'error',
+          message: `Failed to invalidate: ${errors.join(', ')}`,
+        });
+      }
+    } finally {
+      setIsInvalidating(false);
+    }
+  };
+
+  // Single 1-click invalidation handler
+  const handleSingleInvalidate = async (purchaseId: string) => {
+    setIsInvalidating(true);
+    setInvalidationStatus(null);
+    try {
+      const res = await api.invalidatePurchase(purchaseId, invalidationReason);
+      setInvalidationStatus({
+        type: 'success',
+        message: `✓ Invalidation compensation emitted for customer ${res.customerId} (allocated customer sequence #${res.customerSequence}).`,
+        items: [{ purchaseId, customerId: res.customerId, sequence: res.customerSequence }],
+      });
+      setSelectedPurchaseIds((prev) => prev.filter((id) => id !== purchaseId));
+      await fetchBrokerMessages(selectedPartition, peekLimit);
+      if (onMetadataChanged) onMetadataChanged();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setInvalidationStatus({
+        type: 'error',
+        message: `Failed to invalidate purchase: ${msg}`,
+      });
+    } finally {
+      setIsInvalidating(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -872,6 +1033,159 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
           </div>
         </div>
 
+        {/* Invalidation Execution Feedback Banner */}
+        {invalidationStatus && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              background: invalidationStatus.type === 'success' ? '#ecfdf5' : '#fff1f2',
+              border: invalidationStatus.type === 'success' ? '1px solid #a7f3d0' : '1px solid #fecdd3',
+              color: invalidationStatus.type === 'success' ? '#047857' : '#be123c',
+              marginBottom: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{invalidationStatus.message}</div>
+              {invalidationStatus.items && invalidationStatus.items.length > 0 && (
+                <div style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {invalidationStatus.items.map((it) => (
+                    <span
+                      key={it.purchaseId}
+                      style={{
+                        background: '#ffffff',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid #a7f3d0',
+                        color: '#065f46',
+                      }}
+                    >
+                      Customer <strong>{it.customerId}</strong> ➔ Seq #{it.sequence} (ID: {it.purchaseId.slice(0, 12)}...)
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setInvalidationStatus(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Batch Invalidation Toolbar when messages are ticked */}
+        {selectedPurchaseIds.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              background: '#fff1f2',
+              border: '1px solid #fecdd3',
+              marginBottom: '14px',
+              flexWrap: 'wrap',
+              gap: '12px',
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span
+                style={{
+                  background: '#e11d48',
+                  color: '#ffffff',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: 'var(--radius-full)',
+                }}
+              >
+                {selectedPurchaseIds.length} Selected
+              </span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#9f1239' }}>
+                Batch Invalidation Action:
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ fontSize: '0.75rem', color: '#881337', fontWeight: 600 }}>Reason:</label>
+                <select
+                  aria-label="Batch Invalidation Reason"
+                  value={invalidationReason}
+                  onChange={(e) => setInvalidationReason(e.target.value)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid #fca5a5',
+                    fontSize: '0.75rem',
+                    background: '#ffffff',
+                    fontFamily: 'var(--font-mono)',
+                    color: '#881337',
+                  }}
+                >
+                  <option value="DEMO_INVALIDATION">Demo Invalidation (Seminar)</option>
+                  <option value="CUSTOMER_RETURN">Customer Return / Refund</option>
+                  <option value="FRAUD_CONFIRMED">Fraud Confirmed</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setSelectedPurchaseIds([])}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #fca5a5',
+                  background: '#ffffff',
+                  color: '#9f1239',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Deselect All
+              </button>
+              <button
+                type="button"
+                disabled={isInvalidating}
+                onClick={handleBatchInvalidate}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                  color: '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  cursor: isInvalidating ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(225, 29, 72, 0.35)',
+                }}
+              >
+                {isInvalidating ? 'Invalidating...' : `⚡ Invalidate Selected (${selectedPurchaseIds.length})`}
+              </button>
+            </div>
+          </div>
+        )}
+
         {peekError && (
           <div
             style={{
@@ -932,27 +1246,44 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     letterSpacing: '0.04em',
                   }}
                 >
-                  <th style={{ padding: '10px 14px' }}>Offset</th>
-                  <th style={{ padding: '10px 14px' }}>Key (CustomerId)</th>
-                  <th style={{ padding: '10px 14px' }}>Event Type</th>
-                  <th style={{ padding: '10px 14px' }}>Timestamp</th>
-                  <th style={{ padding: '10px 14px' }}>Payload Summary</th>
+                  <th style={{ width: '42px', padding: '10px 10px', textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all completed purchases on partition"
+                      title={
+                        selectablePurchases.length > 0
+                          ? 'Select / Deselect all completed purchases'
+                          : 'No completed purchases available to select'
+                      }
+                      checked={allSelectableChecked}
+                      onChange={toggleSelectAll}
+                      disabled={selectablePurchases.length === 0}
+                      style={{
+                        cursor: selectablePurchases.length > 0 ? 'pointer' : 'not-allowed',
+                        width: '15px',
+                        height: '15px',
+                        accentColor: '#e11d48',
+                      }}
+                    />
+                  </th>
+                  <th style={{ padding: '10px 12px' }}>Offset</th>
+                  <th style={{ padding: '10px 12px' }}>Key (CustomerId)</th>
+                  <th style={{ padding: '10px 12px' }}>Event Type</th>
+                  <th style={{ padding: '10px 12px' }}>Timestamp</th>
+                  <th style={{ padding: '10px 12px' }}>Payload Summary</th>
                   <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {processedMessages.map((msg) => {
-                  const payloadObj =
-                    typeof msg.payload === 'object' && msg.payload !== null
-                      ? (msg.payload as Record<string, unknown>)
-                      : null;
-                  const eventType = payloadObj?.eventType
-                    ? String(payloadObj.eventType)
-                    : 'RawMessage';
-                  const customerSeq =
-                    payloadObj?.customerSequence !== undefined
-                      ? String(payloadObj.customerSequence)
-                      : '-';
+                  const {
+                    purchaseId,
+                    isInvalidated,
+                    customerSeq,
+                    amountCents,
+                    reason,
+                  } = getPurchaseDetails(msg);
+                  const isSelected = purchaseId ? selectedPurchaseIds.includes(purchaseId) : false;
                   const isExpanded = expandedOffset === msg.offset;
 
                   let timeDisplay = msg.timestamp;
@@ -963,20 +1294,49 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     // ignore
                   }
 
-                  const isInvalidated = eventType === 'PurchaseInvalidated';
-
                   return (
                     <React.Fragment key={msg.offset}>
                       <tr
                         style={{
                           borderBottom: '1px solid var(--border-subtle)',
-                          background: isExpanded ? '#f8fafc' : isInvalidated ? '#fffbeb' : '#ffffff',
+                          background: isSelected
+                            ? '#fff1f2'
+                            : isExpanded
+                              ? '#f8fafc'
+                              : isInvalidated
+                                ? '#fffbeb'
+                                : '#ffffff',
+                          borderLeft: isSelected
+                            ? '3px solid #e11d48'
+                            : isInvalidated
+                              ? '3px solid #f59e0b'
+                              : '3px solid transparent',
                           transition: 'background 0.15s ease',
                         }}
                       >
+                        {/* Checkbox column */}
+                        <td style={{ textAlign: 'center', padding: '10px 10px' }}>
+                          {purchaseId && !isInvalidated ? (
+                            <input
+                              type="checkbox"
+                              aria-label={`Select purchase ${purchaseId}`}
+                              checked={isSelected}
+                              onChange={() => toggleSelectPurchase(purchaseId)}
+                              style={{
+                                cursor: 'pointer',
+                                width: '15px',
+                                height: '15px',
+                                accentColor: '#e11d48',
+                              }}
+                            />
+                          ) : (
+                            <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>-</span>
+                          )}
+                        </td>
+
                         <td
                           style={{
-                            padding: '10px 14px',
+                            padding: '10px 12px',
                             fontFamily: 'var(--font-mono)',
                             fontWeight: 600,
                           }}
@@ -992,7 +1352,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                         </td>
                         <td
                           style={{
-                            padding: '10px 14px',
+                            padding: '10px 12px',
                             fontFamily: 'var(--font-mono)',
                             fontWeight: 600,
                           }}
@@ -1013,7 +1373,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                             <span style={{ color: 'var(--text-dim)' }}>[Null Key]</span>
                           )}
                         </td>
-                        <td style={{ padding: '10px 14px' }}>
+                        <td style={{ padding: '10px 12px' }}>
                           <span
                             className={`badge-mono ${isInvalidated ? 'badge-amber' : 'badge-emerald'}`}
                           >
@@ -1022,7 +1382,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                         </td>
                         <td
                           style={{
-                            padding: '10px 14px',
+                            padding: '10px 12px',
                             color: 'var(--text-muted)',
                             fontSize: '0.75rem',
                             fontFamily: 'var(--font-mono)',
@@ -1032,36 +1392,81 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                         </td>
                         <td
                           style={{
-                            padding: '10px 14px',
+                            padding: '10px 12px',
                             color: 'var(--text-body)',
                             fontSize: '0.775rem',
                           }}
                         >
-                          {payloadObj ? (
-                            <span>
-                              Sequence{' '}
-                              <strong style={{ fontFamily: 'var(--font-mono)' }}>
-                                #{customerSeq}
-                              </strong>
-                              {payloadObj.payload && typeof payloadObj.payload === 'object' ? (
-                                <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
-                                  {(payloadObj.payload as Record<string, unknown>).amountCents
-                                    ? `$${(Number((payloadObj.payload as Record<string, unknown>).amountCents) / 100).toFixed(2)}`
-                                    : (payloadObj.payload as Record<string, unknown>).reason
-                                      ? `[Reason: ${String((payloadObj.payload as Record<string, unknown>).reason)}]`
-                                      : 'Payload'}
-                                </span>
-                              ) : null}
-                            </span>
-                          ) : (
-                            <span
-                              style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}
-                            >
-                              {String(msg.payload).slice(0, 40)}...
-                            </span>
-                          )}
+                          <span>
+                            {customerSeq && (
+                              <span style={{ marginRight: '6px' }}>
+                                Seq{' '}
+                                <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                                  #{customerSeq}
+                                </strong>
+                              </span>
+                            )}
+                            {amountCents !== null && (
+                              <span style={{ color: 'var(--color-emerald)', fontWeight: 600, marginRight: '6px' }}>
+                                ${(amountCents / 100).toFixed(2)}
+                              </span>
+                            )}
+                            {reason && (
+                              <span style={{ color: 'var(--color-amber)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                                [{reason}]
+                              </span>
+                            )}
+                            {purchaseId && (
+                              <span
+                                onClick={() => copyToClipboard(purchaseId, 'Purchase ID')}
+                                title="Click to copy Purchase ID"
+                                style={{
+                                  fontSize: '0.7rem',
+                                  color: 'var(--text-muted)',
+                                  fontFamily: 'var(--font-mono)',
+                                  marginLeft: '4px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                ({purchaseId.slice(0, 14)}...)
+                              </span>
+                            )}
+                          </span>
                         </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          {purchaseId && !isInvalidated ? (
+                            <button
+                              type="button"
+                              disabled={isInvalidating}
+                              onClick={() => handleSingleInvalidate(purchaseId)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid #fecdd3',
+                                background: '#fff1f2',
+                                color: '#e11d48',
+                                fontSize: '0.725rem',
+                                fontWeight: 600,
+                                cursor: isInvalidating ? 'not-allowed' : 'pointer',
+                                marginRight: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title={`1-click Invalidate purchase ${purchaseId}`}
+                            >
+                              <span>↩</span> Invalidate
+                            </button>
+                          ) : isInvalidated ? (
+                            <span
+                              className="badge-mono badge-amber"
+                              style={{ marginRight: '6px', fontSize: '0.675rem' }}
+                            >
+                              Invalidated
+                            </span>
+                          ) : null}
+
                           <button
                             type="button"
                             onClick={() => setExpandedOffset(isExpanded ? null : msg.offset)}
@@ -1076,7 +1481,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                               cursor: 'pointer',
                             }}
                           >
-                            {isExpanded ? 'Hide JSON' : 'Inspect JSON'}
+                            {isExpanded ? 'Hide' : 'Inspect'}
                           </button>
                         </td>
                       </tr>
@@ -1088,7 +1493,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                             borderBottom: '1px solid var(--border-subtle)',
                           }}
                         >
-                          <td colSpan={6} style={{ padding: '14px 18px' }}>
+                          <td colSpan={7} style={{ padding: '14px 18px' }}>
                             <div
                               style={{
                                 display: 'flex',
