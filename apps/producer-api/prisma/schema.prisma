@@ -1,0 +1,57 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model PurchaseCustomer {
+  customerId        String @id @map("customer_id")
+  nextEventSequence BigInt @default(1) @map("next_event_sequence")
+
+  purchases         Purchase[]
+
+  @@map("purchase_customers")
+}
+
+model Purchase {
+  purchaseId         String           @id @map("purchase_id")
+  customerId         String           @map("customer_id")
+  amountCents        BigInt           @map("amount_cents")
+  status             String           @map("status")
+  completionSequence BigInt           @map("completion_sequence")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  customer           PurchaseCustomer @relation(fields: [customerId], references: [customerId])
+
+  @@unique([customerId, completionSequence])
+  @@map("purchases")
+}
+
+model HttpIdempotencyKey {
+  customerId         String @map("customer_id")
+  idempotencyKey     String @map("idempotency_key")
+  requestFingerprint String @map("request_fingerprint")
+  purchaseId         String @map("purchase_id")
+
+  @@id([customerId, idempotencyKey])
+  @@map("http_idempotency_keys")
+}
+
+model OutboxEvent {
+  eventId          String    @id @map("event_id")
+  aggregateId      String    @map("aggregate_id")
+  customerSequence BigInt    @map("customer_sequence")
+  eventType        String    @map("event_type")
+  payloadJson      Json      @map("payload_json")
+  status           String    @default("PENDING") @map("status")
+  attemptCount     Int       @default(0) @map("attempt_count")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  publishedAt      DateTime? @map("published_at") @db.Timestamptz
+
+  @@unique([aggregateId, customerSequence])
+  @@index([status, createdAt, aggregateId, customerSequence], map: "outbox_pending_order")
+  @@map("outbox_events")
+}

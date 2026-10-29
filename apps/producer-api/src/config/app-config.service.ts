@@ -7,6 +7,7 @@ export interface IAppConfig {
   readonly kafkaBrokers: string[];
   readonly kafkaClientId: string;
   readonly purchaseTopic: string;
+  readonly databaseUrl: string;
 }
 
 @Injectable()
@@ -33,5 +34,9 @@ export class AppConfigService implements IAppConfig {
 
   get purchaseTopic(): string {
     return this.config.PURCHASE_TOPIC;
+  }
+
+  get databaseUrl(): string {
+    return this.config.DATABASE_URL;
   }
 }

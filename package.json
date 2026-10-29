@@ -37,6 +37,8 @@
     "demo:lag:p3": "node scripts/verify-lag.mjs",
     "demo:pause-resume": "node scripts/demo-pause-resume.mjs",
     "demo:pause-resume:p3": "node scripts/demo-pause-resume.mjs",
+    "demo:concurrency": "node scripts/verify-postgres-concurrency.mjs",
+    "demo:concurrency:p4": "node scripts/verify-postgres-concurrency.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

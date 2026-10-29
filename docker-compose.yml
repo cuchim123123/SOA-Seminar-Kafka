@@ -48,6 +48,27 @@ services:
       retries: 5
       start_period: 15s
 
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: postgres-db
+    hostname: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-kafka_streaming_lab}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-kafka_streaming_lab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 volumes:
   kafka_data:
     name: kafka_data
+  postgres_data:
+    name: postgres_data

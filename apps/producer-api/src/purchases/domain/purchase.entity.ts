@@ -1,8 +1,12 @@
+export type PurchaseStatus = 'COMPLETED' | 'INVALIDATED';
+
 export interface PurchaseProps {
   readonly purchaseId: string;
   readonly customerId: string;
   readonly amountCents: number;
   readonly customerSequence: number;
+  readonly status?: PurchaseStatus;
+  readonly createdAt?: string;
 }
 
 function assertNonEmpty(value: string | undefined | null, field: string): string {
@@ -20,7 +24,12 @@ function assertPositiveInteger(value: number | undefined | null, field: string):
 }
 
 export class Purchase {
-  private constructor(private readonly props: PurchaseProps) {}
+  private constructor(
+    private readonly props: PurchaseProps & {
+      readonly status: PurchaseStatus;
+      readonly createdAt: string;
+    },
+  ) {}
 
   public static create(props: PurchaseProps): Purchase {
     return new Purchase({
@@ -28,7 +37,15 @@ export class Purchase {
       customerId: assertNonEmpty(props.customerId, 'customerId'),
       amountCents: assertPositiveInteger(props.amountCents, 'amountCents'),
       customerSequence: assertPositiveInteger(props.customerSequence, 'customerSequence'),
+      status: props.status ?? 'COMPLETED',
+      createdAt: props.createdAt ?? new Date().toISOString(),
     });
+  }
+
+  public static reconstitute(
+    props: PurchaseProps & { status: PurchaseStatus; createdAt: string },
+  ): Purchase {
+    return new Purchase(props);
   }
 
   get purchaseId(): string {
@@ -45,5 +62,13 @@ export class Purchase {
 
   get customerSequence(): number {
     return this.props.customerSequence;
+  }
+
+  get status(): PurchaseStatus {
+    return this.props.status;
+  }
+
+  get createdAt(): string {
+    return this.props.createdAt;
   }
 }

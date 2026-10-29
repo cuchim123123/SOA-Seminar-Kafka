@@ -5,10 +5,10 @@ import { OUTBOX_REPOSITORY_PORT } from './application/ports/outbox-repository.po
 import { PURCHASE_REPOSITORY_PORT } from './application/ports/purchase-repository.port';
 import { SEQUENCE_GENERATOR_PORT } from './application/ports/sequence-generator.port';
 import { UNIT_OF_WORK_PORT } from './application/ports/unit-of-work.port';
-import { InMemoryOutboxRepositoryAdapter } from './infrastructure/adapters/in-memory-outbox-repository.adapter';
-import { InMemoryPurchaseRepositoryAdapter } from './infrastructure/adapters/in-memory-purchase-repository.adapter';
-import { InMemorySequenceGeneratorAdapter } from './infrastructure/adapters/in-memory-sequence-generator.adapter';
-import { InMemoryUnitOfWorkAdapter } from './infrastructure/adapters/in-memory-unit-of-work.adapter';
+import { PostgresOutboxRepositoryAdapter } from './infrastructure/adapters/postgres-outbox-repository.adapter';
+import { PostgresPurchaseRepositoryAdapter } from './infrastructure/adapters/postgres-purchase-repository.adapter';
+import { PostgresSequenceGeneratorAdapter } from './infrastructure/adapters/postgres-sequence-generator.adapter';
+import { PostgresUnitOfWorkAdapter } from './infrastructure/adapters/postgres-unit-of-work.adapter';
 import { KafkaEventPublisherAdapter } from './infrastructure/adapters/kafka-event-publisher.adapter';
 import { OutboxRelayService } from './infrastructure/services/outbox-relay.service';
 import { PurchasesController } from './interfaces/http/purchases.controller';
@@ -18,17 +18,21 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
   providers: [
     CreatePurchaseHandler,
     OutboxRelayService,
+    PostgresPurchaseRepositoryAdapter,
+    PostgresOutboxRepositoryAdapter,
+    PostgresSequenceGeneratorAdapter,
+    PostgresUnitOfWorkAdapter,
     {
       provide: PURCHASE_REPOSITORY_PORT,
-      useClass: InMemoryPurchaseRepositoryAdapter,
+      useClass: PostgresPurchaseRepositoryAdapter,
     },
     {
       provide: OUTBOX_REPOSITORY_PORT,
-      useClass: InMemoryOutboxRepositoryAdapter,
+      useClass: PostgresOutboxRepositoryAdapter,
     },
     {
       provide: SEQUENCE_GENERATOR_PORT,
-      useClass: InMemorySequenceGeneratorAdapter,
+      useClass: PostgresSequenceGeneratorAdapter,
     },
     {
       provide: EVENT_PUBLISHER_PORT,
@@ -36,7 +40,7 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
     },
     {
       provide: UNIT_OF_WORK_PORT,
-      useClass: InMemoryUnitOfWorkAdapter,
+      useClass: PostgresUnitOfWorkAdapter,
     },
   ],
   exports: [

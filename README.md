@@ -117,9 +117,20 @@ pnpm demo:lag
 pnpm demo:pause-resume
 ```
 
+### Phase 4: Reliable DB/Kafka Integration & Outbox Demo
+
+```bash
+# Apply Prisma database migrations to PostgreSQL
+pnpm --filter @lab/producer-api prisma:migrate
+
+# Run automated concurrent customer sequence locking verification (P4-01)
+pnpm demo:concurrency
+```
+
 - **Kafka Broker (Host listener)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
 - **Kafka UI**: `http://localhost:8080`
+- **PostgreSQL DB**: `localhost:5432` (`postgres:16-alpine`, database: `kafka_streaming_lab`)
 
 ---
 
@@ -128,7 +139,8 @@ pnpm demo:pause-resume
 ```text
 .
 ├── apps/
-│   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Kafka Publisher
+│   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Outbox -> Kafka
+│   │   └── prisma/            # Prisma schema and PostgreSQL migrations
 │   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
 │   └── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
 ├── packages/
@@ -142,8 +154,9 @@ pnpm demo:pause-resume
 │   ├── inspect-partitions.mjs # Live partition inspector reporting actual broker metadata and key distribution
 │   ├── verify-consumer-groups.mjs    # Multi-group independent stream consumption verification
 │   ├── verify-lag.mjs                # Manual offset commit N + 1 and UNCOMMITTED lag reader verification
-│   └── demo-pause-resume.mjs         # Consumer pause, lag accumulation, and catch-up verification
-├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
+│   ├── demo-pause-resume.mjs         # Consumer pause, lag accumulation, and catch-up verification
+│   └── verify-postgres-concurrency.mjs # Concurrent customer sequence row locking and PostgreSQL verification
+├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
 ├── pnpm-workspace.yaml        # pnpm workspace package patterns
