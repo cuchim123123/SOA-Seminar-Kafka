@@ -3,13 +3,13 @@ import { PauseAnalyticsConsumerCommand } from '../../../src/analytics/applicatio
 import { PauseAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/pause-analytics-consumer.handler';
 import { ResumeAnalyticsConsumerCommand } from '../../../src/analytics/application/commands/resume-analytics-consumer.command';
 import { ResumeAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/resume-analytics-consumer.handler';
-import { KafkaConsumerControlPort } from '../../../src/analytics/application/ports/kafka-consumer-control.port';
+import { ConsumerControlPort } from '../../../src/analytics/application/ports/consumer-control.port';
 import { GetConsumerControlStatusHandler } from '../../../src/analytics/application/queries/get-consumer-control-status.handler';
 import { GetConsumerControlStatusQuery } from '../../../src/analytics/application/queries/get-consumer-control-status.query';
 
 describe('Consumer Control Handlers', () => {
   it('PauseAnalyticsConsumerHandler invokes pause on control port', async () => {
-    const mockControl: KafkaConsumerControlPort = {
+    const mockControl: ConsumerControlPort = {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
@@ -23,7 +23,7 @@ describe('Consumer Control Handlers', () => {
   });
 
   it('ResumeAnalyticsConsumerHandler invokes resume on control port', async () => {
-    const mockControl: KafkaConsumerControlPort = {
+    const mockControl: ConsumerControlPort = {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
@@ -44,7 +44,7 @@ describe('Consumer Control Handlers', () => {
       pausedPartitions: [0, 1],
     };
 
-    const mockControl: KafkaConsumerControlPort = {
+    const mockControl: ConsumerControlPort = {
       pause: vi.fn(),
       resume: vi.fn(),
       getStatus: vi.fn().mockResolvedValue(mockStatus),

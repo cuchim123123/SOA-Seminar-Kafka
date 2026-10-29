@@ -7,12 +7,12 @@ import { ApplySalesEventCommand } from '../../application/commands/apply-sales-e
 import { ApplySalesEventHandler } from '../../application/commands/apply-sales-event.handler';
 import {
   ConsumerControlStatus,
-  KafkaConsumerControlPort,
-} from '../../application/ports/kafka-consumer-control.port';
+  ConsumerControlPort,
+} from '../../application/ports/consumer-control.port';
 
 @Injectable()
 export class KafkaAnalyticsConsumerAdapter
-  implements KafkaConsumerControlPort, OnModuleInit, OnModuleDestroy
+  implements ConsumerControlPort, OnModuleInit, OnModuleDestroy
 {
   private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;

@@ -3,7 +3,7 @@ import { PauseAnalyticsConsumerCommand } from '../../application/commands/pause-
 import { PauseAnalyticsConsumerHandler } from '../../application/commands/pause-analytics-consumer.handler';
 import { ResumeAnalyticsConsumerCommand } from '../../application/commands/resume-analytics-consumer.command';
 import { ResumeAnalyticsConsumerHandler } from '../../application/commands/resume-analytics-consumer.handler';
-import { ConsumerControlStatus } from '../../application/ports/kafka-consumer-control.port';
+import { ConsumerControlStatus } from '../../application/ports/consumer-control.port';
 import { GetConsumerControlStatusHandler } from '../../application/queries/get-consumer-control-status.handler';
 import { GetConsumerControlStatusQuery } from '../../application/queries/get-consumer-control-status.query';
 

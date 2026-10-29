@@ -5,9 +5,9 @@ export interface ConsumerControlStatus {
   readonly pausedPartitions: number[];
 }
 
-export const KAFKA_CONSUMER_CONTROL_PORT = Symbol('KAFKA_CONSUMER_CONTROL_PORT');
+export const CONSUMER_CONTROL_PORT = Symbol('CONSUMER_CONTROL_PORT');
 
-export interface KafkaConsumerControlPort {
+export interface ConsumerControlPort {
   pause(): Promise<void>;
   resume(): Promise<void>;
   getStatus(): Promise<ConsumerControlStatus>;

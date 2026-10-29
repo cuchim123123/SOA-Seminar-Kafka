@@ -3,7 +3,7 @@ import { ApplySalesEventHandler } from './application/commands/apply-sales-event
 import { PauseAnalyticsConsumerHandler } from './application/commands/pause-analytics-consumer.handler';
 import { ResumeAnalyticsConsumerHandler } from './application/commands/resume-analytics-consumer.handler';
 import { ANALYTICS_UNIT_OF_WORK_PORT } from './application/ports/analytics-unit-of-work.port';
-import { KAFKA_CONSUMER_CONTROL_PORT } from './application/ports/kafka-consumer-control.port';
+import { CONSUMER_CONTROL_PORT } from './application/ports/consumer-control.port';
 import { SALES_SUMMARY_READ_DAO_PORT } from './application/ports/sales-summary-read-dao.port';
 import { SALES_SUMMARY_REPOSITORY_PORT } from './application/ports/sales-summary-repository.port';
 import { GetConsumerControlStatusHandler } from './application/queries/get-consumer-control-status.handler';
@@ -40,7 +40,7 @@ import { AnalyticsController } from './interfaces/http/analytics.controller';
     },
     KafkaAnalyticsConsumerAdapter,
     {
-      provide: KAFKA_CONSUMER_CONTROL_PORT,
+      provide: CONSUMER_CONTROL_PORT,
       useExisting: KafkaAnalyticsConsumerAdapter,
     },
   ],
@@ -53,7 +53,7 @@ import { AnalyticsController } from './interfaces/http/analytics.controller';
     SALES_SUMMARY_REPOSITORY_PORT,
     ANALYTICS_UNIT_OF_WORK_PORT,
     SALES_SUMMARY_READ_DAO_PORT,
-    KAFKA_CONSUMER_CONTROL_PORT,
+    CONSUMER_CONTROL_PORT,
   ],
 })
 export class AnalyticsModule {}
