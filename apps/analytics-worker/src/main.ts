@@ -21,6 +21,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new GlobalHttpExceptionFilter(structuredLogger));
   app.useGlobalInterceptors(new HttpLoggingInterceptor(structuredLogger));
   app.enableShutdownHooks();
+  app.enableCors();
 
   await app.listen(config.port);
   structuredLogger.info('Analytics Worker started successfully', {

@@ -16,6 +16,7 @@
     "start:loyalty": "pnpm --filter @lab/loyalty-worker start",
     "start:analytics": "pnpm --filter @lab/analytics-worker start",
     "start:replay": "pnpm --filter @lab/replay-worker start",
+    "start:ui": "pnpm --filter @lab/demo-ui dev",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.spec.ts\"",
@@ -76,5 +77,10 @@
     "typescript-eslint": "^8.20.0",
     "unplugin-swc": "^1.5.1",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "overrides": {
+      "typescript": "~5.7.3"
+    }
   }
 }
