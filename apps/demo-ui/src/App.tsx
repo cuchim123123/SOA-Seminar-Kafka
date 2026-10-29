@@ -9,6 +9,8 @@ import type {
   TopicPartitionMetadata,
 } from './api/client';
 import { Header } from './components/Header';
+import { Navigation } from './components/Navigation';
+import type { TabId } from './components/Navigation';
 import { PipelineVisualizer } from './components/PipelineVisualizer';
 import { PartitionGrid } from './components/PartitionGrid';
 import { ConsumerLagPanel } from './components/ConsumerLagPanel';
@@ -16,8 +18,17 @@ import { ProjectionsPanel } from './components/ProjectionsPanel';
 import { ReplayStudio } from './components/ReplayStudio';
 import { LiveEventLog } from './components/LiveEventLog';
 import type { LogEntry } from './components/LiveEventLog';
+import { UserGuide } from './components/UserGuide';
+
+function getInitialTab(): TabId {
+  const hash = window.location.hash.replace('#', '') as TabId;
+  const validTabs: TabId[] = ['pipeline', 'partitions', 'lag', 'projections', 'replay', 'guide'];
+  return validTabs.includes(hash) ? hash : 'pipeline';
+}
 
 export const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
+
   const [health, setHealth] = useState<ServiceHealthStatus>({
     producer: false,
     loyalty: false,
@@ -36,6 +47,20 @@ export const App: React.FC = () => {
   const [highlightedPartition] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [lastEventTime, setLastEventTime] = useState<number>(Date.now());
+
+  // Hash change synchronization for browser navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveTab(getInitialTab());
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+    window.location.hash = tab;
+  };
 
   const fetchTelemetry = useCallback(async () => {
     try {
@@ -61,11 +86,11 @@ export const App: React.FC = () => {
       if (aStat) setAnalyticsStatus(aStat);
       if (summ) setSalesSummary(summ);
     } catch {
-      // Telemetry fetch non-blocking
+      // Non-blocking telemetry sync
     }
   }, []);
 
-  // Polling effect every 3000ms (smooth, lightweight background sync)
+  // Background sync every 3000ms
   useEffect(() => {
     fetchTelemetry();
     const timer = setInterval(fetchTelemetry, 3000);
@@ -93,14 +118,13 @@ export const App: React.FC = () => {
     };
     setRecentLogs((prev) => [entry, ...prev.slice(0, 19)]);
 
-    // Trigger telemetry refresh to observe partition offsets immediately
     setTimeout(() => {
       fetchTelemetry();
     }, 600);
   };
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '24px 20px 48px' }}>
+    <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px 20px 48px' }}>
       {/* 1. Header with Cluster Health & Telemetry */}
       <Header
         health={health}
@@ -108,46 +132,66 @@ export const App: React.FC = () => {
         onRefresh={handleManualRefresh}
       />
 
-      {/* 2. Interactive Request Flow & Outbox Pipeline */}
-      <PipelineVisualizer
-        onEventEmitted={handleEventEmitted}
-        lastPurchase={lastPurchase}
+      {/* 2. Sleek Tab Navigation Bar */}
+      <Navigation
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        isConsumerPaused={analyticsStatus?.isPaused ?? false}
+        totalPartitions={topicMetadata?.partitionCount ?? 6}
       />
 
-      {/* 3. Kafka 6-Partition Topic Visualizer */}
-      <PartitionGrid
-        metadata={topicMetadata}
-        loading={!topicMetadata}
-        highlightedPartition={highlightedPartition}
-      />
+      {/* 3. Tab Contents: Cleanly Separated Views */}
+      <main>
+        {activeTab === 'pipeline' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <PipelineVisualizer
+              onEventEmitted={handleEventEmitted}
+              lastPurchase={lastPurchase}
+            />
+            <LiveEventLog
+              entries={recentLogs}
+              onClear={() => setRecentLogs([])}
+            />
+          </div>
+        )}
 
-      {/* 4. Independent Consumer Groups & Real Lag Controls */}
-      <ConsumerLagPanel
-        loyaltyLag={loyaltyLag}
-        analyticsLag={analyticsLag}
-        analyticsStatus={analyticsStatus}
-        onStatusChanged={fetchTelemetry}
-      />
+        {activeTab === 'partitions' && (
+          <PartitionGrid
+            metadata={topicMetadata}
+            loading={!topicMetadata}
+            highlightedPartition={highlightedPartition}
+          />
+        )}
 
-      {/* 5. Downstream Read Projections (Loyalty & Analytics) */}
-      <ProjectionsPanel
-        summary={salesSummary}
-        lastUpdatedEventTime={lastEventTime}
-      />
+        {activeTab === 'lag' && (
+          <ConsumerLagPanel
+            loyaltyLag={loyaltyLag}
+            analyticsLag={analyticsLag}
+            analyticsStatus={analyticsStatus}
+            onStatusChanged={fetchTelemetry}
+          />
+        )}
 
-      {/* 6. Bounded Replay & Two-Pass Correction Studio */}
-      <ReplayStudio />
+        {activeTab === 'projections' && (
+          <ProjectionsPanel
+            summary={salesSummary}
+            lastUpdatedEventTime={lastEventTime}
+          />
+        )}
 
-      {/* 7. Live Audit & Event Log */}
-      <LiveEventLog
-        entries={recentLogs}
-        onClear={() => setRecentLogs([])}
-      />
+        {activeTab === 'replay' && (
+          <ReplayStudio />
+        )}
+
+        {activeTab === 'guide' && (
+          <UserGuide onNavigateToTab={handleTabChange} />
+        )}
+      </main>
 
       {/* Footer */}
       <footer
         style={{
-          marginTop: '32px',
+          marginTop: '36px',
           textAlign: 'center',
           color: 'var(--text-muted)',
           fontSize: '0.75rem',
