@@ -32,6 +32,10 @@ describe('InspectTopicHandler', () => {
       inspectConsumerGroupLag: async () => {
         throw new Error('Not implemented');
       },
+      scaleTopicPartitions: async () => {
+        throw new Error('Not implemented');
+      },
+      peekPartitionMessages: async () => [],
     };
 
     const handler = new InspectTopicHandler(mockInspector);

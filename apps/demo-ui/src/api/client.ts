@@ -141,6 +141,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface BrokerMessageRecord {
+  topic: string;
+  partition: number;
+  offset: string;
+  key: string | null;
+  timestamp: string;
+  payload: Record<string, unknown> | string | null;
+}
+
 export const api = {
   // 1. Producer API
   createPurchase: async (
@@ -212,6 +221,57 @@ export const api = {
         };
       }),
     };
+  },
+
+  scaleTopicPartitions: async (
+    topic: string = 'purchase.events',
+    count: number,
+  ): Promise<TopicPartitionMetadata> => {
+    const raw = await request<{
+      topic: string;
+      partitionCount: number;
+      partitions: Array<{
+        topic: string;
+        partition: number;
+        leader: number;
+        replicas: number[];
+        isr: number[];
+        logStartOffset: string;
+        logEndOffset: string;
+      }>;
+    }>(`/api/producer/api/v1/ops/kafka/topics/${topic}/partitions`, {
+      method: 'POST',
+      body: JSON.stringify({ count }),
+    });
+
+    return {
+      topic: raw.topic,
+      partitionCount: raw.partitionCount,
+      partitions: raw.partitions.map((p) => {
+        const start = BigInt(p.logStartOffset || '0');
+        const end = BigInt(p.logEndOffset || '0');
+        const msgCount = end >= start ? (end - start).toString() : '0';
+        return {
+          partition: p.partition,
+          leader: p.leader,
+          replicas: p.replicas,
+          isr: p.isr,
+          logStartOffset: p.logStartOffset,
+          highWatermark: p.logEndOffset,
+          messageCount: msgCount,
+        };
+      }),
+    };
+  },
+
+  peekPartitionMessages: async (
+    topic: string = 'purchase.events',
+    partition: number,
+    limit: number = 10,
+  ): Promise<BrokerMessageRecord[]> => {
+    return request<BrokerMessageRecord[]>(
+      `/api/producer/api/v1/ops/kafka/topics/${topic}/partitions/${partition}/messages?limit=${limit}`,
+    );
   },
 
   getConsumerLag: async (

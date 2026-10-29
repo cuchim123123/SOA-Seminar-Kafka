@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { KAFKA_INSPECTOR_PORT } from './application/ports/kafka-inspector.port';
+import { ScaleTopicPartitionsHandler } from './application/commands/scale-topic-partitions.handler';
 import { GetConsumerGroupLagHandler } from './application/queries/get-consumer-group-lag.handler';
 import { InspectTopicHandler } from './application/queries/inspect-topic.handler';
+import { PeekPartitionMessagesHandler } from './application/queries/peek-partition-messages.handler';
 import { KafkaJsInspectorAdapter } from './infrastructure/adapters/kafkajs-inspector.adapter';
 import { OpsController } from './interfaces/http/ops.controller';
 
@@ -10,11 +12,19 @@ import { OpsController } from './interfaces/http/ops.controller';
   providers: [
     InspectTopicHandler,
     GetConsumerGroupLagHandler,
+    PeekPartitionMessagesHandler,
+    ScaleTopicPartitionsHandler,
     {
       provide: KAFKA_INSPECTOR_PORT,
       useClass: KafkaJsInspectorAdapter,
     },
   ],
-  exports: [InspectTopicHandler, GetConsumerGroupLagHandler, KAFKA_INSPECTOR_PORT],
+  exports: [
+    InspectTopicHandler,
+    GetConsumerGroupLagHandler,
+    PeekPartitionMessagesHandler,
+    ScaleTopicPartitionsHandler,
+    KAFKA_INSPECTOR_PORT,
+  ],
 })
 export class OpsModule {}

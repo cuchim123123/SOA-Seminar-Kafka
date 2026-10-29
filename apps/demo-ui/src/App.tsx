@@ -160,6 +160,7 @@ export const App: React.FC = () => {
             metadata={topicMetadata}
             loading={!topicMetadata}
             highlightedPartition={highlightedPartition}
+            onMetadataChanged={fetchTelemetry}
           />
         )}
 

@@ -31,9 +31,24 @@ export interface ConsumerGroupLagResult {
   readonly partitions: PartitionLag[];
 }
 
+export interface BrokerMessageRecord {
+  readonly topic: string;
+  readonly partition: number;
+  readonly offset: string;
+  readonly key: string | null;
+  readonly timestamp: string;
+  readonly payload: unknown;
+}
+
 export const KAFKA_INSPECTOR_PORT = Symbol('KAFKA_INSPECTOR_PORT');
 
 export interface KafkaInspectorPort {
   inspectTopic(topic: string): Promise<TopicInspectionResult>;
   inspectConsumerGroupLag(groupId: string, topic?: string): Promise<ConsumerGroupLagResult>;
+  scaleTopicPartitions(topic: string, newPartitionCount: number): Promise<TopicInspectionResult>;
+  peekPartitionMessages(
+    topic: string,
+    partition: number,
+    limit?: number,
+  ): Promise<BrokerMessageRecord[]>;
 }

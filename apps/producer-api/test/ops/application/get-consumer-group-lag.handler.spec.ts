@@ -43,6 +43,10 @@ describe('GetConsumerGroupLagHandler', () => {
         expect(topic).toBe('purchase.events');
         return mockLagResult;
       },
+      scaleTopicPartitions: async () => {
+        throw new Error('Not implemented');
+      },
+      peekPartitionMessages: async () => [],
     };
 
     const handler = new GetConsumerGroupLagHandler(mockInspector);

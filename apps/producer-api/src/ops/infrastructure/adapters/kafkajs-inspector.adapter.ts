@@ -1,8 +1,9 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
-import { Admin, Kafka } from 'kafkajs';
+import { Admin, Consumer, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
+  BrokerMessageRecord,
   ConsumerGroupLagResult,
   KafkaInspectorPort,
   PartitionLag,
@@ -68,6 +69,136 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
       partitionCount: partitions.length,
       partitions,
     };
+  }
+
+  async scaleTopicPartitions(
+    topic: string,
+    newPartitionCount: number,
+  ): Promise<TopicInspectionResult> {
+    const current = await this.inspectTopic(topic);
+    if (newPartitionCount <= current.partitionCount) {
+      throw new Error(
+        `Topic '${topic}' currently has ${current.partitionCount} partitions. Kafka only supports scaling partitions upward (requested: ${newPartitionCount}).`,
+      );
+    }
+
+    this.logger.info('Scaling topic partitions on broker cluster...', {
+      topic,
+      currentCount: current.partitionCount,
+      newCount: newPartitionCount,
+    });
+
+    await this.admin.createPartitions({
+      topicPartitions: [
+        {
+          topic,
+          count: newPartitionCount,
+        },
+      ],
+    });
+
+    this.logger.info(
+      'Successfully requested partition creation on broker, waiting for KRaft leader assignment...',
+      {
+        topic,
+        newCount: newPartitionCount,
+      },
+    );
+
+    // Allow KRaft leader election and partition log initialization to settle
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        return await this.inspectTopic(topic);
+      } catch (err) {
+        attempts++;
+        if (attempts >= 3) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    return this.inspectTopic(topic);
+  }
+
+  async peekPartitionMessages(
+    topic: string,
+    partition: number,
+    limit: number = 10,
+  ): Promise<BrokerMessageRecord[]> {
+    const offsets = await this.admin.fetchTopicOffsets(topic);
+    const partOffset = offsets.find((o) => o.partition === partition);
+
+    if (!partOffset) {
+      throw new Error(`Partition #${partition} does not exist for topic '${topic}'`);
+    }
+
+    const low = BigInt(partOffset.low);
+    const high = BigInt(partOffset.high);
+
+    if (high <= low) {
+      return [];
+    }
+
+    const maxRecords = BigInt(Math.max(1, Math.min(50, limit)));
+    const startBigInt = high - maxRecords > low ? high - maxRecords : low;
+    const startOffset = startBigInt.toString();
+
+    const consumer: Consumer = this.kafka.consumer({
+      groupId: `peeker-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      allowAutoTopicCreation: false,
+      maxWaitTimeInMs: 100,
+    });
+
+    await consumer.connect();
+    await consumer.subscribe({ topic, fromBeginning: false });
+
+    consumer.on(consumer.events.GROUP_JOIN, () => {
+      consumer.seek({ topic, partition, offset: startOffset });
+    });
+
+    const messages: BrokerMessageRecord[] = [];
+
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => resolve(), 2500);
+
+      consumer
+        .run({
+          autoCommit: false,
+          eachMessage: async ({ partition: msgPart, message }) => {
+            if (msgPart === partition) {
+              let payload: unknown = null;
+              try {
+                payload = message.value ? JSON.parse(message.value.toString('utf-8')) : null;
+              } catch {
+                payload = message.value ? message.value.toString('utf-8') : null;
+              }
+
+              messages.push({
+                topic,
+                partition: msgPart,
+                offset: message.offset,
+                key: message.key ? message.key.toString('utf-8') : null,
+                timestamp: message.timestamp,
+                payload,
+              });
+
+              if (messages.length >= limit || BigInt(message.offset) + 1n >= high) {
+                clearTimeout(timer);
+                resolve();
+              }
+            }
+          },
+        })
+        .catch(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+    });
+
+    await consumer.disconnect().catch(() => {});
+    return messages.reverse(); // Return newest records first
   }
 
   async inspectConsumerGroupLag(
