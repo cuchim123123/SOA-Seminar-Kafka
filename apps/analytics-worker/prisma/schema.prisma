@@ -1,0 +1,30 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-analytics"
+}
+
+model AnalyticsSummary {
+  id                String    @id @default("global") @map("id")
+  totalRevenueCents BigInt    @default(0) @map("total_revenue_cents")
+  purchaseCount     BigInt    @default(0) @map("purchase_count")
+  customerIds       Json      @default("[]") @map("customer_ids")
+  lastEventId       String?   @map("last_event_id")
+  lastProcessedAt   DateTime? @map("last_processed_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("analytics_summary")
+}
+
+model ProcessedEvent {
+  consumerName String   @map("consumer_name")
+  eventId      String   @map("event_id")
+  processedAt  DateTime @default(now()) @map("processed_at") @db.Timestamptz
+
+  @@id([consumerName, eventId])
+  @@map("processed_events")
+}

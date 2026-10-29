@@ -46,6 +46,8 @@
     "demo:publisher:p4": "node scripts/verify-outbox-publisher.mjs",
     "demo:loyalty-dedup": "node scripts/verify-durable-loyalty.mjs",
     "demo:loyalty-dedup:p4": "node scripts/verify-durable-loyalty.mjs",
+    "demo:analytics-dedup": "node scripts/verify-durable-analytics.mjs",
+    "demo:analytics-dedup:p4": "node scripts/verify-durable-analytics.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

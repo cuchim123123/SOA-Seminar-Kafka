@@ -36,7 +36,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 - [x] **P4-02 CQRS purchase flow + outbox** — Replace direct source event publication with atomic purchase/outbox command handler and reader query; retain 202 response shape. **Proof:** DB source commit survives Kafka disconnection, outbox pending visible.
 - [x] **P4-03 Publisher worker** — Single ordered outbox publisher, retries/backoff, stable IDs and ack status. **Proof:** Kafka restored → pending events published, ordering preserved.
 - [x] **P4-04 Durable Loyalty processing** — Processed-event unique insertion in same DB transaction as loyalty update; manual offset after commit. **Proof:** duplicate event does not update points twice.
-- [ ] **P4-05 Durable Analytics processing** — Independent processed-event namespace and revenue projection; no cross-context write leak. **Proof:** Analytics commits independently.
+- [x] **P4-05 Durable Analytics processing** — Independent processed-event namespace and revenue projection; no cross-context write leak. **Proof:** Analytics commits independently.
 - [ ] **P4-06 Fault injection integration suite** — Crash after DB commit before offset; publisher crash after ack before outbox status update. **Proof:** redelivery, skip, one business state mutation.
 
 ## Phase 5 — Replay

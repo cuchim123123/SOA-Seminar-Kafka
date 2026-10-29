@@ -16,4 +16,5 @@ export interface ApplySalesEventResult {
   readonly totalRevenueCents: number;
   readonly purchaseCount: number;
   readonly uniqueCustomerCount: number;
+  readonly isDuplicate?: boolean;
 }

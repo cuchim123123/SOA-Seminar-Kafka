@@ -85,6 +85,7 @@ export class KafkaAnalyticsConsumerAdapter
                 totalRevenueCents: result.totalRevenueCents,
                 purchaseCount: result.purchaseCount,
                 uniqueCustomerCount: result.uniqueCustomerCount,
+                isDuplicate: result.isDuplicate,
               };
             }
             return {

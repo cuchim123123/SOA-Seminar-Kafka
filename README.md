@@ -123,6 +123,7 @@ pnpm demo:pause-resume
 # Apply Prisma database migrations to PostgreSQL
 pnpm --filter @lab/producer-api prisma:migrate
 pnpm --filter @lab/loyalty-worker prisma:migrate
+pnpm --filter @lab/analytics-worker prisma:migrate
 
 # Run automated concurrent customer sequence locking verification (P4-01)
 pnpm demo:concurrency
@@ -135,6 +136,9 @@ pnpm demo:publisher
 
 # Run automated durable loyalty processing & consumer idempotency verification (P4-04)
 pnpm demo:loyalty-dedup
+
+# Run automated durable analytics processing & consumer idempotency verification (P4-05)
+pnpm demo:analytics-dedup
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -153,7 +157,9 @@ pnpm demo:loyalty-dedup
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
 │   ├── outbox-publisher/      # NestJS Outbox Publisher: single ordered daemon -> Kafka
 │   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
+│   │   └── prisma/            # Prisma schema and PostgreSQL migrations
 │   └── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
+│       └── prisma/            # Prisma schema and PostgreSQL migrations
 ├── packages/
 │   ├── contracts/             # Integration event schemas, Zod validation, factories, serializer
 │   └── observability/         # Structured logger, unified Kafka execution coordinator, error hierarchy
@@ -169,7 +175,8 @@ pnpm demo:loyalty-dedup
 │   ├── verify-postgres-concurrency.mjs # Concurrent customer sequence row locking and PostgreSQL verification
 │   ├── verify-outbox-offline.mjs     # Transactional outbox persistence and offline Kafka survival verification
 │   ├── verify-outbox-publisher.mjs   # Standalone ordered outbox publisher worker verification
-│   └── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
+│   ├── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
+│   └── verify-durable-analytics.mjs  # Durable analytics processing and consumer deduplication verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
