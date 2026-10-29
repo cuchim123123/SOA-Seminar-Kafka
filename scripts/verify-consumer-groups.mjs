@@ -131,22 +131,29 @@ async function main() {
       dispatchedEvents.push(body);
     }
 
-    // 4. Wait for processing across both consumer groups
-    console.log('[P3-01 Verification] Waiting 3s for both consumer groups to process events...');
-    await sleep(3000);
+    // 4. Poll for processing across both consumer groups
+    console.log('[P3-01 Verification] Polling workers for processing completion (up to 10s)...');
+    let loyaltyData = null;
+    let analyticsData = null;
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < 10000) {
+      if (!loyaltyData) {
+        const res = await fetch(
+          `http://localhost:${LOYALTY_PORT}/api/v1/demo/loyalty/${testCustomerId}`,
+        );
+        if (res.ok) loyaltyData = await res.json();
+      }
+      const res = await fetch(`http://localhost:${ANALYTICS_PORT}/api/v1/analytics/summary`);
+      if (res.ok) analyticsData = await res.json();
 
-    // 5. Query Loyalty Worker (loyalty-v1 state output)
-    const loyaltyRes = await fetch(
-      `http://localhost:${LOYALTY_PORT}/api/v1/loyalty/${testCustomerId}`,
-    );
-    const loyaltyData = loyaltyRes.ok ? await loyaltyRes.json() : null;
-
-    // 6. Query Analytics Worker (analytics-v1 state output)
-    const analyticsRes = await fetch(`http://localhost:${ANALYTICS_PORT}/api/v1/analytics/summary`);
-    const analyticsData = analyticsRes.ok ? await analyticsRes.json() : null;
+      if (loyaltyData && analyticsData && analyticsData.purchaseCount >= 2) {
+        break;
+      }
+      await sleep(500);
+    }
 
     // 7. Inspect Kafka Group Metadata
-    const groups = await admin.describeConsumerGroups([LOYALTY_GROUP, ANALYTICS_GROUP]);
+    const groups = await admin.describeGroups([LOYALTY_GROUP, ANALYTICS_GROUP]);
 
     console.log('\n' + '='.repeat(70));
     console.log('  EVIDENCE OF INDEPENDENT CONSUMER GROUPS AND DIVERGENT PROJECTIONS');
@@ -205,6 +212,7 @@ async function main() {
       console.log(`[P3-01 Verification] Shutting down spawned process PID ${child.pid}...`);
       child.kill();
     }
+    process.exit(process.exitCode ?? 0);
   }
 }
 

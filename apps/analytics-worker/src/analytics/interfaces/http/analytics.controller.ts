@@ -3,14 +3,14 @@ import { GetSalesSummaryHandler } from '../../application/queries/get-sales-summ
 import { GetSalesSummaryQuery } from '../../application/queries/get-sales-summary.query';
 import { SalesSummaryResponseDto } from './dto/sales-summary-response.dto';
 
-@Controller('api/v1/analytics')
+@Controller(['api/v1/analytics', 'api/v1/demo'])
 export class AnalyticsController {
   constructor(
     @Inject(GetSalesSummaryHandler)
     private readonly getSalesSummaryHandler: GetSalesSummaryHandler,
   ) {}
 
-  @Get('summary')
+  @Get(['summary', 'sales-summary'])
   async getSummary(): Promise<SalesSummaryResponseDto> {
     const summary = await this.getSalesSummaryHandler.execute(new GetSalesSummaryQuery({}));
 

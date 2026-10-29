@@ -3,7 +3,7 @@ import { GetLoyaltyAccountHandler } from '../../application/queries/get-loyalty-
 import { GetLoyaltyAccountQuery } from '../../application/queries/get-loyalty-account.query';
 import { LoyaltyAccountResponseDto } from './dto/loyalty-account-response.dto';
 
-@Controller('api/v1/demo/loyalty')
+@Controller(['api/v1/demo/loyalty', 'api/v1/loyalty'])
 export class LoyaltyController {
   constructor(
     @Inject(GetLoyaltyAccountHandler)

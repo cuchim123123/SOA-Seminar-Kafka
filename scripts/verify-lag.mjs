@@ -132,6 +132,8 @@ async function main() {
     // PART B: PROOF OF MANUAL COMMIT N + 1 DISCIPLINE
     // ─────────────────────────────────────────────────────────────────────────
     console.log('\n--- PART B: Publishing Workload to Verify Manual Commit N + 1 ---');
+    const beforeOffsets = await admin.fetchTopicOffsets(TOPIC);
+
     const customerId = `P3_CUST_${Date.now()}`;
     const purchasePayload = { customerId, amountCents: 12500 };
 
@@ -146,18 +148,36 @@ async function main() {
     }
 
     const produceBody = await produceRes.json();
-    const targetPartition = produceBody.kafka.partition;
-    const consumedOffset = produceBody.kafka.offset;
+    console.log(
+      `  -> Accepted purchaseId=${produceBody.purchaseId}, eventId=${produceBody.eventId}`,
+    );
+
+    // Allow outbox relay to publish to Kafka and consumers to commit
+    console.log('  Waiting 3s for outbox relay to publish and consumers to commit N + 1...');
+    await sleep(3000);
+
+    const afterOffsets = await admin.fetchTopicOffsets(TOPIC);
+    let targetPartition = -1;
+    let consumedOffset = '0';
+    for (const after of afterOffsets) {
+      const before = beforeOffsets.find((b) => b.partition === after.partition);
+      if (before && BigInt(after.offset) > BigInt(before.offset)) {
+        targetPartition = after.partition;
+        consumedOffset = (BigInt(after.offset) - 1n).toString();
+        break;
+      }
+    }
+
+    if (targetPartition === -1) {
+      throw new Error('Could not identify published record partition from topic offsets');
+    }
+
     const expectedCommittedOffset = (BigInt(consumedOffset) + 1n).toString();
 
     console.log(
       `  -> Published record to Topic='${TOPIC}', Partition=${targetPartition}, ConsumedOffset=${consumedOffset}`,
     );
     console.log(`  -> Expected Committed Offset (N + 1): ${expectedCommittedOffset}`);
-
-    // Wait for consumer workers with autoCommit: false to process and manually commit
-    console.log('  Waiting 3s for consumers to process and execute commitOffsets(N + 1)...');
-    await sleep(3000);
 
     // ─────────────────────────────────────────────────────────────────────────
     // PART C: INSPECT COMMITTED OFFSETS & LAG VIA OPS API
@@ -234,6 +254,7 @@ async function main() {
     for (const child of spawned) {
       child.kill();
     }
+    process.exit(process.exitCode ?? 0);
   }
 }
 

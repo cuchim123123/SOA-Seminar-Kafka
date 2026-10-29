@@ -15,6 +15,7 @@ export class OutboxRelayService {
     serviceName: 'producer-api',
   });
   private isProcessing = false;
+  private hasPendingRequests = false;
 
   constructor(
     @Inject(OUTBOX_REPOSITORY_PORT)
@@ -28,44 +29,53 @@ export class OutboxRelayService {
    * Ensures per-customer sequential publishing.
    */
   async processPending(): Promise<number> {
-    if (this.isProcessing) return 0;
+    if (this.isProcessing) {
+      this.hasPendingRequests = true;
+      return 0;
+    }
     this.isProcessing = true;
 
-    let processedCount = 0;
+    let totalProcessed = 0;
     try {
-      const pendingRecords = await this.outboxRepository.findPending(100);
-
-      for (const record of pendingRecords) {
-        try {
-          const result = await this.eventPublisher.publish(record.envelope);
-          await this.outboxRepository.markPublished(record.eventId, new Date().toISOString());
-          processedCount++;
-
-          this.logger.info('Outbox event relayed successfully', {
-            eventId: record.eventId,
-            aggregateId: record.aggregateId,
-            customerSequence: record.customerSequence,
-            topic: result.topic,
-            partition: result.partition,
-            offset: result.offset,
-          });
-        } catch (err: unknown) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          await this.outboxRepository.markFailed(record.eventId, errorMessage);
-          this.logger.error('Failed to relay outbox event to Kafka broker', err, {
-            eventId: record.eventId,
-            aggregateId: record.aggregateId,
-            customerSequence: record.customerSequence,
-            error: errorMessage,
-          });
-          // Stop processing further events to preserve sequential ordering invariant
+      do {
+        this.hasPendingRequests = false;
+        const pendingRecords = await this.outboxRepository.findPending(100);
+        if (pendingRecords.length === 0) {
           break;
         }
-      }
+
+        for (const record of pendingRecords) {
+          try {
+            const result = await this.eventPublisher.publish(record.envelope);
+            await this.outboxRepository.markPublished(record.eventId, new Date().toISOString());
+            totalProcessed++;
+
+            this.logger.info('Outbox event relayed successfully', {
+              eventId: record.eventId,
+              aggregateId: record.aggregateId,
+              customerSequence: record.customerSequence,
+              topic: result.topic,
+              partition: result.partition,
+              offset: result.offset,
+            });
+          } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            await this.outboxRepository.markFailed(record.eventId, errorMessage);
+            this.logger.error('Failed to relay outbox event to Kafka broker', err, {
+              eventId: record.eventId,
+              aggregateId: record.aggregateId,
+              customerSequence: record.customerSequence,
+              error: errorMessage,
+            });
+            // Stop processing further events to preserve sequential ordering invariant
+            return totalProcessed;
+          }
+        }
+      } while (this.hasPendingRequests);
     } finally {
       this.isProcessing = false;
     }
 
-    return processedCount;
+    return totalProcessed;
   }
 }

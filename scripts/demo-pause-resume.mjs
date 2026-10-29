@@ -141,7 +141,7 @@ async function main() {
       });
       const pData = await pRes.json();
       console.log(
-        `  -> Sent Purchase #${i + 1}: amount=${testAmounts[i]}c (Kafka partition=${pData.kafka.partition}, offset=${pData.kafka.offset})`,
+        `  -> Sent Purchase #${i + 1}: amount=${testAmounts[i]}c (purchaseId=${pData.purchaseId}, eventId=${pData.eventId})`,
       );
     }
 
@@ -203,10 +203,14 @@ async function main() {
 
     // 7. Verify Catch-Up
     console.log('\n--- STEP 6: Observing Catch-Up (Proof Point 2) ---');
-    console.log('  Waiting 3s for Analytics consumer to catch up from committed offsets...');
-    await sleep(3000);
-
-    const finalAnalyticsLag = await fetchGroupLag(ANALYTICS_GROUP);
+    console.log('  Polling Analytics consumer to catch up and drain lag to 0 (up to 10s)...');
+    let finalAnalyticsLag = await fetchGroupLag(ANALYTICS_GROUP);
+    const drainStart = Date.now();
+    while (Date.now() - drainStart < 10000) {
+      finalAnalyticsLag = await fetchGroupLag(ANALYTICS_GROUP);
+      if (finalAnalyticsLag.totalLag === '0') break;
+      await sleep(500);
+    }
     const analyticsSummaryRes = await fetch(
       `http://localhost:${ANALYTICS_PORT}/api/v1/analytics/summary`,
     );
@@ -249,6 +253,7 @@ async function main() {
     for (const child of spawned) {
       child.kill();
     }
+    process.exit(process.exitCode ?? 0);
   }
 }
 
