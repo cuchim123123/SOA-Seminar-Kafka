@@ -39,7 +39,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
   const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
 
   // 4. Invalidation & Message Tick-Selection State
-  const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<string[]>([]);
+  const [selectedOffsets, setSelectedOffsets] = useState<string[]>([]);
   const [invalidationReason, setInvalidationReason] = useState<string>('DEMO_INVALIDATION');
   const [isInvalidating, setIsInvalidating] = useState<boolean>(false);
   const [invalidationStatus, setInvalidationStatus] = useState<{
@@ -259,52 +259,62 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
     return { purchaseId, eventType, isInvalidated, customerSeq, amountCents, reason };
   };
 
-  // Computes selectable purchases from current processed messages
-  const selectablePurchases = useMemo(() => {
+  // Computes selectable message offsets from current processed messages
+  const selectableOffsets = useMemo(() => {
     const list: string[] = [];
     for (const msg of processedMessages) {
       const { purchaseId, isInvalidated } = getPurchaseDetails(msg);
-      if (purchaseId && !isInvalidated && !list.includes(purchaseId)) {
-        list.push(purchaseId);
+      if (purchaseId && !isInvalidated) {
+        list.push(msg.offset);
       }
     }
     return list;
   }, [processedMessages]);
 
   const allSelectableChecked =
-    selectablePurchases.length > 0 &&
-    selectablePurchases.every((id) => selectedPurchaseIds.includes(id));
+    selectableOffsets.length > 0 &&
+    selectableOffsets.every((offset) => selectedOffsets.includes(offset));
 
   const toggleSelectAll = () => {
     if (allSelectableChecked) {
-      setSelectedPurchaseIds([]);
+      setSelectedOffsets([]);
     } else {
-      setSelectedPurchaseIds([...selectablePurchases]);
+      setSelectedOffsets([...selectableOffsets]);
     }
   };
 
-  const toggleSelectPurchase = (purchaseId: string) => {
-    setSelectedPurchaseIds((prev) =>
-      prev.includes(purchaseId) ? prev.filter((id) => id !== purchaseId) : [...prev, purchaseId],
+  const toggleSelectOffset = (offset: string) => {
+    setSelectedOffsets((prev) =>
+      prev.includes(offset) ? prev.filter((id) => id !== offset) : [...prev, offset],
     );
   };
 
   // Clear selection on partition change
   useEffect(() => {
-    setSelectedPurchaseIds([]);
+    setSelectedOffsets([]);
     setInvalidationStatus(null);
   }, [selectedPartition]);
 
   // Batch invalidation handler
   const handleBatchInvalidate = async () => {
-    if (selectedPurchaseIds.length === 0) return;
+    if (selectedOffsets.length === 0) return;
     setIsInvalidating(true);
     setInvalidationStatus(null);
     const results: Array<{ purchaseId: string; customerId: string; sequence: number }> = [];
     const errors: string[] = [];
 
+    // Extract unique purchaseIds from selected message offsets
+    const selectedMessages = processedMessages.filter((m) => selectedOffsets.includes(m.offset));
+    const targetPurchaseIds = Array.from(
+      new Set(
+        selectedMessages
+          .map((m) => getPurchaseDetails(m).purchaseId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
     try {
-      for (const pid of selectedPurchaseIds) {
+      for (const pid of targetPurchaseIds) {
         try {
           const res = await api.invalidatePurchase(pid, invalidationReason);
           results.push({
@@ -324,7 +334,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
           message: `✓ Successfully emitted compensation for ${results.length} purchase${results.length > 1 ? 's' : ''}!`,
           items: results,
         });
-        setSelectedPurchaseIds([]);
+        setSelectedOffsets([]);
         await fetchBrokerMessages(selectedPartition, peekLimit);
         if (onMetadataChanged) onMetadataChanged();
       } else {
@@ -349,7 +359,13 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
         message: `✓ Invalidation compensation emitted for customer ${res.customerId} (allocated customer sequence #${res.customerSequence}).`,
         items: [{ purchaseId, customerId: res.customerId, sequence: res.customerSequence }],
       });
-      setSelectedPurchaseIds((prev) => prev.filter((id) => id !== purchaseId));
+      // Deselect any selected offset with this purchaseId
+      setSelectedOffsets((prev) =>
+        prev.filter((offset) => {
+          const m = messages.find((msg) => msg.offset === offset);
+          return m ? getPurchaseDetails(m).purchaseId !== purchaseId : true;
+        }),
+      );
       await fetchBrokerMessages(selectedPartition, peekLimit);
       if (onMetadataChanged) onMetadataChanged();
     } catch (err: unknown) {
@@ -1089,7 +1105,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
         )}
 
         {/* Batch Invalidation Toolbar when messages are ticked */}
-        {selectedPurchaseIds.length > 0 && (
+        {selectedOffsets.length > 0 && (
           <div
             style={{
               display: 'flex',
@@ -1116,7 +1132,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                   borderRadius: 'var(--radius-full)',
                 }}
               >
-                {selectedPurchaseIds.length} Selected
+                {selectedOffsets.length} Selected
               </span>
               <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#9f1239' }}>
                 Batch Invalidation Action:
@@ -1147,7 +1163,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
                 type="button"
-                onClick={() => setSelectedPurchaseIds([])}
+                onClick={() => setSelectedOffsets([])}
                 style={{
                   padding: '5px 12px',
                   borderRadius: 'var(--radius-sm)',
@@ -1180,7 +1196,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                   boxShadow: '0 2px 6px rgba(225, 29, 72, 0.35)',
                 }}
               >
-                {isInvalidating ? 'Invalidating...' : `⚡ Invalidate Selected (${selectedPurchaseIds.length})`}
+                {isInvalidating ? 'Invalidating...' : `⚡ Invalidate Selected (${selectedOffsets.length})`}
               </button>
             </div>
           </div>
@@ -1251,15 +1267,15 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                       type="checkbox"
                       aria-label="Select all completed purchases on partition"
                       title={
-                        selectablePurchases.length > 0
+                        selectableOffsets.length > 0
                           ? 'Select / Deselect all completed purchases'
                           : 'No completed purchases available to select'
                       }
                       checked={allSelectableChecked}
                       onChange={toggleSelectAll}
-                      disabled={selectablePurchases.length === 0}
+                      disabled={selectableOffsets.length === 0}
                       style={{
-                        cursor: selectablePurchases.length > 0 ? 'pointer' : 'not-allowed',
+                        cursor: selectableOffsets.length > 0 ? 'pointer' : 'not-allowed',
                         width: '15px',
                         height: '15px',
                         accentColor: '#e11d48',
@@ -1283,7 +1299,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     amountCents,
                     reason,
                   } = getPurchaseDetails(msg);
-                  const isSelected = purchaseId ? selectedPurchaseIds.includes(purchaseId) : false;
+                  const isSelected = selectedOffsets.includes(msg.offset);
                   const isExpanded = expandedOffset === msg.offset;
 
                   let timeDisplay = msg.timestamp;
@@ -1319,9 +1335,9 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                           {purchaseId && !isInvalidated ? (
                             <input
                               type="checkbox"
-                              aria-label={`Select purchase ${purchaseId}`}
+                              aria-label={`Select message at offset ${msg.offset}`}
                               checked={isSelected}
-                              onChange={() => toggleSelectPurchase(purchaseId)}
+                              onChange={() => toggleSelectOffset(msg.offset)}
                               style={{
                                 cursor: 'pointer',
                                 width: '15px',
