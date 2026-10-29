@@ -1,5 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { uuidv7 } from 'uuidv7';
+import {
+  InsufficientRetentionError,
+  PartitionRetentionDiagnostic,
+} from '../../domain/errors/insufficient-retention.error';
 import { ReplayCustomerCorrector, ReplayInputEvent } from '../../domain/replay-customer-corrector';
 import { ReplayRun } from '../../domain/replay-run.entity';
 import {
@@ -66,8 +70,48 @@ export class StartBoundedReplayHandler {
 
     await this.runRepository.save(run);
 
+    // 3. Verify retention horizon covers required history (P5-04)
+    const requiredOffsets = command.requiredStartOffsets;
+    const truncatedPartitions: PartitionRetentionDiagnostic[] = [];
+
+    for (const [partitionStr, startOffsetStr] of Object.entries(boundaries.startOffsets)) {
+      const partition = Number(partitionStr);
+      const earliestRetained = BigInt(startOffsetStr);
+      const required = BigInt(requiredOffsets?.[partition] ?? '0');
+
+      if (earliestRetained > required) {
+        truncatedPartitions.push({
+          partition,
+          earliestRetainedOffset: startOffsetStr,
+          requiredStartOffset: required.toString(),
+          purgedOffsetCount: (earliestRetained - required).toString(),
+        });
+      }
+    }
+
+    if (truncatedPartitions.length > 0) {
+      const diagnosticSummary = truncatedPartitions
+        .map(
+          (tp) =>
+            `partition ${tp.partition} earliest retained offset is ${tp.earliestRetainedOffset} (required: ${tp.requiredStartOffset}, purged: ${tp.purgedOffsetCount})`,
+        )
+        .join('; ');
+
+      const errorMessage = `Insufficient retained history for topic '${topic}': ${diagnosticSummary}. Broker log retention has truncated required events.`;
+
+      run.fail(errorMessage);
+      await this.runRepository.save(run);
+
+      throw new InsufficientRetentionError(errorMessage, {
+        topic,
+        truncatedPartitions,
+        startOffsets: boundaries.startOffsets,
+        highWatermarks: boundaries.highWatermarks,
+      });
+    }
+
     try {
-      // 3. Mark run as running
+      // 4. Mark run as running
       run.start();
       await this.runRepository.save(run);
 

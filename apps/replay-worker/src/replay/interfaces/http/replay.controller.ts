@@ -31,10 +31,17 @@ export class ReplayController {
 
   @Post('runs')
   async startReplay(@Body() dto?: StartReplayDto): Promise<ReplayRunResponseDto> {
+    const requiredStartOffsets = dto?.requiredStartOffsets
+      ? Object.fromEntries(
+          Object.entries(dto.requiredStartOffsets).map(([k, v]) => [Number(k), String(v)]),
+        )
+      : undefined;
+
     const result = await this.startHandler.execute(
       new StartBoundedReplayCommand({
         runId: dto?.runId,
         topic: dto?.topic,
+        requiredStartOffsets,
       }),
     );
 

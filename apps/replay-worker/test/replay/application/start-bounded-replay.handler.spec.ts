@@ -7,6 +7,7 @@ import { ReplayStagingRepositoryPort } from '../../../src/replay/application/por
 import { TopicBoundaryInspectorPort } from '../../../src/replay/application/ports/topic-boundary-inspector.port';
 import { ReplayRun } from '../../../src/replay/domain/replay-run.entity';
 import { ReplayStagingRecord } from '../../../src/replay/domain/replay-staging-record.entity';
+import { InsufficientRetentionError } from '../../../src/replay/domain/errors/insufficient-retention.error';
 
 describe('StartBoundedReplayHandler', () => {
   it('captures boundaries, initializes on-demand group, runs bounded scan and performs two-pass correction', async () => {
@@ -193,5 +194,138 @@ describe('StartBoundedReplayHandler', () => {
     const lastSaved = savedRuns[savedRuns.length - 1];
     expect(lastSaved.status).toBe('FAILED');
     expect(lastSaved.errorMessage).toBe('Connection lost');
+  });
+
+  it('fails with InsufficientRetentionError when broker retention has purged history earlier than default 0', async () => {
+    const savedRuns: ReplayRun[] = [];
+
+    const mockRepo: ReplayRunRepositoryPort = {
+      save: vi.fn().mockImplementation(async (run: ReplayRun) => {
+        savedRuns.push(run);
+      }),
+      findById: vi.fn(),
+      findLatest: vi.fn(),
+    };
+
+    const mockStagingRepo: ReplayStagingRepositoryPort = {
+      upsertRecord: vi.fn(),
+      findByRunId: vi.fn(),
+    };
+
+    const mockBoundaryInspector: TopicBoundaryInspectorPort = {
+      getTopicBoundaries: vi.fn().mockResolvedValue({
+        topic: 'purchase.events',
+        startOffsets: { 0: '15', 1: '0' },
+        highWatermarks: { 0: '50', 1: '60' },
+      }),
+    };
+
+    const mockScanner: BoundedReplayScannerPort = {
+      scanBoundedTopic: vi.fn(),
+    };
+
+    const handler = new StartBoundedReplayHandler(
+      mockRepo,
+      mockStagingRepo,
+      mockBoundaryInspector,
+      mockScanner,
+    );
+
+    let caughtError: unknown;
+    try {
+      await handler.execute(
+        new StartBoundedReplayCommand({
+          runId: 'retention-failed-run',
+          topic: 'purchase.events',
+        }),
+      );
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(InsufficientRetentionError);
+    const retentionError = caughtError as InsufficientRetentionError;
+    expect(retentionError.message).toContain(
+      "Insufficient retained history for topic 'purchase.events'",
+    );
+    expect(retentionError.message).toContain(
+      'partition 0 earliest retained offset is 15 (required: 0, purged: 15)',
+    );
+    expect(retentionError.retentionDetails.truncatedPartitions).toEqual([
+      {
+        partition: 0,
+        earliestRetainedOffset: '15',
+        requiredStartOffset: '0',
+        purgedOffsetCount: '15',
+      },
+    ]);
+
+    // Ensure scanner was NEVER called
+    expect(mockScanner.scanBoundedTopic).not.toHaveBeenCalled();
+
+    // Verify run was persisted with FAILED status and error message
+    const lastSaved = savedRuns[savedRuns.length - 1];
+    expect(lastSaved.status).toBe('FAILED');
+    expect(lastSaved.errorMessage).toContain('partition 0 earliest retained offset is 15');
+  });
+
+  it('allows custom requiredStartOffsets and fails only when broker retention exceeds custom required', async () => {
+    const savedRuns: ReplayRun[] = [];
+
+    const mockRepo: ReplayRunRepositoryPort = {
+      save: vi.fn().mockImplementation(async (run: ReplayRun) => {
+        savedRuns.push(run);
+      }),
+      findById: vi.fn(),
+      findLatest: vi.fn(),
+    };
+
+    const mockStagingRepo: ReplayStagingRepositoryPort = {
+      upsertRecord: vi.fn(),
+      findByRunId: vi.fn(),
+    };
+
+    const mockBoundaryInspector: TopicBoundaryInspectorPort = {
+      getTopicBoundaries: vi.fn().mockResolvedValue({
+        topic: 'purchase.events',
+        startOffsets: { 0: '10' },
+        highWatermarks: { 0: '20' },
+      }),
+    };
+
+    const mockScanner: BoundedReplayScannerPort = {
+      scanBoundedTopic: vi.fn().mockResolvedValue({
+        scannedCount: 0,
+        finalCommittedOffsets: { 0: '20' },
+      }),
+    };
+
+    const handler = new StartBoundedReplayHandler(
+      mockRepo,
+      mockStagingRepo,
+      mockBoundaryInspector,
+      mockScanner,
+    );
+
+    // Case A: Required is 5, but earliest retained is 10 -> fails
+    await expect(
+      handler.execute(
+        new StartBoundedReplayCommand({
+          runId: 'custom-req-fail',
+          requiredStartOffsets: { 0: '5' },
+        }),
+      ),
+    ).rejects.toThrow(InsufficientRetentionError);
+
+    // Case B: Required is 10, earliest retained is 10 -> passes
+    const result = await handler.execute(
+      new StartBoundedReplayCommand({
+        runId: 'custom-req-pass',
+        requiredStartOffsets: { 0: '10' },
+      }),
+    );
+
+    expect(result.status).toBe('COMPLETED');
+    expect(mockScanner.scanBoundedTopic).toHaveBeenCalledTimes(1);
   });
 });
