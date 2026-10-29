@@ -15,11 +15,9 @@ export const ReplayStudio: React.FC = () => {
     setComparison(null);
 
     try {
-      // If simulating retention failure, require an offset earlier than possible (offset -1 or 0 when truncated)
       const options = simulateRetentionFailure
         ? {
-            // Require partition 0 to have offset 0, but if we pass an impossible requirement or test retention
-            requiredStartOffsets: { '0': '999999' }, // Impossible high required offset or test logic
+            requiredStartOffsets: { '0': '999999' },
           }
         : undefined;
 
@@ -43,19 +41,19 @@ export const ReplayStudio: React.FC = () => {
   };
 
   return (
-    <section className="cyber-card" style={{ padding: '24px', marginBottom: '24px' }}>
+    <section className="cyber-card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ color: 'var(--color-amber)' }}>↺</span>
-            BOUNDED REPLAY &amp; TWO-PASS CORRECTION STUDIO (PHASE 5)
+            Bounded Replay &amp; Two-Pass Correction Studio (Phase 5)
           </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', marginTop: '2px' }}>
             Recompute accurate projections using an isolated on-demand group without touching live consumer group offsets. Reconstructs state via two-pass correction.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => handleStartReplay(false)}
             disabled={running}
@@ -78,29 +76,29 @@ export const ReplayStudio: React.FC = () => {
       {errorMessage && (
         <div
           style={{
-            padding: '12px 16px',
+            padding: '12px 14px',
             borderRadius: 'var(--radius-sm)',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            color: '#fca5a5',
+            background: 'var(--color-crimson-bg)',
+            border: '1px solid var(--color-crimson-border)',
+            color: '#991b1b',
             fontSize: '0.825rem',
             fontFamily: 'var(--font-mono)',
             marginBottom: '16px',
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: '4px' }}>✕ Replay Execution Aborted</div>
+          <div style={{ fontWeight: 700, marginBottom: '2px' }}>✕ Replay Execution Aborted</div>
           <div>{errorMessage}</div>
         </div>
       )}
 
       {replayRun && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {/* Replay Run Telemetry */}
           <div
             style={{
-              padding: '16px',
+              padding: '14px',
               borderRadius: 'var(--radius-sm)',
-              background: 'rgba(0,0,0,0.25)',
+              background: 'var(--bg-subtle)',
               border: '1px solid var(--border-subtle)',
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -110,21 +108,21 @@ export const ReplayStudio: React.FC = () => {
             }}
           >
             <div>
-              <div style={{ color: 'var(--text-dim)' }}>Replay Run ID:</div>
+              <div style={{ color: 'var(--text-muted)' }}>Replay Run ID:</div>
               <div style={{ color: 'var(--color-cyan)', fontWeight: 600, marginTop: '2px' }}>
                 {replayRun.id.slice(0, 18)}...
               </div>
             </div>
 
             <div>
-              <div style={{ color: 'var(--text-dim)' }}>On-Demand Group:</div>
+              <div style={{ color: 'var(--text-muted)' }}>On-Demand Group:</div>
               <div style={{ color: 'var(--color-violet)', fontWeight: 600, marginTop: '2px' }}>
                 {replayRun.groupId.slice(0, 20)}...
               </div>
             </div>
 
             <div>
-              <div style={{ color: 'var(--text-dim)' }}>Status:</div>
+              <div style={{ color: 'var(--text-muted)' }}>Status:</div>
               <div style={{ marginTop: '2px' }}>
                 <span className={`badge-mono ${replayRun.status === 'COMPLETED' ? 'badge-emerald' : replayRun.status === 'FAILED' ? 'badge-crimson' : 'badge-amber'}`}>
                   {replayRun.status}
@@ -133,7 +131,7 @@ export const ReplayStudio: React.FC = () => {
             </div>
 
             <div>
-              <div style={{ color: 'var(--text-dim)' }}>Scanned Events:</div>
+              <div style={{ color: 'var(--text-muted)' }}>Scanned Events:</div>
               <div style={{ color: 'var(--text-main)', fontWeight: 700, marginTop: '2px' }}>
                 {replayRun.scannedCount} records
               </div>
@@ -143,11 +141,11 @@ export const ReplayStudio: React.FC = () => {
           {/* Comparison Card (Live vs Replay Staging) */}
           {comparison && (
             <div
-              className="cyber-card"
               style={{
                 padding: '16px',
-                background: 'rgba(139, 92, 246, 0.06)',
-                border: '1px solid var(--border-glow-violet)',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--color-violet-bg)',
+                border: '1px solid var(--color-violet-border)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -157,33 +155,33 @@ export const ReplayStudio: React.FC = () => {
                 <span className="badge-mono badge-violet">Isolated in Staging</span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', fontFamily: 'var(--font-mono)' }}>
-                <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Live Projection (Naive):</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ padding: '12px', background: '#ffffff', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Live Projection (Naive):</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-amber)', marginTop: '4px' }}>
                     {comparison.live?.points || 0} pts
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Tier: {comparison.live?.tier || 'N/A'} (Correction Flag: {comparison.live?.correctionRequired ? 'True' : 'False'})
                   </div>
                 </div>
 
-                <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Staged Projection (Corrected):</div>
+                <div style={{ padding: '12px', background: '#ffffff', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Staged Projection (Corrected):</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-emerald)', marginTop: '4px' }}>
                     {comparison.staged?.points || 0} pts
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Tier: {comparison.staged?.tier || 'N/A'} (Scanned: {comparison.staged?.scannedEventCount} events)
                   </div>
                 </div>
 
-                <div style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>Discrepancy:</div>
+                <div style={{ padding: '12px', background: '#ffffff', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Discrepancy:</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-crimson)', marginTop: '4px' }}>
                     {comparison.discrepancy.pointsDifference} pts
                   </div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Spend Diff: ${(comparison.discrepancy.spendDifferenceCents / 100).toFixed(2)}
                   </div>
                 </div>
@@ -196,21 +194,21 @@ export const ReplayStudio: React.FC = () => {
       {/* Mechanics Explanation */}
       <div
         style={{
-          marginTop: '16px',
-          padding: '12px 16px',
+          marginTop: '14px',
+          padding: '10px 14px',
           borderRadius: 'var(--radius-sm)',
-          background: 'rgba(6, 182, 212, 0.08)',
-          border: '1px solid rgba(6, 182, 212, 0.25)',
+          background: 'var(--color-cyan-bg)',
+          border: '1px solid var(--color-cyan-border)',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          gap: '10px',
           fontSize: '0.8rem',
-          color: 'var(--text-muted)',
+          color: '#0369a1',
         }}
       >
-        <span style={{ fontSize: '1.1rem', color: 'var(--color-cyan)' }}>ℹ</span>
+        <span style={{ fontSize: '1rem', color: 'var(--color-cyan)' }}>ℹ</span>
         <span>
-          <strong style={{ color: 'var(--text-main)' }}>Replay vs. Catch-up:</strong> Replay uses an on-demand disposable consumer group with fixed high-watermarks. The live consumer groups (<code style={{ color: 'var(--color-cyan)', fontFamily: 'var(--font-mono)' }}>loyalty-v1</code> and <code style={{ color: 'var(--color-cyan)', fontFamily: 'var(--font-mono)' }}>analytics-v1</code>) continue processing without interruption.
+          <strong style={{ color: '#0f172a' }}>Replay vs. Catch-up:</strong> Replay uses an on-demand disposable consumer group with fixed high-watermarks. The live consumer groups (<code style={{ color: '#0369a1', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>loyalty-v1</code> and <code style={{ color: '#0369a1', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>analytics-v1</code>) continue processing in real-time without pause or disruption.
         </span>
       </div>
     </section>

@@ -11,38 +11,35 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
   const allHealthy = Object.values(health).every(Boolean);
 
   return (
-    <header className="cyber-card" style={{ padding: '16px 24px', marginBottom: '24px' }}>
+    <header className="cyber-card" style={{ padding: '16px 24px', marginBottom: '20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span
               style={{
                 display: 'inline-block',
-                width: '12px',
-                height: '12px',
+                width: '10px',
+                height: '10px',
                 borderRadius: '50%',
                 backgroundColor: allHealthy ? 'var(--color-emerald)' : 'var(--color-amber)',
-                boxShadow: allHealthy ? '0 0 12px var(--color-emerald)' : '0 0 12px var(--color-amber)',
               }}
               className="animate-pulse-glow"
             />
             <h1
               style={{
-                fontSize: '1.5rem',
+                fontSize: '1.35rem',
                 fontWeight: 800,
                 letterSpacing: '-0.02em',
-                background: 'linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 50%, #94a3b8 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                color: 'var(--text-main)',
               }}
             >
-              KAFKA STREAMING LAB
+              Kafka Streaming Lab
             </h1>
-            <span className="badge-mono badge-violet">KRaft Multi-Partition</span>
+            <span className="badge-mono badge-violet">KRaft Cluster</span>
             <span className="badge-mono badge-cyan">Phase 0–5 Active</span>
           </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
-            Interactive Kafka Architecture, Partitioning, Outbox &amp; Bounded Replay Studio
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', marginTop: '2px' }}>
+            Interactive Kafka Architecture, Partition Ordering, Transactional Outbox &amp; Bounded Replay Studio
           </p>
         </div>
 
@@ -69,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
             target="_blank"
             rel="noopener noreferrer"
             className="btn-cyber btn-outline"
-            style={{ padding: '6px 12px', fontSize: '0.75rem', textDecoration: 'none' }}
+            style={{ textDecoration: 'none' }}
           >
             Kafka UI ↗
           </a>
@@ -77,7 +74,6 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
           <button
             onClick={onRefresh}
             className="btn-cyber btn-outline"
-            style={{ padding: '6px 12px', fontSize: '0.75rem' }}
             disabled={refreshing}
             title="Refresh cluster telemetry"
           >

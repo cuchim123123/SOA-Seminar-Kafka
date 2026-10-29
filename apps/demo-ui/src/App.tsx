@@ -65,10 +65,10 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Polling effect every 2000ms
+  // Polling effect every 3000ms (smooth, lightweight background sync)
   useEffect(() => {
     fetchTelemetry();
-    const timer = setInterval(fetchTelemetry, 2000);
+    const timer = setInterval(fetchTelemetry, 3000);
     return () => clearInterval(timer);
   }, [fetchTelemetry]);
 
@@ -147,20 +147,20 @@ export const App: React.FC = () => {
       {/* Footer */}
       <footer
         style={{
-          marginTop: '40px',
+          marginTop: '32px',
           textAlign: 'center',
-          color: 'var(--text-dim)',
+          color: 'var(--text-muted)',
           fontSize: '0.75rem',
           fontFamily: 'var(--font-mono)',
           borderTop: '1px solid var(--border-subtle)',
-          paddingTop: '20px',
+          paddingTop: '18px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px',
+          gap: '6px',
           alignItems: 'center',
         }}
       >
-        <div>
+        <div style={{ fontWeight: 600, color: 'var(--text-body)' }}>
           KAFKA STREAMING LAB — ARCHITECTURAL DEMO &amp; EVIDENCE OBSERVABILITY PLATFORM
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>

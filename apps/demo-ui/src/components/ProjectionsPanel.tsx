@@ -38,52 +38,53 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
   const getTierColor = (tier: string) => {
     switch (tier) {
       case 'GOLD':
-        return 'var(--color-amber)';
+        return '#b45309';
       case 'SILVER':
-        return 'var(--color-cyan)';
+        return '#0369a1';
       default:
-        return '#94a3b8';
+        return '#475569';
     }
   };
 
   return (
-    <section className="cyber-card" style={{ padding: '24px', marginBottom: '24px' }}>
+    <section className="cyber-card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
       <div style={{ marginBottom: '16px' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ color: 'var(--color-violet)' }}>◈</span>
-          DOWNSTREAM READ PROJECTIONS (ISOLATED POSTGRES DATABASES)
+          Downstream Read Projections (Isolated Postgres Databases)
         </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', marginTop: '2px' }}>
           Business projections are updated idempotently by consumer workers after DB commits. Databases are strictly isolated (<code style={{ color: 'var(--color-cyan)', fontFamily: 'var(--font-mono)' }}>loyalty_db</code> and <code style={{ color: 'var(--color-cyan)', fontFamily: 'var(--font-mono)' }}>analytics_db</code>).
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
         
         {/* Widget 1: Loyalty Account Projection */}
         <div
-          className="cyber-card"
           style={{
-            padding: '18px',
-            background: 'rgba(10, 14, 24, 0.85)',
+            padding: '16px',
+            borderRadius: 'var(--radius-md)',
+            background: '#ffffff',
             border: '1px solid var(--border-subtle)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge-mono badge-violet">loyalty_db</span>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Loyalty Account</span>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Loyalty Account</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Customer:</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Customer:</span>
               <select
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
                 style={{
-                  background: 'var(--bg-input)',
+                  background: '#ffffff',
                   color: 'var(--text-main)',
-                  border: '1px solid var(--border-subtle)',
+                  border: '1px solid var(--border-medium)',
                   borderRadius: 'var(--radius-sm)',
                   padding: '4px 8px',
                   fontSize: '0.75rem',
@@ -103,17 +104,17 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
               Loading loyalty projection...
             </div>
           ) : account ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'rgba(0,0,0,0.25)', borderRadius: 'var(--radius-sm)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
                 <div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Points Balance</div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-violet)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Points Balance</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-violet)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                     {account.pointsBalance} <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-muted)' }}>pts</span>
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Current Tier</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Current Tier</div>
                   <div
                     style={{
                       fontSize: '1rem',
@@ -128,16 +129,16 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-dim)' }}>Eligible Spend</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ color: 'var(--text-muted)' }}>Eligible Spend</div>
                   <div style={{ color: 'var(--text-main)', fontWeight: 600, marginTop: '2px' }}>
                     ${(account.totalEligibleSpendCents / 100).toFixed(2)}
                   </div>
                 </div>
 
-                <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-dim)' }}>Last Sequence</div>
+                <div style={{ padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ color: 'var(--text-muted)' }}>Last Sequence</div>
                   <div style={{ color: 'var(--color-cyan)', fontWeight: 600, marginTop: '2px' }}>
                     Seq #{account.lastCustomerSequence}
                   </div>
@@ -145,14 +146,14 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
               </div>
 
               {account.correctionRequired && (
-                <div style={{ padding: '6px 10px', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: '#fcd34d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ padding: '8px 12px', background: 'var(--color-amber-bg)', border: '1px solid var(--color-amber-border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>⚠</span>
-                  <span>Correction flag active: Invalidation received, pending two-pass replay.</span>
+                  <span>Correction flag active: Invalidation received, pending two-pass bounded replay.</span>
                 </div>
               )}
             </div>
           ) : (
-            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}>
               No loyalty record yet for {selectedCustomerId}. Emit a purchase to create account.
             </div>
           )}
@@ -160,49 +161,50 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
 
         {/* Widget 2: Platform Analytics Projection */}
         <div
-          className="cyber-card"
           style={{
-            padding: '18px',
-            background: 'rgba(10, 14, 24, 0.85)',
+            padding: '16px',
+            borderRadius: 'var(--radius-md)',
+            background: '#ffffff',
             border: '1px solid var(--border-subtle)',
+            boxShadow: 'var(--shadow-sm)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge-mono badge-cyan">analytics_db</span>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Sales Analytics Summary</span>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Sales Analytics Summary</span>
             </div>
             <span className="badge-mono badge-emerald">Live Projection</span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'rgba(0,0,0,0.25)', borderRadius: 'var(--radius-sm)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Total Platform Revenue</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-emerald)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Platform Revenue</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-emerald)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                   ${((summary?.totalRevenueCents || 0) / 100).toFixed(2)}
                 </div>
               </div>
 
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Completed Purchases</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Completed Purchases</div>
                 <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-cyan)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                   {summary?.totalPurchasesCount || 0}
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-              <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--text-dim)' }}>Processed Events</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ color: 'var(--text-muted)' }}>Processed Events</div>
                 <div style={{ color: 'var(--text-main)', fontWeight: 600, marginTop: '2px' }}>
                   {summary?.processedEventCount || 0} events
                 </div>
               </div>
 
-              <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--text-dim)' }}>Last Updated</div>
-                <div style={{ color: 'var(--text-muted)', fontWeight: 500, marginTop: '2px', fontSize: '0.7rem' }}>
+              <div style={{ padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ color: 'var(--text-muted)' }}>Last Updated</div>
+                <div style={{ color: 'var(--text-body)', fontWeight: 500, marginTop: '2px', fontSize: '0.7rem' }}>
                   {summary?.lastUpdated ? new Date(summary.lastUpdated).toLocaleTimeString() : 'N/A'}
                 </div>
               </div>
