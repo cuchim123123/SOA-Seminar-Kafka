@@ -51,6 +51,7 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
     });
 
     await this.consumer.run({
+      autoCommit: false,
       eachMessage: async ({ topic, partition, message }) => {
         await processKafkaRecord({
           topic,
@@ -86,6 +87,16 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
             };
           },
         });
+
+        // Explicit manual commit discipline: Consumed offset N is committed as N + 1
+        const nextOffset = (BigInt(message.offset) + 1n).toString();
+        await this.consumer.commitOffsets([
+          {
+            topic,
+            partition,
+            offset: nextOffset,
+          },
+        ]);
       },
     });
   }

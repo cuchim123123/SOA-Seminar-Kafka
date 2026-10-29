@@ -29,6 +29,9 @@ describe('InspectTopicHandler', () => {
         expect(topic).toBe('purchase.events');
         return mockResult;
       },
+      inspectConsumerGroupLag: async () => {
+        throw new Error('Not implemented');
+      },
     };
 
     const handler = new InspectTopicHandler(mockInspector);

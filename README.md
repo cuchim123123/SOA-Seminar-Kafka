@@ -175,5 +175,5 @@ pnpm demo:groups
 
 ### Phase 3 — Consumer Groups and Offsets
 - [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
-- [ ] **P3-02: Manual Commit + Lag Reader** — Explicit offset commit and Admin-derived next-committed/log-end lag per partition.
+- [x] **P3-02: Manual Commit + Lag Reader** — Explicit manual offset commit discipline (`autoCommit: false`, `N + 1`) and live Kafka Admin lag calculation `(logEndOffset - committedOffset)` per partition with `UNCOMMITTED` handling (`pnpm demo:lag`).
 - [ ] **P3-03: Pause/Resume Scenario** — CLI or allowlisted control to pause Analytics and later catch up.

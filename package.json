@@ -33,6 +33,8 @@
     "demo:partitions:p2": "node scripts/inspect-partitions.mjs",
     "demo:groups": "node scripts/verify-consumer-groups.mjs",
     "demo:groups:p3": "node scripts/verify-consumer-groups.mjs",
+    "demo:lag": "node scripts/verify-lag.mjs",
+    "demo:lag:p3": "node scripts/verify-lag.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

@@ -3,7 +3,9 @@ import { StructuredLogger } from '@lab/observability';
 import { Admin, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
+  ConsumerGroupLagResult,
   KafkaInspectorPort,
+  PartitionLag,
   PartitionPosition,
   TopicInspectionResult,
 } from '../../application/ports/kafka-inspector.port';
@@ -64,6 +66,79 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
     return {
       topic,
       partitionCount: partitions.length,
+      partitions,
+    };
+  }
+
+  async inspectConsumerGroupLag(
+    groupId: string,
+    topic: string = this.config.purchaseTopic,
+  ): Promise<ConsumerGroupLagResult> {
+    const topicOffsets = await this.admin.fetchTopicOffsets(topic);
+
+    let groupPartitions: Array<{
+      partition: number;
+      offset: string;
+      metadata: string | null;
+    }> = [];
+
+    try {
+      const fetched = await this.admin.fetchOffsets({ groupId, topics: [topic] });
+      const topicEntry = fetched.find((f) => f.topic === topic);
+      if (topicEntry) {
+        groupPartitions = topicEntry.partitions;
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Could not fetch committed offsets for consumer group '${groupId}': ${msg}`);
+    }
+
+    const groupOffsetMap = new Map<number, string>();
+    for (const gp of groupPartitions) {
+      groupOffsetMap.set(gp.partition, gp.offset);
+    }
+
+    let hasUncommitted = false;
+    let totalLagBigInt = 0n;
+
+    const partitions: PartitionLag[] = topicOffsets.map((to) => {
+      const low = BigInt(to.low);
+      const high = BigInt(to.high);
+      const committedRaw = groupOffsetMap.get(to.partition);
+
+      const isUncommitted = committedRaw === undefined || committedRaw === '-1';
+      let committedOffset: string | null = null;
+      let lag: string | 'UNCOMMITTED';
+
+      if (isUncommitted) {
+        committedOffset = null;
+        lag = 'UNCOMMITTED';
+        hasUncommitted = true;
+      } else {
+        const committedBigInt = BigInt(committedRaw);
+        committedOffset = committedRaw;
+        const lagBigInt = high > committedBigInt ? high - committedBigInt : 0n;
+        lag = lagBigInt.toString();
+        totalLagBigInt += lagBigInt;
+      }
+
+      return {
+        topic,
+        partition: to.partition,
+        logStartOffset: low.toString(),
+        logEndOffset: high.toString(),
+        committedOffset,
+        lag,
+        isUncommitted,
+      };
+    });
+
+    const totalLag = hasUncommitted ? 'UNCOMMITTED' : totalLagBigInt.toString();
+
+    return {
+      groupId,
+      topic,
+      totalLag,
       partitions,
     };
   }
