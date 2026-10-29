@@ -189,7 +189,7 @@ export const api = {
 
   invalidatePurchase: async (
     purchaseId: string,
-    reason: string = 'Customer return requested',
+    reason: string = 'DEMO_INVALIDATION',
   ): Promise<PurchaseInvalidatedResponse> => {
     return request<PurchaseInvalidatedResponse>(
       `/api/producer/api/v1/purchases/${purchaseId}/invalidate`,

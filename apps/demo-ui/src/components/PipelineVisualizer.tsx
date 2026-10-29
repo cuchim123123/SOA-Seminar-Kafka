@@ -14,7 +14,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
   const [customerId, setCustomerId] = useState<string>('U001');
   const [amountDollars, setAmountDollars] = useState<number>(120);
   const [invalidationPurchaseId, setInvalidationPurchaseId] = useState<string>('');
-  const [invalidationReason, setInvalidationReason] = useState<string>('Customer return requested');
+  const [invalidationReason, setInvalidationReason] = useState<string>('DEMO_INVALIDATION');
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
@@ -368,11 +368,9 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
             }}
           />
 
-          <input
-            type="text"
+          <select
             value={invalidationReason}
             onChange={(e) => setInvalidationReason(e.target.value)}
-            placeholder="Reason (e.g. Customer return)"
             style={{
               flex: '1 1 200px',
               padding: '7px 12px',
@@ -380,8 +378,12 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
               border: '1px solid var(--border-medium)',
               fontSize: '0.8rem',
               background: '#ffffff',
+              fontFamily: 'var(--font-mono)',
             }}
-          />
+          >
+            <option value="DEMO_INVALIDATION">DEMO_INVALIDATION (Return/Comp)</option>
+            <option value="FRAUD_CONFIRMED">FRAUD_CONFIRMED (Fraud Alert)</option>
+          </select>
 
           <button
             type="button"

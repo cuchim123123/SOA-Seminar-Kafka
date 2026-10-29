@@ -33,7 +33,12 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
   const [expandedOffset, setExpandedOffset] = useState<string | null>(null);
   const [messageSearch, setMessageSearch] = useState<string>('');
 
-  // 3. Partition Scaling State
+  // 3. Sorting & UX State
+  const [sortOrder, setSortOrder] = useState<'latest' | 'oldest'>('latest');
+  const [sortField, setSortField] = useState<'offset' | 'key' | 'sequence'>('offset');
+  const [copiedNotification, setCopiedNotification] = useState<string | null>(null);
+
+  // 4. Partition Scaling State
   const [showScaleModal, setShowScaleModal] = useState<boolean>(false);
   const [targetPartitionCount, setTargetPartitionCount] = useState<number>(partitionCount + 2);
   const [scaling, setScaling] = useState<boolean>(false);
@@ -92,11 +97,20 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
     return () => clearInterval(timer);
   }, [autoPeek, selectedPartition, peekLimit, fetchBrokerMessages]);
 
+  // Copy helper
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedNotification(`Copied ${label}`);
+    setTimeout(() => setCopiedNotification(null), 1500);
+  };
+
   // Handle Partition Scale
   const handleScalePartitions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (targetPartitionCount <= partitionCount) {
-      setScaleError(`New partition count (${targetPartitionCount}) must be greater than current count (${partitionCount}). Kafka does not allow decreasing partitions.`);
+      setScaleError(
+        `New partition count (${targetPartitionCount}) must be greater than current count (${partitionCount}). Kafka does not allow decreasing partitions.`,
+      );
       return;
     }
 
@@ -121,40 +135,111 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
     }
   };
 
-  // Filter messages
-  const filteredMessages = useMemo(() => {
-    if (!messageSearch.trim()) return messages;
-    const q = messageSearch.toLowerCase();
-    return messages.filter((m) => {
-      const keyMatch = m.key?.toLowerCase().includes(q);
-      const offsetMatch = m.offset.includes(q);
-      const payloadStr = JSON.stringify(m.payload || '').toLowerCase();
-      return keyMatch || offsetMatch || payloadStr.includes(q);
+  // Filter and Sort messages
+  const processedMessages = useMemo(() => {
+    let result = [...messages];
+
+    // Filter
+    if (messageSearch.trim()) {
+      const q = messageSearch.toLowerCase();
+      result = result.filter((m) => {
+        const keyMatch = m.key?.toLowerCase().includes(q);
+        const offsetMatch = m.offset.includes(q);
+        const payloadStr = JSON.stringify(m.payload || '').toLowerCase();
+        return keyMatch || offsetMatch || payloadStr.includes(q);
+      });
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      if (sortField === 'offset') {
+        const diff = BigInt(a.offset) - BigInt(b.offset);
+        return sortOrder === 'latest'
+          ? diff > 0n
+            ? -1
+            : diff < 0n
+              ? 1
+              : 0
+          : diff > 0n
+            ? 1
+            : diff < 0n
+              ? -1
+              : 0;
+      }
+
+      if (sortField === 'key') {
+        const keyA = a.key || '';
+        const keyB = b.key || '';
+        const comp = keyA.localeCompare(keyB);
+        return sortOrder === 'latest' ? -comp : comp;
+      }
+
+      if (sortField === 'sequence') {
+        const seqA = (a.payload as Record<string, unknown>)?.customerSequence ?? 0;
+        const seqB = (b.payload as Record<string, unknown>)?.customerSequence ?? 0;
+        const diff = Number(seqA) - Number(seqB);
+        return sortOrder === 'latest' ? -diff : diff;
+      }
+
+      return 0;
     });
-  }, [messages, messageSearch]);
+
+    return result;
+  }, [messages, messageSearch, sortOrder, sortField]);
+
+  // Message statistics
+  const partitionStats = useMemo(() => {
+    let completed = 0;
+    let invalidated = 0;
+    for (const m of messages) {
+      const eventType = (m.payload as Record<string, unknown>)?.eventType;
+      if (eventType === 'PurchaseInvalidated') {
+        invalidated++;
+      } else {
+        completed++;
+      }
+    }
+    return { completed, invalidated, total: messages.length };
+  }, [messages]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* 1. Header & Quick Actions */}
       <section className="cyber-card" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2
+                style={{
+                  fontSize: '1.15rem',
+                  fontWeight: 700,
+                  color: 'var(--text-main)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
                 <span style={{ color: 'var(--color-cyan)' }}>❖</span>
                 Kafka Partition Management &amp; Live Broker Inspector
               </h2>
               <span className="badge-mono badge-cyan">{topicName}</span>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', marginTop: '4px' }}>
-              Direct KRaft broker telemetry. Inspect live Kafka log positions, peek raw broker messages, and scale topic partitions dynamically.
+              Direct KRaft broker telemetry. Inspect live Kafka log positions, peek raw broker
+              messages, and scale topic partitions dynamically.
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span className="badge-mono badge-violet">
-              {partitionCount} Partitions
-            </span>
+            <span className="badge-mono badge-violet">{partitionCount} Partitions</span>
             <span className="badge-mono badge-emerald">
               {totalMessagesAcrossTopic.toString()} Total Records
             </span>
@@ -191,9 +276,20 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px',
+              marginBottom: '10px',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--color-violet)', fontWeight: 700 }}>⚡</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--color-violet)', fontWeight: 700 }}>
+                ⚡
+              </span>
               <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)' }}>
                 Murmur2 Key Hashing Simulator (Kafka Default Partitioner)
               </span>
@@ -226,9 +322,25 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '12px',
+              alignItems: 'center',
+            }}
+          >
             <div>
-              <label htmlFor="partition-key-input" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 }}>
+              <label
+                htmlFor="partition-key-input"
+                style={{
+                  display: 'block',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-muted)',
+                  marginBottom: '4px',
+                  fontWeight: 600,
+                }}
+              >
                 Test Key / Customer ID:
               </label>
               <input
@@ -256,16 +368,40 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               />
             </div>
 
-            <div style={{ background: '#ffffff', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '0.785rem', fontFamily: 'var(--font-mono)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+            <div
+              style={{
+                background: '#ffffff',
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '0.785rem',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}
+              >
                 <span style={{ color: 'var(--text-muted)' }}>Murmur2 Hash:</span>
-                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{hashResult.hexHash}</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                  {hashResult.hexHash}
+                </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}
+              >
                 <span style={{ color: 'var(--text-muted)' }}>Positive (31-bit):</span>
-                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{hashResult.positiveHash.toLocaleString()}</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>
+                  {hashResult.positiveHash.toLocaleString()}
+                </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '4px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  borderTop: '1px solid var(--border-subtle)',
+                  paddingTop: '4px',
+                }}
+              >
                 <span style={{ color: 'var(--text-muted)' }}>Target Partition:</span>
                 <span style={{ color: '#0284c7', fontWeight: 700, fontSize: '0.85rem' }}>
                   Partition #{hashResult.targetPartition}
@@ -274,7 +410,18 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
             </div>
 
             <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-              <strong style={{ color: 'var(--text-body)' }}>Deterministic Guarantees:</strong> Any message produced with key <code style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 600 }}>{simulatorKey || '...'}</code> is guaranteed to land in <strong style={{ color: '#0284c7' }}>Partition #{hashResult.targetPartition}</strong>.
+              <strong style={{ color: 'var(--text-body)' }}>Deterministic Guarantees:</strong> Any
+              message produced with key{' '}
+              <code
+                style={{ fontFamily: 'var(--font-mono)', color: '#0284c7', fontWeight: 600 }}
+              >
+                {simulatorKey || '...'}
+              </code>{' '}
+              is guaranteed to land in{' '}
+              <strong style={{ color: '#0284c7' }}>
+                Partition #{hashResult.targetPartition}
+              </strong>
+              .
             </div>
           </div>
         </div>
@@ -282,7 +429,16 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
 
       {/* 3. Partition Cards Matrix */}
       <section className="cyber-card" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '14px',
+            flexWrap: 'wrap',
+            gap: '8px',
+          }}
+        >
           <div>
             <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)' }}>
               Partition Matrix ({partitionCount} Partitions)
@@ -292,24 +448,63 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#0284c7', display: 'inline-block' }} />
+              <span
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '2px',
+                  background: '#0284c7',
+                  display: 'inline-block',
+                }}
+              />
               Active Target
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#e0f2fe', border: '1px solid #0284c7', display: 'inline-block' }} />
+              <span
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '2px',
+                  background: '#e0f2fe',
+                  border: '1px solid #0284c7',
+                  display: 'inline-block',
+                }}
+              />
               Selected for Peek
             </span>
           </div>
         </div>
 
         {loading && !metadata ? (
-          <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+          <div
+            style={{
+              padding: '28px',
+              textAlign: 'center',
+              color: 'var(--text-dim)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.85rem',
+            }}
+          >
             Reading broker partition log end offsets...
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: '12px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+              gap: '12px',
+            }}
+          >
             {partitions.map((p) => {
               const isTarget = activeHighlight === p.partition;
               const isSelected = selectedPartition === p.partition;
@@ -327,14 +522,23 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     border: isTarget
                       ? '2px solid #0284c7'
                       : isSelected
-                      ? '1px solid #0284c7'
-                      : '1px solid var(--border-subtle)',
-                    boxShadow: isTarget ? '0 0 0 3px rgba(2, 132, 199, 0.15)' : 'var(--shadow-sm)',
+                        ? '1px solid #0284c7'
+                        : '1px solid var(--border-subtle)',
+                    boxShadow: isTarget
+                      ? '0 0 0 3px rgba(2, 132, 199, 0.15)'
+                      : 'var(--shadow-sm)',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '8px',
+                    }}
+                  >
                     <span
                       className={`badge-mono ${isSelected ? 'badge-cyan' : 'badge-violet'}`}
                       style={{ fontSize: '0.75rem' }}
@@ -348,18 +552,38 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      fontSize: '0.75rem',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Start Offset:</span>
-                      <span style={{ color: 'var(--text-body)', fontWeight: 600 }}>{p.logStartOffset}</span>
+                      <span style={{ color: 'var(--text-body)', fontWeight: 600 }}>
+                        {p.logStartOffset}
+                      </span>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: 'var(--text-muted)' }}>High-Watermark:</span>
-                      <span style={{ color: 'var(--color-emerald)', fontWeight: 600 }}>{p.highWatermark}</span>
+                      <span style={{ color: 'var(--color-emerald)', fontWeight: 600 }}>
+                        {p.highWatermark}
+                      </span>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '4px', marginTop: '2px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        borderTop: '1px solid var(--border-subtle)',
+                        paddingTop: '4px',
+                        marginTop: '2px',
+                      }}
+                    >
                       <span style={{ color: 'var(--text-muted)' }}>Messages:</span>
                       <span style={{ color: 'var(--color-violet)', fontWeight: 700 }}>
                         {msgCount.toString()}
@@ -395,20 +619,37 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
         )}
       </section>
 
-      {/* 4. Live Broker Message Viewer (Peeker) */}
+      {/* 4. Live Broker Message Viewer with Advanced Sorting & UX */}
       <section className="cyber-card" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+            marginBottom: '16px',
+          }}
+        >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <h3
+                style={{
+                  fontSize: '1.05rem',
+                  fontWeight: 700,
+                  color: 'var(--text-main)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
                 <span>🔍</span> Live Broker Records — Partition #{selectedPartition}
               </h3>
-              <span className="badge-mono badge-cyan">
-                {messages.length} Records Loaded
-              </span>
+              <span className="badge-mono badge-cyan">{messages.length} Records Peeked</span>
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '2px' }}>
-              Peeking the newest records directly from Kafka partition log without altering consumer group committed offsets.
+              Peeking raw records directly from Kafka partition log without mutating consumer group
+              committed offsets.
             </p>
           </div>
 
@@ -418,14 +659,15 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               type="text"
               value={messageSearch}
               onChange={(e) => setMessageSearch(e.target.value)}
-              placeholder="Filter by key, ID, event..."
+              placeholder="Search in records..."
               style={{
-                padding: '5px 10px',
+                padding: '6px 12px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-medium)',
                 fontFamily: 'var(--font-mono)',
                 fontSize: '0.785rem',
                 minWidth: '180px',
+                background: '#ffffff',
               }}
             />
 
@@ -435,7 +677,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               value={peekLimit}
               onChange={(e) => setPeekLimit(Number(e.target.value))}
               style={{
-                padding: '5px 8px',
+                padding: '6px 10px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-medium)',
                 fontFamily: 'var(--font-mono)',
@@ -443,20 +685,34 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                 background: '#ffffff',
               }}
             >
-              <option value={5}>Limit: 5</option>
-              <option value={10}>Limit: 10</option>
-              <option value={25}>Limit: 25</option>
-              <option value={50}>Limit: 50</option>
+              <option value={5}>5 records</option>
+              <option value={10}>10 records</option>
+              <option value={25}>25 records</option>
+              <option value={50}>50 records</option>
             </select>
 
             {/* Auto-peek toggle */}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.775rem', color: 'var(--text-body)', cursor: 'pointer', userSelect: 'none' }}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.775rem',
+                color: 'var(--text-body)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                background: autoPeek ? '#ecfdf5' : '#ffffff',
+                border: autoPeek ? '1px solid #a7f3d0' : '1px solid var(--border-medium)',
+                padding: '4px 8px',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
               <input
                 type="checkbox"
                 checked={autoPeek}
                 onChange={(e) => setAutoPeek(e.target.checked)}
               />
-              Live Watch (3s)
+              Auto-Refresh (3s)
             </label>
 
             {/* Refresh Button */}
@@ -465,7 +721,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               disabled={peeking}
               onClick={() => fetchBrokerMessages(selectedPartition, peekLimit)}
               style={{
-                padding: '5px 12px',
+                padding: '6px 14px',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-medium)',
                 background: '#ffffff',
@@ -476,6 +732,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '4px',
+                boxShadow: 'var(--shadow-sm)',
               }}
             >
               {peeking ? 'Peeking...' : '↻ Peek Now'}
@@ -483,34 +740,219 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
           </div>
         </div>
 
+        {/* 5. Powerful Message Sorting & UX Controls Toolbar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            padding: '10px 14px',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border-subtle)',
+            marginBottom: '14px',
+          }}
+        >
+          {/* Sorting Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Sort Records:
+            </span>
+
+            {/* Latest vs Oldest Toggle Button */}
+            <div
+              style={{
+                display: 'inline-flex',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-medium)',
+                overflow: 'hidden',
+                background: '#ffffff',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setSortOrder('latest')}
+                style={{
+                  padding: '4px 10px',
+                  border: 'none',
+                  background: sortOrder === 'latest' ? '#0284c7' : '#ffffff',
+                  color: sortOrder === 'latest' ? '#ffffff' : 'var(--text-body)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>⬇</span> Latest First (Newest)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortOrder('oldest')}
+                style={{
+                  padding: '4px 10px',
+                  border: 'none',
+                  borderLeft: '1px solid var(--border-medium)',
+                  background: sortOrder === 'oldest' ? '#0284c7' : '#ffffff',
+                  color: sortOrder === 'oldest' ? '#ffffff' : 'var(--text-body)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>⬆</span> Oldest First (Ascending)
+              </button>
+            </div>
+
+            {/* Sort Field Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>By:</span>
+              <select
+                aria-label="Sort Field"
+                value={sortField}
+                onChange={(e) =>
+                  setSortField(e.target.value as 'offset' | 'key' | 'sequence')
+                }
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.75rem',
+                  background: '#ffffff',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                <option value="offset">Broker Offset</option>
+                <option value="key">Key (Customer ID)</option>
+                <option value="sequence">Customer Sequence #</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Quick Metrics & Copied Toast */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {copiedNotification && (
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--color-emerald)',
+                  fontWeight: 600,
+                  background: '#ecfdf5',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #a7f3d0',
+                }}
+              >
+                ✓ {copiedNotification}
+              </span>
+            )}
+            <span className="badge-mono badge-emerald">{partitionStats.completed} Completed</span>
+            {partitionStats.invalidated > 0 && (
+              <span className="badge-mono badge-amber">
+                {partitionStats.invalidated} Invalidated
+              </span>
+            )}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Showing {processedMessages.length} of {messages.length}
+            </span>
+          </div>
+        </div>
+
         {peekError && (
-          <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--color-crimson-bg)', border: '1px solid var(--color-crimson-border)', color: 'var(--color-crimson)', fontSize: '0.8rem', marginBottom: '14px' }}>
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--color-crimson-bg)',
+              border: '1px solid var(--color-crimson-border)',
+              color: 'var(--color-crimson)',
+              fontSize: '0.8rem',
+              marginBottom: '14px',
+            }}
+          >
             Failed to peek partition messages: {peekError}
           </div>
         )}
 
-        {filteredMessages.length === 0 ? (
-          <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.825rem', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
-            {peeking ? 'Fetching broker partition records...' : `No messages found in Partition #${selectedPartition} log.`}
+        {processedMessages.length === 0 ? (
+          <div
+            style={{
+              padding: '36px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.825rem',
+              background: 'var(--bg-subtle)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            {peeking
+              ? 'Fetching broker partition records...'
+              : `No messages found in Partition #${selectedPartition} log.`}
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', fontFamily: 'var(--font-sans)' }}>
+          <div
+            style={{
+              overflowX: 'auto',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '0.8rem',
+                textAlign: 'left',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
               <thead>
-                <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <tr
+                  style={{
+                    background: 'var(--bg-subtle)',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
                   <th style={{ padding: '10px 14px' }}>Offset</th>
                   <th style={{ padding: '10px 14px' }}>Key (CustomerId)</th>
                   <th style={{ padding: '10px 14px' }}>Event Type</th>
                   <th style={{ padding: '10px 14px' }}>Timestamp</th>
                   <th style={{ padding: '10px 14px' }}>Payload Summary</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Action</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredMessages.map((msg) => {
-                  const payloadObj = typeof msg.payload === 'object' && msg.payload !== null ? (msg.payload as Record<string, unknown>) : null;
-                  const eventType = payloadObj?.eventType ? String(payloadObj.eventType) : 'RawMessage';
-                  const customerSeq = payloadObj?.customerSequence !== undefined ? String(payloadObj.customerSequence) : '-';
+                {processedMessages.map((msg) => {
+                  const payloadObj =
+                    typeof msg.payload === 'object' && msg.payload !== null
+                      ? (msg.payload as Record<string, unknown>)
+                      : null;
+                  const eventType = payloadObj?.eventType
+                    ? String(payloadObj.eventType)
+                    : 'RawMessage';
+                  const customerSeq =
+                    payloadObj?.customerSequence !== undefined
+                      ? String(payloadObj.customerSequence)
+                      : '-';
                   const isExpanded = expandedOffset === msg.offset;
 
                   let timeDisplay = msg.timestamp;
@@ -521,45 +963,100 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                     // ignore
                   }
 
+                  const isInvalidated = eventType === 'PurchaseInvalidated';
+
                   return (
                     <React.Fragment key={msg.offset}>
                       <tr
                         style={{
                           borderBottom: '1px solid var(--border-subtle)',
-                          background: isExpanded ? '#f8fafc' : '#ffffff',
+                          background: isExpanded ? '#f8fafc' : isInvalidated ? '#fffbeb' : '#ffffff',
                           transition: 'background 0.15s ease',
                         }}
                       >
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-primary)' }}>
-                          <span className="badge-mono badge-cyan">#{msg.offset}</span>
+                        <td
+                          style={{
+                            padding: '10px 14px',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          <span
+                            className="badge-mono badge-cyan"
+                            onClick={() => copyToClipboard(msg.offset, 'Offset')}
+                            title="Click to copy offset"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            #{msg.offset}
+                          </span>
                         </td>
-                        <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-main)' }}>
+                        <td
+                          style={{
+                            padding: '10px 14px',
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                          }}
+                        >
                           {msg.key ? (
-                            <span style={{ color: '#0284c7' }}>{msg.key}</span>
+                            <span
+                              onClick={() => copyToClipboard(msg.key!, 'Customer ID')}
+                              title="Click to copy Customer ID"
+                              style={{
+                                color: '#0284c7',
+                                cursor: 'pointer',
+                                textDecoration: 'underline dotted',
+                              }}
+                            >
+                              {msg.key}
+                            </span>
                           ) : (
                             <span style={{ color: 'var(--text-dim)' }}>[Null Key]</span>
                           )}
                         </td>
                         <td style={{ padding: '10px 14px' }}>
-                          <span className={`badge-mono ${eventType.includes('Invalid') ? 'badge-amber' : 'badge-emerald'}`}>
-                            {eventType}
+                          <span
+                            className={`badge-mono ${isInvalidated ? 'badge-amber' : 'badge-emerald'}`}
+                          >
+                            {isInvalidated ? '↩ PurchaseInvalidated' : '✓ PurchaseCompleted'}
                           </span>
                         </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                        <td
+                          style={{
+                            padding: '10px 14px',
+                            color: 'var(--text-muted)',
+                            fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
                           {timeDisplay}
                         </td>
-                        <td style={{ padding: '10px 14px', color: 'var(--text-body)', fontSize: '0.775rem' }}>
+                        <td
+                          style={{
+                            padding: '10px 14px',
+                            color: 'var(--text-body)',
+                            fontSize: '0.775rem',
+                          }}
+                        >
                           {payloadObj ? (
                             <span>
-                              Seq <strong style={{ fontFamily: 'var(--font-mono)' }}>#{customerSeq}</strong>
+                              Sequence{' '}
+                              <strong style={{ fontFamily: 'var(--font-mono)' }}>
+                                #{customerSeq}
+                              </strong>
                               {payloadObj.payload && typeof payloadObj.payload === 'object' ? (
                                 <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
-                                  ({(payloadObj.payload as Record<string, unknown>).amountCents ? `$${(Number((payloadObj.payload as Record<string, unknown>).amountCents) / 100).toFixed(2)}` : 'Payload'})
+                                  {(payloadObj.payload as Record<string, unknown>).amountCents
+                                    ? `$${(Number((payloadObj.payload as Record<string, unknown>).amountCents) / 100).toFixed(2)}`
+                                    : (payloadObj.payload as Record<string, unknown>).reason
+                                      ? `[Reason: ${String((payloadObj.payload as Record<string, unknown>).reason)}]`
+                                      : 'Payload'}
                                 </span>
                               ) : null}
                             </span>
                           ) : (
-                            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                            <span
+                              style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}
+                            >
                               {String(msg.payload).slice(0, 40)}...
                             </span>
                           )}
@@ -569,7 +1066,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                             type="button"
                             onClick={() => setExpandedOffset(isExpanded ? null : msg.offset)}
                             style={{
-                              padding: '3px 8px',
+                              padding: '4px 10px',
                               borderRadius: 'var(--radius-sm)',
                               border: '1px solid var(--border-medium)',
                               background: '#ffffff',
@@ -585,31 +1082,57 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                       </tr>
 
                       {isExpanded && (
-                        <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border-subtle)' }}>
-                          <td colSpan={6} style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                FULL KAFKA ENVELOPE (RECORD #{msg.offset})
+                        <tr
+                          style={{
+                            background: '#f8fafc',
+                            borderBottom: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          <td colSpan={6} style={{ padding: '14px 18px' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '8px',
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: '0.75rem',
+                                  fontWeight: 700,
+                                  color: 'var(--text-muted)',
+                                  fontFamily: 'var(--font-mono)',
+                                }}
+                              >
+                                RECORD #{msg.offset} (PARTITION #{msg.partition}) — FULL KAFKA
+                                ENVELOPE
                               </span>
                               <button
                                 type="button"
-                                onClick={() => navigator.clipboard.writeText(JSON.stringify(msg.payload, null, 2))}
+                                onClick={() =>
+                                  copyToClipboard(
+                                    JSON.stringify(msg.payload, null, 2),
+                                    'Full Envelope JSON',
+                                  )
+                                }
                                 style={{
-                                  fontSize: '0.7rem',
-                                  padding: '2px 8px',
+                                  fontSize: '0.725rem',
+                                  padding: '3px 10px',
                                   borderRadius: 'var(--radius-sm)',
                                   border: '1px solid var(--border-medium)',
                                   background: '#ffffff',
                                   cursor: 'pointer',
+                                  fontWeight: 600,
                                 }}
                               >
-                                Copy JSON
+                                📋 Copy JSON
                               </button>
                             </div>
                             <pre
                               style={{
                                 margin: 0,
-                                padding: '10px 12px',
+                                padding: '12px 14px',
                                 background: '#ffffff',
                                 border: '1px solid var(--border-subtle)',
                                 borderRadius: 'var(--radius-sm)',
@@ -617,7 +1140,8 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                                 fontFamily: 'var(--font-mono)',
                                 color: 'var(--text-main)',
                                 overflowX: 'auto',
-                                maxHeight: '220px',
+                                maxHeight: '240px',
+                                lineHeight: '1.45',
                               }}
                             >
                               {JSON.stringify(msg.payload, null, 2)}
@@ -634,7 +1158,7 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
         )}
       </section>
 
-      {/* 5. Scale Partitions Modal */}
+      {/* 6. Scale Partitions Modal */}
       {showScaleModal && (
         <div
           style={{
@@ -657,8 +1181,24 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               background: '#ffffff',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '14px',
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                  color: 'var(--text-main)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
                 <span>⚙</span> Scale Topic Partitions
               </h3>
               <button
@@ -677,16 +1217,39 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleScalePartitions} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form
+              onSubmit={handleScalePartitions}
+              style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}
+            >
               <div>
-                <label htmlFor="target-partition-count-input" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-body)', marginBottom: '4px' }}>
+                <label
+                  htmlFor="target-partition-count-input"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: 'var(--text-body)',
+                    marginBottom: '4px',
+                  }}
+                >
                   Topic: <code style={{ color: '#0284c7' }}>{topicName}</code>
                 </label>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                <div
+                  style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}
+                >
                   Current partition count: <strong>{partitionCount}</strong>
                 </div>
 
-                <label htmlFor="target-partition-count-input" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-body)', marginBottom: '4px' }}>
+                <label
+                  htmlFor="target-partition-count-input"
+                  style={{
+                    display: 'block',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: 'var(--text-body)',
+                    marginBottom: '4px',
+                  }}
+                >
                   Target Partition Count:
                 </label>
                 <input
@@ -723,24 +1286,52 @@ export const PartitionGrid: React.FC<PartitionGridProps> = ({
                 <strong>Kafka Partition Scaling Rule:</strong>
                 <ul style={{ paddingLeft: '16px', marginTop: '4px' }}>
                   <li>Partitions can only be increased, never reduced.</li>
-                  <li>Existing messages remain on their current partitions with their original offsets.</li>
+                  <li>
+                    Existing messages remain on their current partitions with their original
+                    offsets.
+                  </li>
                   <li>New records will be hashed across {targetPartitionCount} partitions.</li>
                 </ul>
               </div>
 
               {scaleError && (
-                <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--color-crimson-bg)', border: '1px solid var(--color-crimson-border)', color: 'var(--color-crimson)', fontSize: '0.8rem' }}>
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-crimson-bg)',
+                    border: '1px solid var(--color-crimson-border)',
+                    color: 'var(--color-crimson)',
+                    fontSize: '0.8rem',
+                  }}
+                >
                   {scaleError}
                 </div>
               )}
 
               {scaleSuccess && (
-                <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--color-emerald-bg)', border: '1px solid var(--color-emerald-border)', color: 'var(--color-emerald)', fontSize: '0.8rem' }}>
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-emerald-bg)',
+                    border: '1px solid var(--color-emerald-border)',
+                    color: 'var(--color-emerald)',
+                    fontSize: '0.8rem',
+                  }}
+                >
                   {scaleSuccess}
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '8px',
+                  marginTop: '8px',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setShowScaleModal(false)}

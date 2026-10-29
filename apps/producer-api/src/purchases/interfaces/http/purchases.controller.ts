@@ -63,7 +63,8 @@ export class PurchasesController {
   @HttpCode(HttpStatus.OK)
   async invalidatePurchase(
     @Param('purchaseId') purchaseId: string,
-    @Body(new ZodValidationPipe(invalidatePurchaseSchema)) dto: InvalidatePurchaseDto = {},
+    @Body(new ZodValidationPipe(invalidatePurchaseSchema))
+    dto: InvalidatePurchaseDto = { reason: 'DEMO_INVALIDATION' },
   ): Promise<PurchaseInvalidatedResponseDto> {
     const command = new InvalidateSyntheticPurchaseCommand({
       purchaseId,
