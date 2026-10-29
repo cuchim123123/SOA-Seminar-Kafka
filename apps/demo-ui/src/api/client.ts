@@ -110,6 +110,18 @@ export interface CustomerComparisonDto {
   };
 }
 
+export interface StagingCustomerRecord {
+  id: string;
+  runId: string;
+  customerId: string;
+  points: number;
+  tier: string;
+  eligibleSpendCents: number;
+  scannedEventCount: number;
+  lastCustomerSequence: number;
+  createdAt: string;
+}
+
 export interface ServiceHealthStatus {
   producer: boolean;
   loyalty: boolean;
@@ -346,6 +358,10 @@ export const api = {
     return request<CustomerComparisonDto>(
       `/api/replay/api/v1/replay/runs/${runId}/comparison/${customerId}`,
     );
+  },
+
+  getStagingRecords: async (runId: string): Promise<StagingCustomerRecord[]> => {
+    return request<StagingCustomerRecord[]>(`/api/replay/api/v1/replay/runs/${runId}/staging`);
   },
 
   // 5. Cluster Health Checks

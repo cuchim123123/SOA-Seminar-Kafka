@@ -14,6 +14,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
   const [customerId, setCustomerId] = useState<string>('U001');
   const [amountDollars, setAmountDollars] = useState<number>(120);
   const [invalidationPurchaseId, setInvalidationPurchaseId] = useState<string>('');
+  const [invalidationReason, setInvalidationReason] = useState<string>('Customer return requested');
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
@@ -43,8 +44,8 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
   };
 
   const handleInvalidate = async () => {
-    if (!invalidationPurchaseId) {
-      setStatusMessage('✕ Please specify or emit a Purchase ID to invalidate.');
+    if (!invalidationPurchaseId.trim()) {
+      setStatusMessage('✕ Please specify or enter a Purchase ID to invalidate.');
       return;
     }
 
@@ -57,7 +58,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
       setTimeout(() => setActiveStep(3), 550);
       setTimeout(() => setActiveStep(4), 850);
 
-      const res = await api.invalidatePurchase(invalidationPurchaseId, 'Customer return requested');
+      const res = await api.invalidatePurchase(invalidationPurchaseId.trim(), invalidationReason);
       setStatusMessage(
         `✓ Invalidation compensation emitted: Customer ${res.customerId} allocated Seq #${res.customerSequence} (Already Invalidated: ${res.isAlreadyInvalidated}).`,
       );
@@ -324,6 +325,84 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
             )}
           </div>
         )}
+      </div>
+
+      {/* 2. Compensating Action: Invalidation Studio */}
+      <div
+        style={{
+          marginTop: '16px',
+          padding: '16px 20px',
+          borderRadius: 'var(--radius-md)',
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.1rem', color: '#d97706' }}>↩</span>
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#92400e' }}>
+              Phase 5 Compensation: Invalidate Purchase Event
+            </span>
+          </div>
+          <span className="badge-mono badge-amber">POST /api/v1/purchases/:purchaseId/invalidate</span>
+        </div>
+
+        <p style={{ fontSize: '0.8rem', color: '#78350f', marginBottom: '12px', lineHeight: '1.4' }}>
+          In Kafka event streaming, past records are <strong>immutable</strong>. Rather than deleting rows or mutating Kafka log offsets, an explicit <code style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>PurchaseInvalidated</code> event is emitted into the customer's partition with an incremented sequence number.
+        </p>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={invalidationPurchaseId}
+            onChange={(e) => setInvalidationPurchaseId(e.target.value)}
+            placeholder="Purchase ID (e.g. pur_01a188...)"
+            style={{
+              flex: '2 1 280px',
+              padding: '7px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid #d97706',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8rem',
+              background: '#ffffff',
+            }}
+          />
+
+          <input
+            type="text"
+            value={invalidationReason}
+            onChange={(e) => setInvalidationReason(e.target.value)}
+            placeholder="Reason (e.g. Customer return)"
+            style={{
+              flex: '1 1 200px',
+              padding: '7px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-medium)',
+              fontSize: '0.8rem',
+              background: '#ffffff',
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={handleInvalidate}
+            disabled={loading || !invalidationPurchaseId.trim()}
+            style={{
+              background: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '7px 18px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: loading || !invalidationPurchaseId.trim() ? 'not-allowed' : 'pointer',
+              opacity: loading || !invalidationPurchaseId.trim() ? 0.6 : 1,
+              boxShadow: 'var(--shadow-sm)',
+            }}
+          >
+            {loading ? 'Invalidating...' : '↩ Invalidate Purchase'}
+          </button>
+        </div>
       </div>
     </section>
   );
