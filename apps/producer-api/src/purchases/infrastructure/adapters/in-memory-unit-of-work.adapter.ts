@@ -1,6 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
 import {
+  HTTP_IDEMPOTENCY_REPOSITORY_PORT,
+  HttpIdempotencyRepositoryPort,
+} from '../../application/ports/http-idempotency-repository.port';
+import {
   OUTBOX_REPOSITORY_PORT,
   OutboxRepositoryPort,
 } from '../../application/ports/outbox-repository.port';
@@ -28,6 +32,8 @@ export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
     private readonly outboxRepository: OutboxRepositoryPort,
     @Inject(SEQUENCE_GENERATOR_PORT)
     private readonly sequenceGenerator: SequenceGeneratorPort,
+    @Inject(HTTP_IDEMPOTENCY_REPOSITORY_PORT)
+    private readonly idempotencyRepository: HttpIdempotencyRepositoryPort,
     @Inject(OutboxRelayService)
     private readonly outboxRelay: OutboxRelayService,
   ) {}
@@ -37,6 +43,7 @@ export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
       purchaseRepository: this.purchaseRepository,
       outboxRepository: this.outboxRepository,
       sequenceGenerator: this.sequenceGenerator,
+      idempotencyRepository: this.idempotencyRepository,
     };
 
     // 1. Execute transactional boundary across aggregate state and outbox

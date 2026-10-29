@@ -12,7 +12,9 @@ if (typeof process.loadEnvFile === 'function') {
 const PRODUCER_PORT = process.env.PORT || '3000';
 const DATABASE_URL =
   process.env.DATABASE_URL ||
-  `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD || 'postgres'}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`;
+  (process.env.POSTGRES_PASSWORD
+    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
+    : undefined);
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

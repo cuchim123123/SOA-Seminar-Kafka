@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ZodValidationPipe } from '../../../src/common/pipes/zod-validation.pipe';
 import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase.command';
 import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase.handler';
+import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase.handler';
 import { createPurchaseSchema } from '../../../src/purchases/interfaces/http/dto/create-purchase.dto';
 import { PurchasesController } from '../../../src/purchases/interfaces/http/purchases.controller';
 
@@ -21,7 +22,11 @@ describe('PurchasesController & ZodValidationPipe', () => {
         })),
       } as unknown as CreatePurchaseHandler;
 
-      const controller = new PurchasesController(mockHandler);
+      const mockGetHandler = {
+        execute: vi.fn(),
+      } as unknown as GetPurchaseHandler;
+
+      const controller = new PurchasesController(mockHandler, mockGetHandler);
       const response = await controller.createPurchase(
         {
           customerId: 'CUST_1',
@@ -46,6 +51,40 @@ describe('PurchasesController & ZodValidationPipe', () => {
         eventId: '01a18192-9c94-7d7b-952b-02265a63bac4',
         correlationId: '01a18192-9c94-7d7b-952b-02265a63bac4',
       });
+    });
+
+    it('returns purchase read model when found', async () => {
+      const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockGetHandler = {
+        execute: vi.fn(async () => ({
+          purchaseId: 'pur_xyz',
+          customerId: 'CUST_1',
+          amountCents: 2000,
+          status: 'COMPLETED' as const,
+          customerSequence: 1,
+          createdAt: '2026-10-29T12:00:00.000Z',
+          outboxStatus: 'PUBLISHED' as const,
+          publishedAt: '2026-10-29T12:00:01.000Z',
+          eventId: 'evt_123',
+        })),
+      } as unknown as GetPurchaseHandler;
+
+      const controller = new PurchasesController(mockCreateHandler, mockGetHandler);
+      const result = await controller.getPurchase('pur_xyz');
+
+      expect(mockGetHandler.execute).toHaveBeenCalled();
+      expect(result.purchaseId).toBe('pur_xyz');
+      expect(result.outboxStatus).toBe('PUBLISHED');
+    });
+
+    it('throws NotFoundException when purchase does not exist', async () => {
+      const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockGetHandler = {
+        execute: vi.fn(async () => null),
+      } as unknown as GetPurchaseHandler;
+
+      const controller = new PurchasesController(mockCreateHandler, mockGetHandler);
+      await expect(controller.getPurchase('pur_unknown')).rejects.toThrow();
     });
   });
 

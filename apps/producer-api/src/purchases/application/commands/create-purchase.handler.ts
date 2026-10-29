@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { createPurchaseCompletedEnvelope, uuidv7 } from '@lab/contracts';
 import { Purchase } from '../../domain/purchase.entity';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../ports/unit-of-work.port';
@@ -13,16 +13,43 @@ export class CreatePurchaseHandler {
 
   async execute(command: CreatePurchaseCommand): Promise<CreatePurchaseResult> {
     const { customerId, amountCents, correlationId, idempotencyKey } = command.data;
+    const resolvedCorrelationId = correlationId ?? uuidv7();
+    const requestFingerprint = JSON.stringify({ customerId, amountCents });
 
     return await this.unitOfWork.execute(async (ctx) => {
-      // 1. Monotonic customer sequence allocated under transactional lock
+      // 1. Idempotency Key Check
+      if (idempotencyKey) {
+        const existingKey = await ctx.idempotencyRepository.find(customerId, idempotencyKey);
+        if (existingKey) {
+          if (existingKey.requestFingerprint !== requestFingerprint) {
+            throw new ConflictException(
+              `Idempotency key '${idempotencyKey}' reused with conflicting payload for customer '${customerId}'`,
+            );
+          }
+
+          // Exact duplicate: return existing purchase without mutating state
+          const existingPurchase = await ctx.purchaseRepository.findById(existingKey.purchaseId);
+          if (existingPurchase) {
+            return {
+              purchaseId: existingPurchase.purchaseId,
+              customerId: existingPurchase.customerId,
+              amountCents: existingPurchase.amountCents,
+              customerSequence: existingPurchase.customerSequence,
+              eventId: existingPurchase.purchaseId,
+              correlationId: resolvedCorrelationId,
+              idempotencyKey,
+            };
+          }
+        }
+      }
+
+      // 2. Monotonic customer sequence allocated under transactional lock
       const customerSequence = await ctx.sequenceGenerator.nextSequence(customerId);
 
       const purchaseId = `pur_${uuidv7()}`;
       const eventId = uuidv7();
-      const resolvedCorrelationId = correlationId ?? uuidv7();
 
-      // 2. Instantiate and validate domain entity invariants
+      // 3. Instantiate and validate domain entity invariants
       const purchase = Purchase.create({
         purchaseId,
         customerId,
@@ -30,7 +57,7 @@ export class CreatePurchaseHandler {
         customerSequence,
       });
 
-      // 3. Create typed integration envelope via contracts single-source-of-truth factory
+      // 4. Create typed integration envelope via contracts single-source-of-truth factory
       const envelope = createPurchaseCompletedEnvelope({
         eventId,
         customerId: purchase.customerId,
@@ -40,10 +67,10 @@ export class CreatePurchaseHandler {
         correlationId: resolvedCorrelationId,
       });
 
-      // 4. Atomically persist Purchase entity inside Unit of Work
+      // 5. Atomically persist Purchase entity inside Unit of Work
       await ctx.purchaseRepository.save(purchase);
 
-      // 5. Atomically append integration event to Outbox inside Unit of Work
+      // 6. Atomically append integration event to Outbox inside Unit of Work
       await ctx.outboxRepository.save({
         eventId,
         aggregateId: purchase.customerId,
@@ -54,6 +81,16 @@ export class CreatePurchaseHandler {
         attemptCount: 0,
         createdAt: new Date().toISOString(),
       });
+
+      // 7. Atomically register Idempotency Key record inside Unit of Work
+      if (idempotencyKey) {
+        await ctx.idempotencyRepository.save({
+          customerId,
+          idempotencyKey,
+          requestFingerprint,
+          purchaseId: purchase.purchaseId,
+        });
+      }
 
       return {
         purchaseId: purchase.purchaseId,

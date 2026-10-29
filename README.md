@@ -125,6 +125,9 @@ pnpm --filter @lab/producer-api prisma:migrate
 
 # Run automated concurrent customer sequence locking verification (P4-01)
 pnpm demo:concurrency
+
+# Run automated CQRS purchase command, Read DAO query, and transactional outbox verification (P4-02)
+pnpm demo:outbox
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`

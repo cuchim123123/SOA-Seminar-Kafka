@@ -67,7 +67,7 @@ export class PostgresOutboxRepositoryAdapter implements OutboxRepositoryPort {
     await this.client.outboxEvent.update({
       where: { eventId },
       data: {
-        status: 'FAILED',
+        status: 'PENDING',
         attemptCount: { increment: 1 },
       },
     });

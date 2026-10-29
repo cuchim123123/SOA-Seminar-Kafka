@@ -1,24 +1,32 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
   Inject,
+  NotFoundException,
+  Param,
   Post,
   UsePipes,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CreatePurchaseCommand } from '../../application/commands/create-purchase.command';
 import { CreatePurchaseHandler } from '../../application/commands/create-purchase.handler';
+import { GetPurchaseHandler } from '../../application/queries/get-purchase.handler';
+import { GetPurchaseQuery } from '../../application/queries/get-purchase.query';
 import { CreatePurchaseDto, createPurchaseSchema } from './dto/create-purchase.dto';
 import { PurchaseAcceptedResponseDto } from './dto/purchase-accepted-response.dto';
+import { PurchaseStatusResponseDto } from './dto/purchase-status-response.dto';
 
-@Controller('api/v1/demo/purchases')
+@Controller(['api/v1/demo/purchases', 'api/v1/purchases'])
 export class PurchasesController {
   constructor(
     @Inject(CreatePurchaseHandler)
     private readonly createPurchaseHandler: CreatePurchaseHandler,
+    @Inject(GetPurchaseHandler)
+    private readonly getPurchaseHandler: GetPurchaseHandler,
   ) {}
 
   @Post()
@@ -43,5 +51,14 @@ export class PurchasesController {
       eventId: result.eventId,
       correlationId: result.correlationId,
     };
+  }
+
+  @Get(':purchaseId')
+  async getPurchase(@Param('purchaseId') purchaseId: string): Promise<PurchaseStatusResponseDto> {
+    const result = await this.getPurchaseHandler.execute(new GetPurchaseQuery({ purchaseId }));
+    if (!result) {
+      throw new NotFoundException(`Purchase '${purchaseId}' not found`);
+    }
+    return result;
   }
 }

@@ -3,6 +3,7 @@ import { StructuredLogger } from '@lab/observability';
 import { PrismaService } from '../../../database/prisma.service';
 import { UnitOfWorkContext, UnitOfWorkPort } from '../../application/ports/unit-of-work.port';
 import { OutboxRelayService } from '../services/outbox-relay.service';
+import { PostgresHttpIdempotencyRepositoryAdapter } from './postgres-http-idempotency-repository.adapter';
 import { PostgresOutboxRepositoryAdapter } from './postgres-outbox-repository.adapter';
 import { PostgresPurchaseRepositoryAdapter } from './postgres-purchase-repository.adapter';
 import { PostgresSequenceGeneratorAdapter } from './postgres-sequence-generator.adapter';
@@ -27,6 +28,7 @@ export class PostgresUnitOfWorkAdapter implements UnitOfWorkPort {
           purchaseRepository: new PostgresPurchaseRepositoryAdapter(tx),
           outboxRepository: new PostgresOutboxRepositoryAdapter(tx),
           sequenceGenerator: new PostgresSequenceGeneratorAdapter(tx),
+          idempotencyRepository: new PostgresHttpIdempotencyRepositoryAdapter(tx),
         };
 
         return await work(context);

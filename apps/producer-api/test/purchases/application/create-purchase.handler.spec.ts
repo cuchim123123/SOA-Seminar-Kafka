@@ -38,6 +38,11 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
       nextSequence: vi.fn(async (_customerId: string): Promise<number> => 1),
     };
 
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => null),
+      save: vi.fn(async () => {}),
+    };
+
     const executeSpy = vi.fn();
     const mockUnitOfWork: UnitOfWorkPort = {
       execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
@@ -46,6 +51,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
           purchaseRepository: mockPurchaseRepo,
           outboxRepository: mockOutboxRepo,
           sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
         });
       },
     };
@@ -123,12 +129,18 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
       nextSequence: vi.fn(async () => 3),
     };
 
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => null),
+      save: vi.fn(async () => {}),
+    };
+
     const mockUnitOfWork: UnitOfWorkPort = {
       execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
         return work({
           purchaseRepository: mockPurchaseRepo,
           outboxRepository: mockOutboxRepo,
           sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
         });
       },
     };
@@ -147,5 +159,122 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
     expect(result.idempotencyKey).toBe(idempotencyKey);
     expect(result.customerSequence).toBe(3);
     expect(savedOutboxRecord?.envelope.correlationId).toBe(fixedCorrelationId);
+    expect(mockIdempotencyRepo.save).toHaveBeenCalledWith({
+      customerId: 'CUST_U002',
+      idempotencyKey,
+      requestFingerprint: JSON.stringify({ customerId: 'CUST_U002', amountCents: 1200 }),
+      purchaseId: result.purchaseId,
+    });
+  });
+
+  it('returns existing purchase when exact duplicate idempotency key is submitted', async () => {
+    const existingPurchase = Purchase.create({
+      purchaseId: 'pur_existing_123',
+      customerId: 'CUST_U001',
+      amountCents: 5000,
+      customerSequence: 5,
+    });
+
+    const mockPurchaseRepo: PurchaseRepositoryPort = {
+      save: vi.fn(),
+      findById: vi.fn(async () => existingPurchase),
+    };
+
+    const mockOutboxRepo: OutboxRepositoryPort = {
+      save: vi.fn(),
+      findPending: vi.fn(),
+      markPublished: vi.fn(),
+      markFailed: vi.fn(),
+    };
+
+    const mockSequenceGenerator: SequenceGeneratorPort = {
+      nextSequence: vi.fn(async () => 6),
+    };
+
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => ({
+        customerId: 'CUST_U001',
+        idempotencyKey: 'idem_key_1',
+        requestFingerprint: JSON.stringify({ customerId: 'CUST_U001', amountCents: 5000 }),
+        purchaseId: 'pur_existing_123',
+      })),
+      save: vi.fn(),
+    };
+
+    const mockUnitOfWork: UnitOfWorkPort = {
+      execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
+        return work({
+          purchaseRepository: mockPurchaseRepo,
+          outboxRepository: mockOutboxRepo,
+          sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
+        });
+      },
+    };
+
+    const handler = new CreatePurchaseHandler(mockUnitOfWork);
+    const result = await handler.execute(
+      new CreatePurchaseCommand({
+        customerId: 'CUST_U001',
+        amountCents: 5000,
+        idempotencyKey: 'idem_key_1',
+      }),
+    );
+
+    expect(result.purchaseId).toBe('pur_existing_123');
+    expect(result.amountCents).toBe(5000);
+    expect(mockSequenceGenerator.nextSequence).not.toHaveBeenCalled();
+    expect(mockPurchaseRepo.save).not.toHaveBeenCalled();
+    expect(mockOutboxRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('throws ConflictException when idempotency key is reused with conflicting payload', async () => {
+    const mockPurchaseRepo: PurchaseRepositoryPort = {
+      save: vi.fn(),
+      findById: vi.fn(),
+    };
+
+    const mockOutboxRepo: OutboxRepositoryPort = {
+      save: vi.fn(),
+      findPending: vi.fn(),
+      markPublished: vi.fn(),
+      markFailed: vi.fn(),
+    };
+
+    const mockSequenceGenerator: SequenceGeneratorPort = {
+      nextSequence: vi.fn(),
+    };
+
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => ({
+        customerId: 'CUST_U001',
+        idempotencyKey: 'idem_key_1',
+        requestFingerprint: JSON.stringify({ customerId: 'CUST_U001', amountCents: 5000 }),
+        purchaseId: 'pur_existing_123',
+      })),
+      save: vi.fn(),
+    };
+
+    const mockUnitOfWork: UnitOfWorkPort = {
+      execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
+        return work({
+          purchaseRepository: mockPurchaseRepo,
+          outboxRepository: mockOutboxRepo,
+          sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
+        });
+      },
+    };
+
+    const handler = new CreatePurchaseHandler(mockUnitOfWork);
+    await expect(
+      handler.execute(
+        new CreatePurchaseCommand({
+          customerId: 'CUST_U001',
+          amountCents: 9999, // Conflicting amount!
+          idempotencyKey: 'idem_key_1',
+        }),
+      ),
+    ).rejects.toThrow();
   });
 });
