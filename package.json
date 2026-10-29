@@ -35,6 +35,8 @@
     "demo:groups:p3": "node scripts/verify-consumer-groups.mjs",
     "demo:lag": "node scripts/verify-lag.mjs",
     "demo:lag:p3": "node scripts/verify-lag.mjs",
+    "demo:pause-resume": "node scripts/demo-pause-resume.mjs",
+    "demo:pause-resume:p3": "node scripts/demo-pause-resume.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

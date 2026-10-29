@@ -5,13 +5,20 @@ import { Consumer, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import { ApplySalesEventCommand } from '../../application/commands/apply-sales-event.command';
 import { ApplySalesEventHandler } from '../../application/commands/apply-sales-event.handler';
+import {
+  ConsumerControlStatus,
+  KafkaConsumerControlPort,
+} from '../../application/ports/kafka-consumer-control.port';
 
 @Injectable()
-export class KafkaAnalyticsConsumerAdapter implements OnModuleInit, OnModuleDestroy {
+export class KafkaAnalyticsConsumerAdapter
+  implements KafkaConsumerControlPort, OnModuleInit, OnModuleDestroy
+{
   private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   private readonly topic: string;
+  private isPaused = false;
 
   constructor(
     @Inject(AppConfigService)
@@ -98,6 +105,38 @@ export class KafkaAnalyticsConsumerAdapter implements OnModuleInit, OnModuleDest
         ]);
       },
     });
+  }
+
+  async pause(): Promise<void> {
+    this.consumer.pause([{ topic: this.topic }]);
+    this.isPaused = true;
+    this.logger.warn('Analytics Kafka consumer PAUSED by operator request', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  async resume(): Promise<void> {
+    this.consumer.resume([{ topic: this.topic }]);
+    this.isPaused = false;
+    this.logger.info('Analytics Kafka consumer RESUMED by operator request', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  async getStatus(): Promise<ConsumerControlStatus> {
+    const pausedPartitions = this.consumer
+      .paused()
+      .filter((p) => p.topic === this.topic)
+      .flatMap((p) => p.partitions);
+
+    return {
+      groupId: this.config.kafkaGroupId,
+      topic: this.topic,
+      isPaused: this.isPaused,
+      pausedPartitions,
+    };
   }
 
   async onModuleDestroy(): Promise<void> {

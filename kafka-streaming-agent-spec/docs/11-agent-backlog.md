@@ -28,7 +28,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 - [x] **P3-01 Independent Analytics group** — Separate worker/group processes same events, independent state output. **Proof:** both groups see identical event IDs.
 - [x] **P3-02 Manual commit + lag reader** — Explicit offset commit and Admin-derived next-committed/log-end lag per partition. **Proof:** commit N+1, real lag readings handle `UNCOMMITTED`.
-- [ ] **P3-03 Pause/resume scenario** — CLI or allowlisted control to pause Analytics and later catch up. **Proof:** Analytics lag rises while Loyalty advances; resumes to 0.
+- [x] **P3-03 Pause/resume scenario** — CLI or allowlisted control to pause Analytics and later catch up. **Proof:** Analytics lag rises while Loyalty advances; resumes to 0.
 
 ## Phase 4 — Reliable DB/Kafka integration
 

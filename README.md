@@ -109,6 +109,12 @@ pnpm start:analytics
 
 # Run automated independent consumer group demonstration and verification
 pnpm demo:groups
+
+# Run automated manual offset commit (N + 1) and lag reader verification
+pnpm demo:lag
+
+# Run automated consumer pause, lag accumulation, and catch-up demonstration
+pnpm demo:pause-resume
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -134,7 +140,9 @@ pnpm demo:groups
 │   ├── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
 │   ├── generate-ordered-workload.mjs # Multi-customer ordered load generator and 82-point verification
 │   ├── inspect-partitions.mjs # Live partition inspector reporting actual broker metadata and key distribution
-│   └── verify-consumer-groups.mjs    # Multi-group independent stream consumption verification
+│   ├── verify-consumer-groups.mjs    # Multi-group independent stream consumption verification
+│   ├── verify-lag.mjs                # Manual offset commit N + 1 and UNCOMMITTED lag reader verification
+│   └── demo-pause-resume.mjs         # Consumer pause, lag accumulation, and catch-up verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
@@ -173,7 +181,7 @@ pnpm demo:groups
 - [x] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
 - [x] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.
 
-### Phase 3 — Consumer Groups and Offsets
+### Phase 3 — Consumer Groups and Offsets (100% COMPLETE)
 - [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
 - [x] **P3-02: Manual Commit + Lag Reader** — Explicit manual offset commit discipline (`autoCommit: false`, `N + 1`) and live Kafka Admin lag calculation `(logEndOffset - committedOffset)` per partition with `UNCOMMITTED` handling (`pnpm demo:lag`).
-- [ ] **P3-03: Pause/Resume Scenario** — CLI or allowlisted control to pause Analytics and later catch up.
+- [x] **P3-03: Pause/Resume Scenario** — CLI and HTTP allowlisted control to pause Analytics, observe lag accumulation while Loyalty proceeds, and catch up back to 0 lag upon resume (`pnpm demo:pause-resume`).
