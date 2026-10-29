@@ -37,6 +37,29 @@ describe('LoyaltyAccount Domain Entity', () => {
     expect(account.tier).toBe('GOLD');
   });
 
+  it('marks correctionRequired and updates lastCustomerSequence on applyInvalidation', () => {
+    const account = LoyaltyAccount.create('U001');
+    account.applyPurchase(12_000, 1);
+    expect(account.correctionRequired).toBe(false);
+    expect(account.lastCustomerSequence).toBe(1);
+
+    account.applyInvalidation(2);
+    expect(account.correctionRequired).toBe(true);
+    expect(account.lastCustomerSequence).toBe(2);
+    // Points and tier should remain untouched
+    expect(account.pointsBalance).toBe(12);
+    expect(account.tier).toBe('SILVER');
+  });
+
+  it('rejects out of order customer sequence on applyInvalidation', () => {
+    const account = LoyaltyAccount.create('U001');
+    account.applyPurchase(12_000, 1);
+
+    expect(() => account.applyInvalidation(3)).toThrowError(
+      /Sequence gap or out-of-order event for customer U001: expected 2, received 3/,
+    );
+  });
+
   it('rejects empty customerId on initialization', () => {
     expect(() => LoyaltyAccount.create('')).toThrowError(/customerId must not be empty/);
     expect(() => LoyaltyAccount.create('   ')).toThrowError(/customerId must not be empty/);

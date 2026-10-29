@@ -1,8 +1,18 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import { StartBoundedReplayCommand } from '../../application/commands/start-bounded-replay.command';
 import { StartBoundedReplayHandler } from '../../application/commands/start-bounded-replay.handler';
+import {
+  CompareReplayWithLiveHandler,
+  CustomerLiveStagingComparisonDto,
+} from '../../application/queries/compare-replay-with-live.handler';
+import { CompareReplayWithLiveQuery } from '../../application/queries/compare-replay-with-live.query';
 import { GetReplayRunHandler } from '../../application/queries/get-replay-run.handler';
 import { GetReplayRunQuery } from '../../application/queries/get-replay-run.query';
+import {
+  GetReplayStagingHandler,
+  StagingCustomerDto,
+} from '../../application/queries/get-replay-staging.handler';
+import { GetReplayStagingQuery } from '../../application/queries/get-replay-staging.query';
 import { ReplayRunResponseDto } from './dto/replay-run-response.dto';
 import { StartReplayDto } from './dto/start-replay.dto';
 
@@ -13,6 +23,10 @@ export class ReplayController {
     private readonly startHandler: StartBoundedReplayHandler,
     @Inject(GetReplayRunHandler)
     private readonly getHandler: GetReplayRunHandler,
+    @Inject(GetReplayStagingHandler)
+    private readonly stagingHandler: GetReplayStagingHandler,
+    @Inject(CompareReplayWithLiveHandler)
+    private readonly comparisonHandler: CompareReplayWithLiveHandler,
   ) {}
 
   @Post('runs')
@@ -54,5 +68,18 @@ export class ReplayController {
       startedAt: result.startedAt ? result.startedAt.toISOString() : null,
       completedAt: result.completedAt ? result.completedAt.toISOString() : null,
     };
+  }
+
+  @Get('runs/:runId/staging')
+  async getStagingRecords(@Param('runId') runId: string): Promise<StagingCustomerDto[]> {
+    return this.stagingHandler.execute(new GetReplayStagingQuery(runId));
+  }
+
+  @Get('runs/:runId/comparison/:customerId')
+  async compareWithLive(
+    @Param('runId') runId: string,
+    @Param('customerId') customerId: string,
+  ): Promise<CustomerLiveStagingComparisonDto> {
+    return this.comparisonHandler.execute(new CompareReplayWithLiveQuery(runId, customerId));
   }
 }

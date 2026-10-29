@@ -4,7 +4,9 @@ import { BOUNDED_REPLAY_SCANNER_PORT } from './application/ports/bounded-replay-
 import { REPLAY_RUN_REPOSITORY_PORT } from './application/ports/replay-run-repository.port';
 import { REPLAY_STAGING_REPOSITORY_PORT } from './application/ports/replay-staging-repository.port';
 import { TOPIC_BOUNDARY_INSPECTOR_PORT } from './application/ports/topic-boundary-inspector.port';
+import { CompareReplayWithLiveHandler } from './application/queries/compare-replay-with-live.handler';
 import { GetReplayRunHandler } from './application/queries/get-replay-run.handler';
+import { GetReplayStagingHandler } from './application/queries/get-replay-staging.handler';
 import { KafkaJsBoundedReplayScannerAdapter } from './infrastructure/adapters/kafkajs-bounded-replay-scanner.adapter';
 import { KafkaJsTopicBoundaryInspectorAdapter } from './infrastructure/adapters/kafkajs-topic-boundary-inspector.adapter';
 import { PostgresReplayRunRepositoryAdapter } from './infrastructure/adapters/postgres-replay-run-repository.adapter';
@@ -16,6 +18,8 @@ import { ReplayController } from './interfaces/http/replay.controller';
   providers: [
     StartBoundedReplayHandler,
     GetReplayRunHandler,
+    GetReplayStagingHandler,
+    CompareReplayWithLiveHandler,
     {
       provide: REPLAY_RUN_REPOSITORY_PORT,
       useClass: PostgresReplayRunRepositoryAdapter,
@@ -36,6 +40,8 @@ import { ReplayController } from './interfaces/http/replay.controller';
   exports: [
     StartBoundedReplayHandler,
     GetReplayRunHandler,
+    GetReplayStagingHandler,
+    CompareReplayWithLiveHandler,
     REPLAY_RUN_REPOSITORY_PORT,
     REPLAY_STAGING_REPOSITORY_PORT,
   ],

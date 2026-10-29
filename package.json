@@ -55,6 +55,8 @@
     "demo:invalidation:p5": "node scripts/verify-purchase-invalidation.mjs",
     "demo:replay": "node scripts/verify-replay-boundary.mjs",
     "demo:replay:p5": "node scripts/verify-replay-boundary.mjs",
+    "demo:correction": "node scripts/verify-two-pass-correction.mjs",
+    "demo:correction:p5": "node scripts/verify-two-pass-correction.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

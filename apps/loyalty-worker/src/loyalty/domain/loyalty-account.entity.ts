@@ -78,6 +78,19 @@ export class LoyaltyAccount {
     this.props.correctionRequired = true;
   }
 
+  applyInvalidation(sequence?: number): void {
+    if (sequence !== undefined) {
+      const expectedSequence = this.props.lastCustomerSequence + 1;
+      if (sequence !== expectedSequence) {
+        throw new Error(
+          `Sequence gap or out-of-order event for customer ${this.props.customerId}: expected ${expectedSequence}, received ${sequence}`,
+        );
+      }
+      this.props.lastCustomerSequence = sequence;
+    }
+    this.props.correctionRequired = true;
+  }
+
   /**
    * Applies a purchase to the loyalty account according to domain rules:
    * 1. Validates strictly incrementing sequence if provided.

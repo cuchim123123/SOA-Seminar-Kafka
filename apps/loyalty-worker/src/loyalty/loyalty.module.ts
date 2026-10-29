@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ApplyPurchaseEventHandler } from './application/commands/apply-purchase-event.handler';
+import { ApplyPurchaseInvalidationHandler } from './application/commands/apply-purchase-invalidation.handler';
 import { LOYALTY_ACCOUNT_READ_DAO_PORT } from './application/ports/loyalty-account-read-dao.port';
 import { LOYALTY_ACCOUNT_REPOSITORY_PORT } from './application/ports/loyalty-account-repository.port';
 import { LOYALTY_UNIT_OF_WORK_PORT } from './application/ports/loyalty-unit-of-work.port';
@@ -14,6 +15,7 @@ import { LoyaltyController } from './interfaces/http/loyalty.controller';
   controllers: [LoyaltyController],
   providers: [
     ApplyPurchaseEventHandler,
+    ApplyPurchaseInvalidationHandler,
     GetLoyaltyAccountHandler,
     PostgresLoyaltyAccountRepositoryAdapter,
     {
@@ -34,6 +36,7 @@ import { LoyaltyController } from './interfaces/http/loyalty.controller';
   ],
   exports: [
     ApplyPurchaseEventHandler,
+    ApplyPurchaseInvalidationHandler,
     GetLoyaltyAccountHandler,
     LOYALTY_ACCOUNT_REPOSITORY_PORT,
     LOYALTY_UNIT_OF_WORK_PORT,

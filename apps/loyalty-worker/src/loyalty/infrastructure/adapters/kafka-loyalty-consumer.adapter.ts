@@ -5,6 +5,8 @@ import { Consumer, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import { ApplyPurchaseEventCommand } from '../../application/commands/apply-purchase-event.command';
 import { ApplyPurchaseEventHandler } from '../../application/commands/apply-purchase-event.handler';
+import { ApplyPurchaseInvalidationCommand } from '../../application/commands/apply-purchase-invalidation.command';
+import { ApplyPurchaseInvalidationHandler } from '../../application/commands/apply-purchase-invalidation.handler';
 
 @Injectable()
 export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestroy {
@@ -18,6 +20,8 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
     private readonly config: AppConfigService,
     @Inject(ApplyPurchaseEventHandler)
     private readonly handler: ApplyPurchaseEventHandler,
+    @Inject(ApplyPurchaseInvalidationHandler)
+    private readonly invalidationHandler: ApplyPurchaseInvalidationHandler,
   ) {
     this.logger = new StructuredLogger(KafkaLoyaltyConsumerAdapter.name, {
       serviceName: 'loyalty-worker',
@@ -82,6 +86,24 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
                 pointsEarned: result.pointsEarned,
                 totalPoints: result.totalPoints,
                 currentTier: result.currentTier,
+                isDuplicate: result.isDuplicate,
+              };
+            }
+            if (envelope.eventType === 'PurchaseInvalidated') {
+              const command = new ApplyPurchaseInvalidationCommand({
+                eventId: envelope.eventId,
+                customerId: envelope.payload.customerId,
+                purchaseId: envelope.payload.purchaseId,
+                customerSequence: envelope.customerSequence,
+                correlationId: envelope.correlationId,
+                reason: envelope.payload.reason,
+              });
+              const result = await this.invalidationHandler.execute(command);
+              return {
+                eventId: result.eventId,
+                customerId: result.customerId,
+                correctionRequired: result.correctionRequired,
+                lastCustomerSequence: result.lastCustomerSequence,
                 isDuplicate: result.isDuplicate,
               };
             }

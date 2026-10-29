@@ -152,6 +152,9 @@ pnpm demo:invalidation
 
 # Run automated bounded replay & fixed boundary verification (P5-02)
 pnpm demo:replay
+
+# Run automated two-pass stream correction (82 -> 40 points) verification (P5-03)
+pnpm demo:correction
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -195,7 +198,9 @@ pnpm demo:replay
 │   ├── verify-outbox-publisher.mjs   # Standalone ordered outbox publisher worker verification
 │   ├── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
 │   ├── verify-durable-analytics.mjs  # Durable analytics processing and consumer deduplication verification
-│   └── verify-fault-injection.mjs    # Fault injection integration suite (D4 consumer crash & D5 publisher crash)
+│   ├── verify-purchase-invalidation.mjs # Purchase invalidation event flow verification
+│   ├── verify-replay-boundary.mjs    # Bounded replay & fixed boundary verification
+│   └── verify-two-pass-correction.mjs # Two-pass correction calculation (82 -> 40 points) verification
 ├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
