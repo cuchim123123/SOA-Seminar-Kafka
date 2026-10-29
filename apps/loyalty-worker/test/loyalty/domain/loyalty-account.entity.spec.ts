@@ -60,6 +60,35 @@ describe('LoyaltyAccount Domain Entity', () => {
     );
   });
 
+  it('safely handles duplicate or past sequence in applyPurchase by marking correctionRequired', () => {
+    const account = LoyaltyAccount.create('U001');
+    account.applyPurchase(12_000, 1);
+    account.applyPurchase(20_000, 2);
+    expect(account.pointsBalance).toBe(52);
+    expect(account.lastCustomerSequence).toBe(2);
+    expect(account.correctionRequired).toBe(false);
+
+    // Past sequence (e.g. sequence 1 re-delivered)
+    const result = account.applyPurchase(12_000, 1);
+    expect(result.pointsEarned).toBe(0);
+    expect(account.pointsBalance).toBe(52); // Not double-counted
+    expect(account.lastCustomerSequence).toBe(2); // Sequence not rolled back
+    expect(account.correctionRequired).toBe(true);
+  });
+
+  it('safely handles duplicate or past sequence in applyInvalidation by marking correctionRequired', () => {
+    const account = LoyaltyAccount.create('U001');
+    account.applyPurchase(12_000, 1);
+    account.applyInvalidation(2);
+    expect(account.correctionRequired).toBe(true);
+    expect(account.lastCustomerSequence).toBe(2);
+
+    // Past sequence invalidation
+    account.applyInvalidation(1);
+    expect(account.lastCustomerSequence).toBe(2);
+    expect(account.correctionRequired).toBe(true);
+  });
+
   it('rejects empty customerId on initialization', () => {
     expect(() => LoyaltyAccount.create('')).toThrowError(/customerId must not be empty/);
     expect(() => LoyaltyAccount.create('   ')).toThrowError(/customerId must not be empty/);

@@ -237,14 +237,23 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
       const high = BigInt(to.high);
       const committedRaw = groupOffsetMap.get(to.partition);
 
-      const isUncommitted = committedRaw === undefined || committedRaw === '-1';
+      const hasNoCommittedOffset = committedRaw === undefined || committedRaw === '-1';
       let committedOffset: string | null = null;
       let lag: string | 'UNCOMMITTED';
+      let isUncommitted = false;
 
-      if (isUncommitted) {
+      if (hasNoCommittedOffset) {
         committedOffset = null;
-        lag = 'UNCOMMITTED';
-        hasUncommitted = true;
+        if (high > low) {
+          // Messages exist on the broker (high > low), but consumer group has never committed an offset
+          lag = 'UNCOMMITTED';
+          isUncommitted = true;
+          hasUncommitted = true;
+        } else {
+          // Partition is completely empty (high === low, e.g. newly scaled partitions 8 & 9)
+          lag = '0';
+          isUncommitted = false;
+        }
       } else {
         const committedBigInt = BigInt(committedRaw);
         committedOffset = committedRaw;

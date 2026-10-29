@@ -80,6 +80,10 @@ export class LoyaltyAccount {
 
   applyInvalidation(sequence?: number): void {
     if (sequence !== undefined) {
+      if (sequence <= this.props.lastCustomerSequence) {
+        this.props.correctionRequired = true;
+        return;
+      }
       const expectedSequence = this.props.lastCustomerSequence + 1;
       if (sequence !== expectedSequence) {
         throw new Error(
@@ -102,6 +106,17 @@ export class LoyaltyAccount {
    */
   applyPurchase(amountCents: number, sequence?: number): ApplyPurchaseResult {
     if (sequence !== undefined) {
+      if (sequence <= this.props.lastCustomerSequence) {
+        this.props.correctionRequired = true;
+        return {
+          pointsEarned: 0,
+          previousTier: this.props.tier,
+          newTier: this.props.tier,
+          totalSpendCents: this.props.totalEligibleSpendCents,
+          totalPoints: this.props.pointsBalance,
+          lastCustomerSequence: this.props.lastCustomerSequence,
+        };
+      }
       const expectedSequence = this.props.lastCustomerSequence + 1;
       if (sequence !== expectedSequence) {
         throw new Error(
