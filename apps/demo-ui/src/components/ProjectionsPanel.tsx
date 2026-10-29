@@ -138,9 +138,9 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
                 </div>
 
                 <div style={{ padding: '8px 10px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ color: 'var(--text-muted)' }}>Last Sequence</div>
+                  <div style={{ color: 'var(--text-muted)' }}>Status</div>
                   <div style={{ color: 'var(--color-cyan)', fontWeight: 600, marginTop: '2px' }}>
-                    Seq #{account.lastCustomerSequence}
+                    {account.lastCustomerSequence ? `Seq #${account.lastCustomerSequence}` : 'Active Account'}
                   </div>
                 </div>
               </div>

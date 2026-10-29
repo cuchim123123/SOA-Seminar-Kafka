@@ -32,7 +32,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
       onEventEmitted(res);
       setInvalidationPurchaseId(res.purchaseId);
       setStatusMessage(
-        `✓ Purchase accepted (202): Customer ${res.customerId} allocated Seq #${res.customerSequence} in Transactional Outbox and published to Kafka.`,
+        `✓ Purchase accepted (202): Customer ${res.customerId} event registered (Event: ${res.eventId.slice(0, 8)}...). Relaying to Kafka via Transactional Outbox.`,
       );
     } catch (err) {
       setStatusMessage(`✕ Error: ${err instanceof Error ? err.message : String(err)}`);

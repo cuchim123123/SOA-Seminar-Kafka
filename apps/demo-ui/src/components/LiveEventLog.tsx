@@ -4,7 +4,7 @@ export interface LogEntry {
   id: string;
   timestamp: string;
   customerId: string;
-  customerSequence: number;
+  customerSequence?: number;
   purchaseId: string;
   status: string;
 }
@@ -63,7 +63,9 @@ export const LiveEventLog: React.FC<LiveEventLogProps> = ({ entries, onClear }) 
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>{item.timestamp}</span>
-                <span className="badge-mono badge-violet">Seq #{item.customerSequence}</span>
+                {item.customerSequence != null && (
+                  <span className="badge-mono badge-violet">Seq #{item.customerSequence}</span>
+                )}
                 <span style={{ color: 'var(--color-cyan)', fontWeight: 600 }}>{item.customerId}</span>
                 <span style={{ color: 'var(--text-body)' }}>Purchase: {item.purchaseId.slice(0, 14)}...</span>
               </div>
