@@ -128,6 +128,9 @@ pnpm demo:concurrency
 
 # Run automated CQRS purchase command, Read DAO query, and transactional outbox verification (P4-02)
 pnpm demo:outbox
+
+# Run automated standalone ordered outbox publisher worker verification (P4-03)
+pnpm demo:publisher
 ```
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
@@ -142,8 +145,9 @@ pnpm demo:outbox
 ```text
 .
 ├── apps/
-│   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Outbox -> Kafka
+│   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Outbox
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
+│   ├── outbox-publisher/      # NestJS Outbox Publisher: single ordered daemon -> Kafka
 │   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
 │   └── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
 ├── packages/

@@ -249,7 +249,17 @@ async function main() {
   } finally {
     await pool.end();
     for (const child of spawned) {
-      child.kill();
+      if (child && child.pid) {
+        if (process.platform === 'win32') {
+          try {
+            spawn('taskkill', ['/pid', String(child.pid), '/f', '/t'], { stdio: 'ignore' });
+          } catch {
+            child.kill('SIGKILL');
+          }
+        } else {
+          child.kill('SIGKILL');
+        }
+      }
     }
     process.exit(process.exitCode ?? 0);
   }

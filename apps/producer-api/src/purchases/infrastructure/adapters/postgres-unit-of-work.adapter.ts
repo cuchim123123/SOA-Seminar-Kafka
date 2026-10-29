@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
+import { AppConfigService } from '../../../config/app-config.service';
 import { PrismaService } from '../../../database/prisma.service';
 import { UnitOfWorkContext, UnitOfWorkPort } from '../../application/ports/unit-of-work.port';
 import { OutboxRelayService } from '../services/outbox-relay.service';
@@ -19,6 +20,9 @@ export class PostgresUnitOfWorkAdapter implements UnitOfWorkPort {
     private readonly prisma: PrismaService,
     @Inject(OutboxRelayService)
     private readonly outboxRelay: OutboxRelayService,
+    @Optional()
+    @Inject(AppConfigService)
+    private readonly config?: AppConfigService,
   ) {}
 
   async execute<T>(work: (context: UnitOfWorkContext) => Promise<T>): Promise<T> {
@@ -39,12 +43,13 @@ export class PostgresUnitOfWorkAdapter implements UnitOfWorkPort {
       },
     );
 
-    // Post-commit hook: trigger asynchronous outbox relay to Kafka after DB commit
-    setImmediate(() => {
-      this.outboxRelay.processPending().catch((err: unknown) => {
-        this.logger.error(`Error in outbox relay post-commit hook: ${err}`);
+    if (this.config?.outboxRelayInProcess ?? true) {
+      setImmediate(() => {
+        this.outboxRelay.processPending().catch((err: unknown) => {
+          this.logger.error(`Error in outbox relay post-commit hook: ${err}`);
+        });
       });
-    });
+    }
 
     return result;
   }

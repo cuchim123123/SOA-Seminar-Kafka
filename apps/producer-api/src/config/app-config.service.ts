@@ -8,6 +8,7 @@ export interface IAppConfig {
   readonly kafkaClientId: string;
   readonly purchaseTopic: string;
   readonly databaseUrl: string;
+  readonly outboxRelayInProcess: boolean;
 }
 
 @Injectable()
@@ -38,5 +39,9 @@ export class AppConfigService implements IAppConfig {
 
   get databaseUrl(): string {
     return this.config.DATABASE_URL;
+  }
+
+  get outboxRelayInProcess(): boolean {
+    return this.config.OUTBOX_RELAY_IN_PROCESS;
   }
 }

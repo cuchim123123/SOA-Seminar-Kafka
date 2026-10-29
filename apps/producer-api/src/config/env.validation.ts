@@ -14,6 +14,10 @@ export const envSchema = z.object({
     .string()
     .min(1)
     .default('postgresql://localhost:5432/kafka_streaming_lab?schema=public'),
+  OUTBOX_RELAY_IN_PROCESS: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

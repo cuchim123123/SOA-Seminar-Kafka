@@ -12,12 +12,13 @@
     "format:check": "prettier --check \"**/*.{ts,mjs,json}\" --ignore-path .gitignore",
     "build": "pnpm -r --if-present run build",
     "start:producer": "pnpm --filter @lab/producer-api start",
+    "start:publisher": "pnpm --filter @lab/outbox-publisher start",
     "start:loyalty": "pnpm --filter @lab/loyalty-worker start",
     "start:analytics": "pnpm --filter @lab/analytics-worker start",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.spec.ts\"",
-    "test:integration": "vitest run integration",
+    "test:integration": "vitest run integration --fileParallelism=false",
     "test:watch": "vitest",
     "kafka:up": "docker compose up -d",
     "kafka:down": "docker compose down",
@@ -41,6 +42,8 @@
     "demo:concurrency:p4": "node scripts/verify-postgres-concurrency.mjs",
     "demo:outbox": "node scripts/verify-outbox-offline.mjs",
     "demo:outbox:p4": "node scripts/verify-outbox-offline.mjs",
+    "demo:publisher": "node scripts/verify-outbox-publisher.mjs",
+    "demo:publisher:p4": "node scripts/verify-outbox-publisher.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
