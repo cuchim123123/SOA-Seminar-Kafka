@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
+import { AppConfigService } from '../../../config/app-config.service';
 import {
   EVENT_PUBLISHER_PORT,
   EventPublisherPort,
@@ -22,6 +23,9 @@ export class OutboxRelayService {
     private readonly outboxRepository: OutboxRepositoryPort,
     @Inject(EVENT_PUBLISHER_PORT)
     private readonly eventPublisher: EventPublisherPort,
+    @Optional()
+    @Inject(AppConfigService)
+    private readonly config?: AppConfigService,
   ) {}
 
   /**
@@ -29,6 +33,9 @@ export class OutboxRelayService {
    * Ensures per-customer sequential publishing.
    */
   async processPending(): Promise<number> {
+    if (this.config && !this.config.outboxRelayInProcess) {
+      return 0;
+    }
     if (this.isProcessing) {
       this.hasPendingRequests = true;
       return 0;
@@ -86,6 +93,9 @@ export class OutboxRelayService {
         if (pendingRecords.length < 100 && !this.hasPendingRequests) {
           break;
         }
+
+        // Yield event loop between pagination iterations to allow incoming I/O
+        await new Promise((resolve) => setImmediate(resolve));
       }
     } finally {
       this.isProcessing = false;

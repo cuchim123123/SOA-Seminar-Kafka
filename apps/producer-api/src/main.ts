@@ -39,6 +39,7 @@ async function bootstrap(): Promise<void> {
   structuredLogger.info('Producer API started successfully', {
     port: config.port,
     environment: config.nodeEnv,
+    outboxRelayInProcess: config.outboxRelayInProcess,
   });
 }
 

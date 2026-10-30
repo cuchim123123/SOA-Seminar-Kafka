@@ -98,12 +98,14 @@ async function main() {
     const { stdout: topicDescribe } = await execAsync(
       `docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic ${TOPIC}`,
     );
-    if (!topicDescribe.includes('PartitionCount: 6')) {
+    const match = topicDescribe.match(/PartitionCount:\s*(\d+)/);
+    const partitionCount = match ? Number(match[1]) : 0;
+    if (partitionCount < 6) {
       throw new Error(
-        `Topic '${TOPIC}' does not have 6 partitions. Run 'pnpm demo:reset --confirm' first! Output: ${topicDescribe.trim()}`,
+        `Topic '${TOPIC}' does not have at least 6 partitions. Run 'pnpm demo:reset --confirm' first! Output: ${topicDescribe.trim()}`,
       );
     }
-    console.log(`[Workload P2] Topic '${TOPIC}' verified with 6 partitions.`);
+    console.log(`[Workload P2] Topic '${TOPIC}' verified with ${partitionCount} partitions.`);
 
     // 2. Ensure Producer API and Loyalty Worker are running
     const producerChild = await ensureServiceRunning(
@@ -132,10 +134,11 @@ async function main() {
       '\n[Workload P2] Generating simultaneous multi-customer workload across 21 customers...',
     );
 
-    const targetCustomer = 'U001';
+    const testRunId = Date.now().toString().slice(-5);
+    const targetCustomer = `U001_${testRunId}`;
     const otherCustomers = Array.from(
       { length: 20 },
-      (_, i) => `U${String(i + 2).padStart(3, '0')}`,
+      (_, i) => `U${String(i + 2).padStart(3, '0')}_${testRunId}`,
     );
 
     const u001Events = [];
@@ -274,7 +277,7 @@ async function main() {
     // 5. Partition Distribution across all 6 partitions
     console.log('\n--- VERIFICATION 2: Key-Based Partition Distribution ---');
     const partitionMap = new Map();
-    for (let p = 0; p < 6; p++) {
+    for (let p = 0; p < partitionCount; p++) {
       partitionMap.set(p, []);
     }
 
@@ -285,7 +288,7 @@ async function main() {
     }
 
     const distributionTable = [];
-    for (let p = 0; p < 6; p++) {
+    for (let p = 0; p < partitionCount; p++) {
       const customers = partitionMap.get(p) ?? [];
       const uniqueCustomers = Array.from(new Set(customers));
       distributionTable.push({

@@ -13,6 +13,7 @@ if (typeof process.loadEnvFile === 'function') {
 
 const LOYALTY_PORT = process.env.LOYALTY_PORT || '3001';
 const DATABASE_URL =
+  process.env.LOYALTY_DATABASE_URL ||
   process.env.DATABASE_URL ||
   (process.env.POSTGRES_PASSWORD
     ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`

@@ -13,7 +13,14 @@ if (typeof process.loadEnvFile === 'function') {
 
 const LOYALTY_PORT = process.env.LOYALTY_WORKER_PORT || process.env.LOYALTY_PORT || '3001';
 const PUBLISHER_PORT = process.env.PUBLISHER_PORT || '3003';
-const DATABASE_URL =
+const PURCHASES_DATABASE_URL =
+  process.env.PURCHASES_DATABASE_URL ||
+  process.env.DATABASE_URL ||
+  (process.env.POSTGRES_PASSWORD
+    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
+    : undefined);
+const LOYALTY_DATABASE_URL =
+  process.env.LOYALTY_DATABASE_URL ||
   process.env.DATABASE_URL ||
   (process.env.POSTGRES_PASSWORD
     ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
@@ -90,14 +97,16 @@ async function main() {
   console.log('  PHASE 4 TICKET P4-06: FAULT INJECTION INTEGRATION SUITE');
   console.log('='.repeat(75));
 
-  if (!DATABASE_URL) {
-    console.error('ERROR: DATABASE_URL must be configured.');
+  if (!PURCHASES_DATABASE_URL || !LOYALTY_DATABASE_URL) {
+    console.error('ERROR: PURCHASES_DATABASE_URL and LOYALTY_DATABASE_URL must be configured.');
     process.exit(1);
   }
 
-  const pool = new pg.Pool({ connectionString: DATABASE_URL });
-  const client = await pool.connect();
-  console.log("[P4-06 Proof] Connected to PostgreSQL DB: 'kafka_streaming_lab'");
+  const purchasesPool = new pg.Pool({ connectionString: PURCHASES_DATABASE_URL });
+  const purchasesClient = await purchasesPool.connect();
+  const loyaltyPool = new pg.Pool({ connectionString: LOYALTY_DATABASE_URL });
+  const loyaltyClient = await loyaltyPool.connect();
+  console.log('[P4-06 Proof] Connected to PostgreSQL DBs (purchases_db and loyalty_db)');
 
   const kafka = new Kafka({
     clientId: `verify-p4-06-${Date.now()}`,
@@ -131,7 +140,7 @@ async function main() {
       env: {
         ...process.env,
         PORT: LOYALTY_PORT,
-        DATABASE_URL,
+        DATABASE_URL: LOYALTY_DATABASE_URL,
         FAULT_INJECTION_POINT: 'AFTER_DB_COMMIT_BEFORE_OFFSET_COMMIT',
         FAULT_TRIGGER_EVENT_ID: evtD4,
       },
@@ -198,10 +207,10 @@ async function main() {
 
     // Verify DB state after crash: DB commit succeeded!
     const dbAccountD4AfterCrash = (
-      await client.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD4])
+      await loyaltyClient.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD4])
     ).rows[0];
     const dbProcessedD4AfterCrash = (
-      await client.query(
+      await loyaltyClient.query(
         'SELECT * FROM processed_events WHERE consumer_name = $1 AND event_id = $2',
         ['loyalty-v1', evtD4],
       )
@@ -234,7 +243,7 @@ async function main() {
       ['--env-file=.env', 'apps/loyalty-worker/dist/main.js'],
       {
         PORT: LOYALTY_PORT,
-        DATABASE_URL,
+        DATABASE_URL: LOYALTY_DATABASE_URL,
         FAULT_INJECTION_POINT: 'NONE',
       },
     );
@@ -245,7 +254,7 @@ async function main() {
 
     // Verify DB state remains unchanged (Idempotency confirmed: duplicate skipped!)
     const dbAccountD4AfterResume = (
-      await client.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD4])
+      await loyaltyClient.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD4])
     ).rows[0];
 
     console.log(
@@ -289,20 +298,20 @@ async function main() {
     console.log(
       `[P4-06 Proof] Step 2.1: Inserting pending outbox record into PostgreSQL for ${custD5}...`,
     );
-    await client.query(
+    await purchasesClient.query(
       `INSERT INTO purchase_customers (customer_id, next_event_sequence)
        VALUES ($1, 2)
        ON CONFLICT (customer_id) DO NOTHING`,
       [custD5],
     );
 
-    await client.query(
+    await purchasesClient.query(
       `INSERT INTO purchases (purchase_id, customer_id, completion_sequence, amount_cents, status, created_at)
        VALUES ($1, $2, $3, $4, 'COMPLETED', NOW())`,
       [purD5, custD5, 1, 20_000],
     );
 
-    await client.query(
+    await purchasesClient.query(
       `INSERT INTO outbox_events (event_id, aggregate_id, customer_sequence, event_type, payload_json, status, attempt_count, created_at)
        VALUES ($1, $2, 1, 'PurchaseCompleted', $3, 'PENDING', 0, NOW())`,
       [evtD5, custD5, JSON.stringify(envelopeD5)],
@@ -322,7 +331,7 @@ async function main() {
         env: {
           ...process.env,
           PORT: PUBLISHER_PORT,
-          DATABASE_URL,
+          DATABASE_URL: PURCHASES_DATABASE_URL,
           FAULT_INJECTION_POINT: 'AFTER_KAFKA_ACK_BEFORE_OUTBOX_MARK',
           FAULT_TRIGGER_EVENT_ID: evtD5,
         },
@@ -357,7 +366,7 @@ async function main() {
 
     // Verify outbox status is STILL PENDING in DB
     const outboxAfterCrash = (
-      await client.query('SELECT * FROM outbox_events WHERE event_id = $1', [evtD5])
+      await purchasesClient.query('SELECT * FROM outbox_events WHERE event_id = $1', [evtD5])
     ).rows[0];
 
     console.log(
@@ -380,7 +389,7 @@ async function main() {
       ['--env-file=.env', 'apps/outbox-publisher/dist/main.js'],
       {
         PORT: PUBLISHER_PORT,
-        DATABASE_URL,
+        DATABASE_URL: PURCHASES_DATABASE_URL,
         FAULT_INJECTION_POINT: 'NONE',
       },
     );
@@ -389,9 +398,10 @@ async function main() {
     let outboxPublished = false;
     const startPollPub = Date.now();
     while (Date.now() - startPollPub < 20000) {
-      const res = await client.query('SELECT status FROM outbox_events WHERE event_id = $1', [
-        evtD5,
-      ]);
+      const res = await purchasesClient.query(
+        'SELECT status FROM outbox_events WHERE event_id = $1',
+        [evtD5],
+      );
       if (res.rows.length > 0 && res.rows[0].status === 'PUBLISHED') {
         outboxPublished = true;
         break;
@@ -416,7 +426,7 @@ async function main() {
       ['--env-file=.env', 'apps/loyalty-worker/dist/main.js'],
       {
         PORT: LOYALTY_PORT,
-        DATABASE_URL,
+        DATABASE_URL: LOYALTY_DATABASE_URL,
         FAULT_INJECTION_POINT: 'NONE',
       },
     );
@@ -425,9 +435,10 @@ async function main() {
     let loyaltyDone = false;
     const startPollLoyalty = Date.now();
     while (Date.now() - startPollLoyalty < 25000) {
-      const res = await client.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [
-        custD5,
-      ]);
+      const res = await loyaltyClient.query(
+        'SELECT * FROM loyalty_accounts WHERE customer_id = $1',
+        [custD5],
+      );
       if (res.rows.length > 0) {
         loyaltyDone = true;
         break;
@@ -443,7 +454,7 @@ async function main() {
     await sleep(3000);
 
     const accountD5 = (
-      await client.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD5])
+      await loyaltyClient.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD5])
     ).rows[0];
 
     console.log(
@@ -490,8 +501,10 @@ async function main() {
     if (activeChild) killProcess(activeChild);
     await producer.disconnect();
     await admin.disconnect();
-    client.release();
-    await pool.end();
+    purchasesClient.release();
+    await purchasesPool.end();
+    loyaltyClient.release();
+    await loyaltyPool.end();
   }
 }
 

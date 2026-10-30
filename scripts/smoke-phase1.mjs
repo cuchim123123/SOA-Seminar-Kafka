@@ -1,5 +1,6 @@
 import { spawn, exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { Kafka } from 'kafkajs';
 
 const execAsync = promisify(exec);
 
@@ -138,21 +139,56 @@ async function main() {
       throw new Error(`Expected requestStatus 'ACCEPTED', got '${responseBody.requestStatus}'`);
     }
 
-    // 6. Inspect Kafka record using Kafka CLI directly on the broker
+    // 6. Inspect Kafka record using Kafka consumer directly on the broker
     console.log(
       `[Smoke P1] Verifying record on Kafka broker for eventId '${responseBody.eventId}'...`,
     );
-    const { stdout: recordOutput } = await execAsync(
-      `docker compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic ${TOPIC} --from-beginning --max-messages 50 --property print.key=true --property key.separator=" | "`,
-    );
+    const kafka = new Kafka({
+      clientId: `smoke-p1-${Date.now()}`,
+      brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+    });
+    const consumer = kafka.consumer({ groupId: `smoke-p1-verify-${Date.now()}` });
+    await consumer.connect();
+    await consumer.subscribe({ topic: TOPIC, fromBeginning: true });
 
-    if (!recordOutput.includes(testCustomerId) || !recordOutput.includes(responseBody.eventId)) {
+    let verifiedEvent = null;
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        resolve(null);
+      }, 5000);
+
+      consumer
+        .run({
+          eachMessage: async ({ message, partition }) => {
+            if (!message.value) return;
+            try {
+              const env = JSON.parse(message.value.toString('utf8'));
+              if (env.eventId === responseBody.eventId) {
+                verifiedEvent = {
+                  partition,
+                  offset: message.offset,
+                  key: message.key ? message.key.toString('utf8') : '',
+                };
+                clearTimeout(timeout);
+                resolve(verifiedEvent);
+              }
+            } catch {
+              // ignore
+            }
+          },
+        })
+        .catch(reject);
+    });
+
+    await consumer.disconnect().catch(() => {});
+
+    if (!verifiedEvent || verifiedEvent.key !== testCustomerId) {
       throw new Error(
         `Kafka record key does not contain expected customerId '${testCustomerId}' or eventId '${responseBody.eventId}'`,
       );
     }
     console.log(
-      `[Smoke P1] Verified event '${responseBody.eventId}' reached Kafka broker topic '${TOPIC}' with key '${testCustomerId}'.`,
+      `[Smoke P1] Verified event '${responseBody.eventId}' reached Kafka broker topic '${TOPIC}' partition ${verifiedEvent.partition} with key '${verifiedEvent.key}'.`,
     );
 
     // 7. Inspect Loyalty Consumer Group status on broker

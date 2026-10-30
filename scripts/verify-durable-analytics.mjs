@@ -13,6 +13,7 @@ if (typeof process.loadEnvFile === 'function') {
 
 const ANALYTICS_PORT = process.env.ANALYTICS_WORKER_PORT || process.env.ANALYTICS_PORT || '3002';
 const DATABASE_URL =
+  process.env.ANALYTICS_DATABASE_URL ||
   process.env.DATABASE_URL ||
   (process.env.POSTGRES_PASSWORD
     ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`

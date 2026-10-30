@@ -17,7 +17,7 @@ export const envSchema = z.object({
   PURCHASES_DATABASE_URL: z.string().optional(),
   OUTBOX_RELAY_IN_PROCESS: z
     .string()
-    .default('true')
+    .default('false')
     .transform((val) => val === 'true'),
 });
 

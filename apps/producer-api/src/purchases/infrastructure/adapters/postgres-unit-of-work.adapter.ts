@@ -43,7 +43,8 @@ export class PostgresUnitOfWorkAdapter implements UnitOfWorkPort {
       },
     );
 
-    if (this.config?.outboxRelayInProcess ?? true) {
+    const relayEnabled = this.config ? this.config.outboxRelayInProcess : true;
+    if (relayEnabled) {
       setImmediate(() => {
         this.outboxRelay.processPending().catch((err: unknown) => {
           this.logger.error(`Error in outbox relay post-commit hook: ${err}`);

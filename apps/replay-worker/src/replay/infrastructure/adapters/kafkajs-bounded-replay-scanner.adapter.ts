@@ -78,15 +78,43 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
             offsets: options.highWatermarks,
           });
 
-          await consumer.commitOffsets(
-            targetPartitions.map((partition) => ({
-              topic: options.topic,
-              partition,
-              offset: options.highWatermarks[partition],
-            })),
-          );
+          try {
+            await consumer.commitOffsets(
+              targetPartitions.map((partition) => ({
+                topic: options.topic,
+                partition,
+                offset: options.highWatermarks[partition],
+              })),
+            );
+          } catch (commitErr) {
+            this.logger.warn(
+              'consumer.commitOffsets encountered an error, falling back to admin.setOffsets',
+              {
+                error: commitErr instanceof Error ? commitErr.message : String(commitErr),
+              },
+            );
+          }
 
-          await consumer.disconnect();
+          await consumer.disconnect().catch(() => {});
+
+          const admin = this.kafka.admin();
+          await admin.connect();
+          try {
+            await admin.setOffsets({
+              groupId: options.groupId,
+              topic: options.topic,
+              partitions: targetPartitions.map((partition) => ({
+                partition,
+                offset: options.highWatermarks[partition],
+              })),
+            });
+          } catch (adminErr) {
+            this.logger.warn('admin.setOffsets fallback note', {
+              error: adminErr instanceof Error ? adminErr.message : String(adminErr),
+            });
+          } finally {
+            await admin.disconnect().catch(() => {});
+          }
 
           this.logger.info('Bounded replay scan finished successfully', {
             groupId: options.groupId,
@@ -128,13 +156,27 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
             if (offset < hw) {
               scannedCount += 1;
               if (options.onRecord) {
+                let parsedValue: unknown = null;
+                if (message.value) {
+                  try {
+                    parsedValue = JSON.parse(message.value.toString());
+                  } catch (parseError) {
+                    this.logger.warn('Skipping malformed message during replay scan', {
+                      topic,
+                      partition,
+                      offset: message.offset,
+                      error: parseError instanceof Error ? parseError.message : String(parseError),
+                    });
+                  }
+                }
+
                 await options.onRecord({
                   topic,
                   partition,
                   offset: message.offset,
                   key: message.key ? message.key.toString() : null,
                   timestamp: message.timestamp,
-                  value: message.value ? JSON.parse(message.value.toString()) : null,
+                  value: parsedValue,
                 });
               }
 
