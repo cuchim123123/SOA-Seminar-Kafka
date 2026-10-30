@@ -36,11 +36,14 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
 
   // Stress burst state
   const [burstCount, setBurstCount] = useState<number>(25);
+  const [burstCountInput, setBurstCountInput] = useState<string>('25');
   const [partitionMode, setPartitionMode] = useState<'balanced' | 'hot'>('balanced');
   const [hotCustomerId, setHotCustomerId] = useState<string>('cust_hot_spot');
   const [bursting, setBursting] = useState<boolean>(false);
   const [burstResult, setBurstResult] = useState<PurchaseBatchResponse | null>(null);
   const [burstError, setBurstError] = useState<string | null>(null);
+  const [injectingPoison, setInjectingPoison] = useState<boolean>(false);
+  const [poisonResult, setPoisonResult] = useState<string | null>(null);
 
   const isLoyaltyPaused = loyaltyStatus?.isPaused ?? false;
   const isAnalyticsPaused = analyticsStatus?.isPaused ?? false;
@@ -114,12 +117,15 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
 
   // Launch Stress Test Workload Burst
   const handleLaunchBurst = async () => {
+    const effectiveCount = Math.max(1, Math.min(500, parseInt(burstCountInput, 10) || burstCount || 25));
+    setBurstCount(effectiveCount);
+    setBurstCountInput(String(effectiveCount));
     setBursting(true);
     setBurstResult(null);
     setBurstError(null);
     try {
       const result = await api.createPurchaseBatch({
-        count: burstCount,
+        count: effectiveCount,
         customerId: partitionMode === 'hot' ? hotCustomerId.trim() || 'cust_hot_spot' : undefined,
       });
       setBurstResult(result);
@@ -134,6 +140,24 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
       setBurstError(err instanceof Error ? err.message : String(err));
     } finally {
       setBursting(false);
+    }
+  };
+
+  // Inject Poison Pill (Malformed raw non-JSON record)
+  const handleInjectPoisonPill = async () => {
+    setInjectingPoison(true);
+    setPoisonResult(null);
+    try {
+      const key = partitionMode === 'hot' ? hotCustomerId.trim() || 'poison_hot_key' : `poison_pill_${Date.now()}`;
+      const res = await api.injectPoisonPill({ key });
+      setPoisonResult(`☠️ Injected poison pill into ${res.topic} partition ${res.partition} at offset ${res.offset} (key: "${res.key}"). Consumer isolated the invalid record and committed offset N+1 safely.`);
+      onStatusChanged();
+      setTimeout(onStatusChanged, 400);
+      setTimeout(onStatusChanged, 1200);
+    } catch (err) {
+      alert(`Poison pill injection failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setInjectingPoison(false);
     }
   };
 
@@ -194,7 +218,10 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
                 <button
                   key={preset}
                   type="button"
-                  onClick={() => setBurstCount(preset)}
+                  onClick={() => {
+                    setBurstCount(preset);
+                    setBurstCountInput(String(preset));
+                  }}
                   disabled={bursting}
                   className={`btn-cyber ${burstCount === preset ? 'btn-cyan' : 'btn-ghost'}`}
                   style={{ padding: '4px 10px', fontSize: '0.775rem' }}
@@ -204,12 +231,26 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
               ))}
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '4px' }}>
                 <input
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={burstCount}
-                  onChange={(e) => setBurstCount(Math.max(1, Math.min(500, parseInt(e.target.value, 10) || 1)))}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={burstCountInput}
+                  onChange={(e) => {
+                    const clean = e.target.value.replace(/[^0-9]/g, '');
+                    setBurstCountInput(clean);
+                    const parsed = parseInt(clean, 10);
+                    if (!isNaN(parsed) && parsed > 0) {
+                      setBurstCount(Math.min(500, parsed));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = parseInt(burstCountInput, 10);
+                    const val = isNaN(parsed) || parsed < 1 ? 1 : Math.min(500, parsed);
+                    setBurstCount(val);
+                    setBurstCountInput(String(val));
+                  }}
                   disabled={bursting}
+                  placeholder="Count"
                   style={{
                     width: '65px',
                     padding: '4px 8px',
@@ -219,7 +260,7 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
                     border: '1px solid var(--border-subtle)',
                   }}
                 />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>events</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>events (max 500)</span>
               </div>
             </div>
           </div>
@@ -275,31 +316,71 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
                   onChange={() => setPartitionMode('hot')}
                   disabled={bursting}
                 />
-                🔥 Hot Single Partition
+                🔥 Custom Key (Hot Partition)
               </label>
 
               {partitionMode === 'hot' && (
-                <input
-                  type="text"
-                  placeholder="e.g. cust_hot_spot"
-                  value={hotCustomerId}
-                  onChange={(e) => setHotCustomerId(e.target.value)}
-                  disabled={bursting}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '0.775rem',
-                    fontFamily: 'var(--font-mono)',
-                    width: '130px',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-subtle)',
-                  }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <input
+                    type="text"
+                    placeholder="Arbitrary Key..."
+                    value={hotCustomerId}
+                    onChange={(e) => setHotCustomerId(e.target.value)}
+                    disabled={bursting}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.775rem',
+                      fontFamily: 'var(--font-mono)',
+                      width: '135px',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid #f97316',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '2px' }}>
+                    {['cust_hot_spot', 'VIP_HOT', 'U001', 'cust_alpha'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setHotCustomerId(preset)}
+                        disabled={bursting}
+                        style={{
+                          fontSize: '0.7rem',
+                          padding: '2px 5px',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--border-subtle)',
+                          background: hotCustomerId === preset ? '#fed7aa' : 'var(--bg-subtle)',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Trigger Button */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+          {/* Action Trigger Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-end', gap: '8px' }}>
+            <button
+              onClick={handleInjectPoisonPill}
+              disabled={injectingPoison || bursting}
+              className="btn-cyber btn-rose"
+              title="Inject malformed non-JSON bytes into Kafka to prove consumer isolation and offset survival"
+              style={{
+                padding: '8px 14px',
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                border: '1px solid #f43f5e',
+                color: '#e11d48',
+                background: '#fff1f2',
+              }}
+            >
+              {injectingPoison ? '☠️ Injecting...' : '☠️ Inject Poison Pill'}
+            </button>
+
             <button
               onClick={handleLaunchBurst}
               disabled={bursting}
@@ -315,6 +396,34 @@ export const ConsumerLagPanel: React.FC<ConsumerLagPanelProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Poison Pill Banner */}
+        {poisonResult && (
+          <div
+            style={{
+              marginTop: '12px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: '#fff1f2',
+              border: '1px solid #fecdd3',
+              fontSize: '0.825rem',
+              color: '#9f1239',
+              fontFamily: 'var(--font-mono)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>{poisonResult}</span>
+            <button
+              type="button"
+              onClick={() => setPoisonResult(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9f1239', fontWeight: 700 }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Burst Result Notification */}
         {burstResult && (

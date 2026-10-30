@@ -26,13 +26,20 @@ describe('OpsController', () => {
       },
       scaleTopicPartitions: async () => mockResult,
       peekPartitionMessages: async () => [],
+      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
     };
 
     const topicHandler = new InspectTopicHandler(mockInspector);
     const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
     const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
     const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(topicHandler, lagHandler, peekHandler, scaleHandler);
+    const controller = new OpsController(
+      topicHandler,
+      lagHandler,
+      peekHandler,
+      scaleHandler,
+      mockInspector,
+    );
 
     const result = await controller.inspectTopic('purchase.events');
     expect(result).toEqual(mockResult);
@@ -65,13 +72,20 @@ describe('OpsController', () => {
         throw new Error('Not implemented');
       },
       peekPartitionMessages: async () => [],
+      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
     };
 
     const topicHandler = new InspectTopicHandler(mockInspector);
     const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
     const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
     const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(topicHandler, lagHandler, peekHandler, scaleHandler);
+    const controller = new OpsController(
+      topicHandler,
+      lagHandler,
+      peekHandler,
+      scaleHandler,
+      mockInspector,
+    );
 
     const result = await controller.getConsumerGroupLag('analytics-v1', 'purchase.events');
     expect(result).toEqual(mockLagResult);
@@ -96,13 +110,20 @@ describe('OpsController', () => {
         return mockScaledResult;
       },
       peekPartitionMessages: async () => [],
+      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
     };
 
     const topicHandler = new InspectTopicHandler(mockInspector);
     const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
     const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
     const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(topicHandler, lagHandler, peekHandler, scaleHandler);
+    const controller = new OpsController(
+      topicHandler,
+      lagHandler,
+      peekHandler,
+      scaleHandler,
+      mockInspector,
+    );
 
     const result = await controller.scaleTopicPartitions('purchase.events', 8);
     expect(result.partitionCount).toBe(8);
@@ -136,16 +157,64 @@ describe('OpsController', () => {
         expect(limit).toBe(5);
         return mockMessages;
       },
+      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
     };
 
     const topicHandler = new InspectTopicHandler(mockInspector);
     const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
     const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
     const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(topicHandler, lagHandler, peekHandler, scaleHandler);
+    const controller = new OpsController(
+      topicHandler,
+      lagHandler,
+      peekHandler,
+      scaleHandler,
+      mockInspector,
+    );
 
     const result = await controller.peekPartitionMessages('purchase.events', 0, '5');
     expect(result).toEqual(mockMessages);
     expect(result[0].offset).toBe('42');
+  });
+
+  it('injects poison pill and publishes raw messages', async () => {
+    const mockInspector: KafkaInspectorPort = {
+      inspectTopic: async () => {
+        throw new Error('Not implemented');
+      },
+      inspectConsumerGroupLag: async () => {
+        throw new Error('Not implemented');
+      },
+      scaleTopicPartitions: async () => {
+        throw new Error('Not implemented');
+      },
+      peekPartitionMessages: async () => [],
+      publishRawMessage: async (t, _k) => ({
+        topic: t,
+        partition: 2,
+        offset: '99',
+      }),
+    };
+
+    const topicHandler = new InspectTopicHandler(mockInspector);
+    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
+    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
+    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
+    const controller = new OpsController(
+      topicHandler,
+      lagHandler,
+      peekHandler,
+      scaleHandler,
+      mockInspector,
+    );
+
+    const poisonRes = await controller.injectPoisonPill({ key: 'poison_custom' });
+    expect(poisonRes.status).toBe('POISON_PILL_INJECTED');
+    expect(poisonRes.partition).toBe(2);
+    expect(poisonRes.key).toBe('poison_custom');
+
+    const rawRes = await controller.publishRaw({ key: 'my_key', payload: 'test' });
+    expect(rawRes.status).toBe('PUBLISHED_RAW');
+    expect(rawRes.key).toBe('my_key');
   });
 });

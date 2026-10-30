@@ -36,6 +36,7 @@ describe('InspectTopicHandler', () => {
         throw new Error('Not implemented');
       },
       peekPartitionMessages: async () => [],
+      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '0' }),
     };
 
     const handler = new InspectTopicHandler(mockInspector);

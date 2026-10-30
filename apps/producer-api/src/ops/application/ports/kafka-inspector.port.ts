@@ -51,4 +51,9 @@ export interface KafkaInspectorPort {
     partition: number,
     limit?: number,
   ): Promise<BrokerMessageRecord[]>;
+  publishRawMessage(
+    topic: string,
+    key: string,
+    payload: string,
+  ): Promise<{ topic: string; partition: number; offset: string }>;
 }

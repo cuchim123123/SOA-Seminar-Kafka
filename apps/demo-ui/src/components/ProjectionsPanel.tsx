@@ -5,11 +5,13 @@ import type { LoyaltyAccountDto, SalesSummaryDto } from '../api/client';
 interface ProjectionsPanelProps {
   summary: SalesSummaryDto | null;
   lastUpdatedEventTime?: number;
+  onRefreshSummary?: () => void;
 }
 
 export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
   summary,
   lastUpdatedEventTime,
+  onRefreshSummary,
 }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('U001');
   const [account, setAccount] = useState<LoyaltyAccountDto | null>(null);
@@ -206,7 +208,26 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
               <span className="badge-mono badge-cyan">analytics_db</span>
               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Sales Analytics Summary</span>
             </div>
-            <span className="badge-mono badge-emerald">Live Projection</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => onRefreshSummary?.()}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  background: '#ffffff',
+                  color: 'var(--text-body)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+                title="Force refresh sales summary from analytics_db"
+              >
+                ↺ Refresh
+              </button>
+              <span className="badge-mono badge-emerald">Live Projection</span>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -240,6 +261,10 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
                   {summary?.lastUpdated ? new Date(summary.lastUpdated).toLocaleTimeString() : 'N/A'}
                 </div>
               </div>
+            </div>
+
+            <div style={{ marginTop: '4px', padding: '8px 12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', fontSize: '0.725rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+              ℹ <strong>Analytics Mechanics:</strong> Reflects gross platform revenue from <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-cyan)' }}>PurchaseCompleted</code> events. Invalidation compensation events trigger Loyalty points clawback only; gross analytics remains intact.
             </div>
           </div>
         </div>

@@ -75,6 +75,8 @@ export interface PurchaseCreatedResponse {
   customerSequence?: number;
   eventId: string;
   correlationId?: string;
+  idempotencyKey?: string;
+  amountCents?: number;
 }
 
 export interface PurchaseInvalidatedResponse {
@@ -188,15 +190,17 @@ export const api = {
   createPurchase: async (
     customerId: string,
     amountCents: number,
+    idempotencyKey?: string,
   ): Promise<PurchaseCreatedResponse> => {
     const raw = await request<{
       purchaseId: string;
       requestStatus: string;
       eventId: string;
       correlationId: string;
+      idempotencyKey?: string;
     }>('/api/producer/api/v1/purchases', {
       method: 'POST',
-      body: JSON.stringify({ customerId, amountCents }),
+      body: JSON.stringify({ customerId, amountCents, idempotencyKey }),
     });
 
     return {
@@ -205,7 +209,42 @@ export const api = {
       status: raw.requestStatus,
       eventId: raw.eventId,
       correlationId: raw.correlationId,
+      idempotencyKey: idempotencyKey || raw.idempotencyKey,
+      amountCents,
     };
+  },
+
+  injectPoisonPill: async (params?: {
+    topic?: string;
+    key?: string;
+  }): Promise<{
+    status: string;
+    topic: string;
+    partition: number;
+    offset: string;
+    key: string;
+  }> => {
+    return request('/api/producer/api/v1/ops/kafka/inject-poison', {
+      method: 'POST',
+      body: JSON.stringify(params || {}),
+    });
+  },
+
+  publishRawMessage: async (params: {
+    topic?: string;
+    key?: string;
+    payload: string;
+  }): Promise<{
+    status: string;
+    topic: string;
+    partition: number;
+    offset: string;
+    key: string;
+  }> => {
+    return request('/api/producer/api/v1/ops/kafka/publish-raw', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 
   createPurchaseBatch: async (params: {

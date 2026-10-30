@@ -1,6 +1,6 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
-import { Admin, Consumer, Kafka } from 'kafkajs';
+import { Admin, Consumer, Kafka, Producer } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
   BrokerMessageRecord,
@@ -16,6 +16,7 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
   private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly admin: Admin;
+  private readonly producer: Producer;
 
   constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {
     this.logger = new StructuredLogger(KafkaJsInspectorAdapter.name, {
@@ -27,18 +28,19 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
       brokers: this.config.kafkaBrokers,
     });
     this.admin = this.kafka.admin();
+    this.producer = this.kafka.producer();
   }
 
   async onModuleInit(): Promise<void> {
-    this.logger.info('Connecting KafkaJS admin client for ops inspection...');
-    await this.admin.connect();
-    this.logger.info('KafkaJS admin client connected');
+    this.logger.info('Connecting KafkaJS admin and producer client for ops inspection...');
+    await Promise.all([this.admin.connect(), this.producer.connect()]);
+    this.logger.info('KafkaJS admin and producer client connected');
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.info('Disconnecting KafkaJS admin client...');
-    await this.admin.disconnect();
-    this.logger.info('KafkaJS admin client disconnected');
+    this.logger.info('Disconnecting KafkaJS admin and producer client...');
+    await Promise.all([this.admin.disconnect(), this.producer.disconnect()]);
+    this.logger.info('KafkaJS admin and producer client disconnected');
   }
 
   async inspectTopic(topic: string): Promise<TopicInspectionResult> {
@@ -280,6 +282,23 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
       topic,
       totalLag,
       partitions,
+    };
+  }
+
+  async publishRawMessage(
+    topic: string,
+    key: string,
+    payload: string,
+  ): Promise<{ topic: string; partition: number; offset: string }> {
+    const records = await this.producer.send({
+      topic,
+      messages: [{ key, value: payload }],
+    });
+    const first = records[0];
+    return {
+      topic,
+      partition: first.partition,
+      offset: first.baseOffset ?? '0',
     };
   }
 }

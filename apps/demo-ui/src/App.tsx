@@ -181,6 +181,7 @@ export const App: React.FC = () => {
           <ProjectionsPanel
             summary={salesSummary}
             lastUpdatedEventTime={lastEventTime}
+            onRefreshSummary={fetchTelemetry}
           />
         )}
 

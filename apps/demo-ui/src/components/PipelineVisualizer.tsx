@@ -13,33 +13,107 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
 }) => {
   const [customerId, setCustomerId] = useState<string>('U001');
   const [amountDollars, setAmountDollars] = useState<number>(120);
+  const [lastIdempotencyKey, setLastIdempotencyKey] = useState<string | null>(null);
+  const [lastAmountDollars, setLastAmountDollars] = useState<number>(120);
+  const [lastEmittedCustomerId, setLastEmittedCustomerId] = useState<string>('U001');
   const [invalidationPurchaseId, setInvalidationPurchaseId] = useState<string>('');
   const [invalidationReason, setInvalidationReason] = useState<string>('DEMO_INVALIDATION');
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number | null>(null);
 
+  // Chaos & Mechanics Studio state
+  const [showChaosStudio, setShowChaosStudio] = useState<boolean>(false);
+  const [poisonKey, setPoisonKey] = useState<string>('corrupt_key_demo');
+  const [injectingPoison, setInjectingPoison] = useState<boolean>(false);
+  const [rawKey, setRawKey] = useState<string>('arbitrary_key_demo');
+  const [rawPayload, setRawPayload] = useState<string>('{"experiment": "arbitrary_schema", "demo": true}');
+  const [publishingRaw, setPublishingRaw] = useState<boolean>(false);
+
   const handleCreatePurchase = async () => {
     setLoading(true);
     setStatusMessage(null);
     setActiveStep(1); // Client -> API
+
+    const targetCustomer = customerId.trim() || 'U001';
+    const amountCents = Math.round(amountDollars * 100);
+    const newIdempotencyKey = `idem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
     try {
       setTimeout(() => setActiveStep(2), 250); // API -> Outbox (DB Transaction)
       setTimeout(() => setActiveStep(3), 550); // Outbox -> Kafka Broker
       setTimeout(() => setActiveStep(4), 850); // Kafka -> Consumer Fan-out
 
-      const res = await api.createPurchase(customerId, Math.round(amountDollars * 100));
+      const res = await api.createPurchase(targetCustomer, amountCents, newIdempotencyKey);
       onEventEmitted(res);
       setInvalidationPurchaseId(res.purchaseId);
+      setLastIdempotencyKey(newIdempotencyKey);
+      setLastAmountDollars(amountDollars);
+      setLastEmittedCustomerId(targetCustomer);
+
       setStatusMessage(
-        `✓ Purchase accepted (202): Customer ${res.customerId} event registered (Event: ${res.eventId.slice(0, 8)}...). Relaying to Kafka via Transactional Outbox.`,
+        `✓ Purchase accepted (202): Key "${res.customerId}" mapped to Kafka. (Event: ${res.eventId.slice(0, 8)}..., Idempotency-Key: ${newIdempotencyKey}). Relayed via Outbox.`,
       );
     } catch (err) {
       setStatusMessage(`✕ Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoading(false);
       setTimeout(() => setActiveStep(null), 1500);
+    }
+  };
+
+  const handleResendDuplicate = async () => {
+    if (!lastIdempotencyKey) return;
+    setLoading(true);
+    setStatusMessage(`🔁 Submitting duplicate event with identical Idempotency-Key: "${lastIdempotencyKey}"...`);
+    setActiveStep(1);
+
+    try {
+      setTimeout(() => setActiveStep(2), 250);
+      const amountCents = Math.round(lastAmountDollars * 100);
+      const res = await api.createPurchase(lastEmittedCustomerId, amountCents, lastIdempotencyKey);
+
+      setStatusMessage(
+        `✓ Idempotency Proven: API detected duplicate key "${lastIdempotencyKey}". Existing purchase ${res.purchaseId} returned without incrementing sequence. Consumer deduplication table (markProcessedIfNew) skips duplicate execution (isDuplicate: true).`,
+      );
+    } catch (err) {
+      setStatusMessage(`✕ Idempotency test failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
+      setTimeout(() => setActiveStep(null), 1200);
+    }
+  };
+
+  const handleInjectPoison = async () => {
+    setInjectingPoison(true);
+    setStatusMessage(null);
+    try {
+      const res = await api.injectPoisonPill({ key: poisonKey.trim() || undefined });
+      setStatusMessage(
+        `☠️ Poison Pill Published: Raw malformed non-JSON payload placed at partition ${res.partition}, offset ${res.offset} (key: "${res.key}"). Consumer caught PoisonPillError, isolated it, and committed offset N+1 safely.`,
+      );
+    } catch (err) {
+      setStatusMessage(`✕ Poison injection failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setInjectingPoison(false);
+    }
+  };
+
+  const handlePublishRaw = async () => {
+    setPublishingRaw(true);
+    setStatusMessage(null);
+    try {
+      const res = await api.publishRawMessage({
+        key: rawKey.trim() || `raw_${Date.now()}`,
+        payload: rawPayload,
+      });
+      setStatusMessage(
+        `✓ Raw record published to "${res.topic}" partition ${res.partition}, offset ${res.offset} with arbitrary key "${res.key}".`,
+      );
+    } catch (err) {
+      setStatusMessage(`✕ Raw publish failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPublishingRaw(false);
     }
   };
 
@@ -72,16 +146,17 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
 
   const handleSendBurst = async () => {
     setLoading(true);
-    setStatusMessage('Emitting 5 sequential purchases for customer U001...');
+    const target = customerId.trim() || 'U001';
+    setStatusMessage(`Emitting 5 sequential purchases for customer/key "${target}"...`);
     try {
       for (let i = 1; i <= 5; i++) {
         setActiveStep(2);
-        const res = await api.createPurchase('U001', 5000 + i * 1000);
+        const res = await api.createPurchase(target, 5000 + i * 1000);
         onEventEmitted(res);
         setInvalidationPurchaseId(res.purchaseId);
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
-      setStatusMessage('✓ Burst complete: 5 purchases emitted for U001. All mapped to the same Kafka partition with strictly ascending offsets.');
+      setStatusMessage(`✓ Burst complete: 5 purchases emitted for key "${target}". All mapped to the same Kafka partition with strictly ascending offsets.`);
     } catch (err) {
       setStatusMessage(`✕ Burst failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -105,29 +180,53 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Arbitrary Partition Key Input */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Customer:</label>
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              style={{
-                background: '#ffffff',
-                color: 'var(--text-main)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 10px',
-                fontSize: '0.8rem',
-                fontFamily: 'var(--font-mono)',
-                outline: 'none',
-              }}
-            >
-              <option value="U001">U001 (Fixture)</option>
-              <option value="U002">U002 (Fixture)</option>
-              <option value="U003">U003 (Fixture)</option>
-              <option value={`U_${Date.now().toString().slice(-4)}`}>Random New</option>
-            </select>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Key / Customer:</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="text"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                placeholder="Arbitrary Key..."
+                style={{
+                  width: '110px',
+                  background: '#ffffff',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border-medium)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '6px 8px',
+                  fontSize: '0.8rem',
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', gap: '2px' }}>
+                {['U001', 'U002', 'cust_alpha', 'VIP_HOT'].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCustomerId(c)}
+                    style={{
+                      padding: '3px 5px',
+                      fontSize: '0.675rem',
+                      fontFamily: 'var(--font-mono)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: customerId === c ? '1px solid #7c3aed' : '1px solid var(--border-subtle)',
+                      background: customerId === c ? '#f5f3ff' : '#ffffff',
+                      color: customerId === c ? '#7c3aed' : 'var(--text-body)',
+                      cursor: 'pointer',
+                      fontWeight: customerId === c ? 700 : 400,
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {/* Amount Input */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Amount ($):</label>
             <input
@@ -135,7 +234,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
               value={amountDollars}
               onChange={(e) => setAmountDollars(Number(e.target.value))}
               style={{
-                width: '74px',
+                width: '68px',
                 background: '#ffffff',
                 color: 'var(--text-main)',
                 border: '1px solid var(--border-medium)',
@@ -150,6 +249,7 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
             />
           </div>
 
+          {/* Main Action Buttons */}
           <button
             onClick={handleCreatePurchase}
             disabled={loading}
@@ -159,24 +259,145 @@ export const PipelineVisualizer: React.FC<PipelineVisualizerProps> = ({
           </button>
 
           <button
-            onClick={handleSendBurst}
-            disabled={loading}
-            className="btn-cyber btn-cyan"
-            title="Send 5 purchases for U001 to prove single-partition sequential ordering"
+            onClick={handleResendDuplicate}
+            disabled={loading || !lastIdempotencyKey}
+            className="btn-cyber btn-ghost"
+            title="Re-send exact same Idempotency-Key and payload to prove consumer deduplication"
+            style={{
+              border: '1px solid #7c3aed',
+              color: '#7c3aed',
+              fontWeight: 600,
+              fontSize: '0.775rem',
+              padding: '6px 12px',
+            }}
           >
-            🚀 Burst 5x (U001)
+            🔁 Re-send Duplicate (Idempotency)
           </button>
 
           <button
-            onClick={handleInvalidate}
-            disabled={loading || !invalidationPurchaseId}
-            className="btn-cyber btn-amber"
-            title="Invalidate the most recent purchase to test Phase 5 compensation"
+            onClick={handleSendBurst}
+            disabled={loading}
+            className="btn-cyber btn-cyan"
+            title="Send 5 purchases for the selected key to prove single-partition sequential ordering"
           >
-            ↩ Invalidate Last
+            🚀 Burst 5x
+          </button>
+
+          <button
+            onClick={() => setShowChaosStudio(!showChaosStudio)}
+            className="btn-cyber btn-ghost"
+            style={{
+              border: showChaosStudio ? '1px solid #f43f5e' : '1px solid var(--border-subtle)',
+              color: showChaosStudio ? '#e11d48' : 'var(--text-body)',
+              background: showChaosStudio ? '#fff1f2' : 'transparent',
+              fontSize: '0.775rem',
+              padding: '6px 10px',
+            }}
+          >
+            🛠 Mechanics &amp; Chaos {showChaosStudio ? '▲' : '▼'}
           </button>
         </div>
       </div>
+
+      {/* Expandable Mechanics & Chaos Studio */}
+      {showChaosStudio && (
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '14px 18px',
+            borderRadius: 'var(--radius-md)',
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.1rem', color: '#e11d48' }}>☠️</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#9f1239' }}>
+                Kafka Mechanics &amp; Chaos Engineering Studio
+              </span>
+            </div>
+            <span className="badge-mono badge-rose">Poison Pills &amp; Raw Publishing</span>
+          </div>
+
+          <p style={{ fontSize: '0.775rem', color: '#881337', marginBottom: '10px', lineHeight: '1.4' }}>
+            Test broker failure modes directly: inject non-JSON corrupted poison pills to prove consumer isolation (<code style={{ fontFamily: 'var(--font-mono)' }}>@lab/observability</code> commits offset N+1 without crash loops), or publish arbitrary raw payloads with custom keys.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '12px', alignItems: 'center' }}>
+            {/* Poison Pill Ingestion */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={poisonKey}
+                onChange={(e) => setPoisonKey(e.target.value)}
+                placeholder="Poison Key..."
+                style={{
+                  width: '140px',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #f43f5e',
+                  fontSize: '0.775rem',
+                  fontFamily: 'var(--font-mono)',
+                  background: '#ffffff',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleInjectPoison}
+                disabled={injectingPoison}
+                className="btn-cyber btn-rose"
+                style={{ padding: '6px 12px', fontSize: '0.775rem', fontWeight: 700 }}
+              >
+                {injectingPoison ? 'Injecting...' : '☠️ Inject Poison Pill (Malformed Non-JSON)'}
+              </button>
+            </div>
+
+            {/* Arbitrary Raw Message Ingestion */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={rawKey}
+                onChange={(e) => setRawKey(e.target.value)}
+                placeholder="Custom Key..."
+                style={{
+                  width: '120px',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.775rem',
+                  fontFamily: 'var(--font-mono)',
+                  background: '#ffffff',
+                }}
+              />
+              <input
+                type="text"
+                value={rawPayload}
+                onChange={(e) => setRawPayload(e.target.value)}
+                placeholder='{"raw": "payload"}'
+                style={{
+                  width: '180px',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.775rem',
+                  fontFamily: 'var(--font-mono)',
+                  background: '#ffffff',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handlePublishRaw}
+                disabled={publishingRaw}
+                className="btn-cyber btn-cyan"
+                style={{ padding: '6px 12px', fontSize: '0.775rem', fontWeight: 600 }}
+              >
+                {publishingRaw ? 'Publishing...' : '📝 Publish Raw Record'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pipeline Stage Flow (Bright, crisp styling) */}
       <div

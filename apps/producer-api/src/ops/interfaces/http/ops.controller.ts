@@ -2,6 +2,8 @@ import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post, Query } from 
 import {
   BrokerMessageRecord,
   ConsumerGroupLagResult,
+  KAFKA_INSPECTOR_PORT,
+  KafkaInspectorPort,
   TopicInspectionResult,
 } from '../../application/ports/kafka-inspector.port';
 import { ScaleTopicPartitionsCommand } from '../../application/commands/scale-topic-partitions.command';
@@ -24,7 +26,46 @@ export class OpsController {
     private readonly peekMessagesHandler: PeekPartitionMessagesHandler,
     @Inject(ScaleTopicPartitionsHandler)
     private readonly scalePartitionsHandler: ScaleTopicPartitionsHandler,
+    @Inject(KAFKA_INSPECTOR_PORT)
+    private readonly kafkaInspector: KafkaInspectorPort,
   ) {}
+
+  @Post('kafka/inject-poison')
+  async injectPoisonPill(
+    @Body() body: { topic?: string; key?: string },
+  ): Promise<{ status: string; topic: string; partition: number; offset: string; key: string }> {
+    const topic = body?.topic?.trim() || 'purchase.events';
+    const key = body?.key?.trim() || `poison_pill_${Date.now()}`;
+    const malformedPayload = `CORRUPTED_POISON_PILL_NON_JSON_{error:true,timestamp:${Date.now()}}`;
+
+    const res = await this.kafkaInspector.publishRawMessage(topic, key, malformedPayload);
+    return {
+      status: 'POISON_PILL_INJECTED',
+      topic: res.topic,
+      partition: res.partition,
+      offset: res.offset,
+      key,
+    };
+  }
+
+  @Post('kafka/publish-raw')
+  async publishRaw(
+    @Body() body: { topic?: string; key: string; payload: string },
+  ): Promise<{ status: string; topic: string; partition: number; offset: string; key: string }> {
+    const topic = body?.topic?.trim() || 'purchase.events';
+    const key = body?.key?.trim() || `arbitrary_key_${Date.now()}`;
+    const payload =
+      typeof body?.payload === 'string' ? body.payload : JSON.stringify(body?.payload ?? {});
+
+    const res = await this.kafkaInspector.publishRawMessage(topic, key, payload);
+    return {
+      status: 'PUBLISHED_RAW',
+      topic: res.topic,
+      partition: res.partition,
+      offset: res.offset,
+      key,
+    };
+  }
 
   @Get('kafka/topics/:topic')
   async inspectTopic(@Param('topic') topic: string): Promise<TopicInspectionResult> {
