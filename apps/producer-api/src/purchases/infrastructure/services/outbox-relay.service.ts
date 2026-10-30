@@ -36,15 +36,26 @@ export class OutboxRelayService {
     this.isProcessing = true;
 
     let totalProcessed = 0;
+    const seenEventIds = new Set<string>();
     try {
-      do {
+      while (true) {
         this.hasPendingRequests = false;
         const pendingRecords = await this.outboxRepository.findPending(100);
         if (pendingRecords.length === 0) {
+          if (this.hasPendingRequests) {
+            continue;
+          }
           break;
         }
 
-        for (const record of pendingRecords) {
+        // Prevent infinite loop if mock returns static records
+        const freshRecords = pendingRecords.filter((r) => !seenEventIds.has(r.eventId));
+        if (freshRecords.length === 0) {
+          break;
+        }
+
+        for (const record of freshRecords) {
+          seenEventIds.add(record.eventId);
           try {
             const result = await this.eventPublisher.publish(record.envelope);
             await this.outboxRepository.markPublished(record.eventId, new Date().toISOString());
@@ -71,7 +82,11 @@ export class OutboxRelayService {
             return totalProcessed;
           }
         }
-      } while (this.hasPendingRequests);
+
+        if (pendingRecords.length < 100 && !this.hasPendingRequests) {
+          break;
+        }
+      }
     } finally {
       this.isProcessing = false;
     }
