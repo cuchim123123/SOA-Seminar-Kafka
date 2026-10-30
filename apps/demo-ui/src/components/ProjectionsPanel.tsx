@@ -14,13 +14,14 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('U001');
   const [account, setAccount] = useState<LoyaltyAccountDto | null>(null);
   const [loadingAccount, setLoadingAccount] = useState<boolean>(false);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   useEffect(() => {
     let cancelled = false;
     const fetchAccount = async () => {
       setLoadingAccount(true);
       try {
-        const data = await api.getLoyaltyAccount(selectedCustomerId);
+        const data = await api.getLoyaltyAccount(selectedCustomerId.trim());
         if (!cancelled) setAccount(data);
       } catch {
         if (!cancelled) setAccount(null);
@@ -33,7 +34,7 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedCustomerId, lastUpdatedEventTime]);
+  }, [selectedCustomerId, lastUpdatedEventTime, refreshTrigger]);
 
   const getTierColor = (tier: string) => {
     switch (tier) {
@@ -76,26 +77,57 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
               <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Loyalty Account</span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Customer:</span>
-              <select
+              <div style={{ display: 'flex', gap: '3px' }}>
+                {['U001', 'U002', 'cust_alpha'].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setSelectedCustomerId(c)}
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '0.725rem',
+                      fontFamily: 'var(--font-mono)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: selectedCustomerId === c ? '1px solid #7c3aed' : '1px solid var(--border-medium)',
+                      background: selectedCustomerId === c ? '#f5f3ff' : '#ffffff',
+                      color: selectedCustomerId === c ? '#7c3aed' : 'var(--text-body)',
+                      cursor: 'pointer',
+                      fontWeight: selectedCustomerId === c ? 700 : 400,
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
+                placeholder="Customer ID..."
                 style={{
                   background: '#ffffff',
                   color: 'var(--text-main)',
                   border: '1px solid var(--border-medium)',
                   borderRadius: 'var(--radius-sm)',
-                  padding: '4px 8px',
+                  padding: '3px 6px',
                   fontSize: '0.75rem',
                   fontFamily: 'var(--font-mono)',
+                  width: '95px',
                   outline: 'none',
                 }}
+              />
+              <button
+                type="button"
+                onClick={() => setRefreshTrigger((prev) => prev + 1)}
+                disabled={loadingAccount}
+                className="btn-cyber btn-ghost"
+                style={{ padding: '3px 8px', fontSize: '0.725rem' }}
+                title="Reload live PostgreSQL projection"
               >
-                <option value="U001">U001</option>
-                <option value="U002">U002</option>
-                <option value="U003">U003</option>
-              </select>
+                {loadingAccount ? '...' : '↺ Refresh'}
+              </button>
             </div>
           </div>
 

@@ -185,7 +185,12 @@ export const App: React.FC = () => {
         )}
 
         {activeTab === 'replay' && (
-          <ReplayStudio onCutoverCompleted={fetchTelemetry} />
+          <ReplayStudio
+            onCutoverCompleted={() => {
+              setLastEventTime(Date.now());
+              fetchTelemetry();
+            }}
+          />
         )}
 
         {activeTab === 'guide' && (
