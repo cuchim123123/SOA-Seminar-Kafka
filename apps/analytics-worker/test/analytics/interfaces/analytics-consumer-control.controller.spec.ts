@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PauseAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/pause-analytics-consumer.handler';
 import { ResumeAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/resume-analytics-consumer.handler';
+import { ConsumerControlPort } from '../../../src/analytics/application/ports/consumer-control.port';
 import { GetConsumerControlStatusHandler } from '../../../src/analytics/application/queries/get-consumer-control-status.handler';
 import { AnalyticsConsumerControlController } from '../../../src/analytics/interfaces/http/analytics-consumer-control.controller';
 
@@ -23,10 +24,16 @@ describe('AnalyticsConsumerControlController', () => {
       }),
     } as unknown as GetConsumerControlStatusHandler;
 
+    const mockConsumerControl = {
+      setProcessingDelay: vi.fn(),
+      getProcessingDelay: vi.fn().mockReturnValue(150),
+    } as unknown as ConsumerControlPort;
+
     const controller = new AnalyticsConsumerControlController(
       mockPauseHandler,
       mockResumeHandler,
       mockStatusHandler,
+      mockConsumerControl,
     );
 
     const pauseResult = await controller.pause();
@@ -34,6 +41,10 @@ describe('AnalyticsConsumerControlController', () => {
 
     const resumeResult = await controller.resume();
     expect(resumeResult).toEqual({ status: 'resumed', isPaused: false });
+
+    const delayResult = await controller.setDelay({ delayMs: 150 });
+    expect(mockConsumerControl.setProcessingDelay).toHaveBeenCalledWith(150);
+    expect(delayResult).toEqual({ status: 'updated', processingDelayMs: 150 });
 
     const statusResult = await controller.getStatus();
     expect(statusResult).toEqual({

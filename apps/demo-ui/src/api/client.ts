@@ -52,6 +52,20 @@ export interface ConsumerStatusDto {
   groupId: string;
   topic: string;
   pausedPartitions?: number[];
+  processingDelayMs?: number;
+}
+
+export interface PurchaseBatchResponse {
+  totalCreated: number;
+  durationMs: number;
+  customerDistribution: Record<string, number>;
+  purchases: Array<{
+    purchaseId: string;
+    customerId: string;
+    amountCents: number;
+    customerSequence: number;
+    eventId: string;
+  }>;
 }
 
 export interface PurchaseCreatedResponse {
@@ -194,6 +208,18 @@ export const api = {
     };
   },
 
+  createPurchaseBatch: async (params: {
+    count: number;
+    customerId?: string;
+    minAmountCents?: number;
+    maxAmountCents?: number;
+  }): Promise<PurchaseBatchResponse> => {
+    return request<PurchaseBatchResponse>('/api/producer/api/v1/purchases/batch', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
   invalidatePurchase: async (
     purchaseId: string,
     reason: string = 'DEMO_INVALIDATION',
@@ -311,6 +337,34 @@ export const api = {
     }
   },
 
+  getLoyaltyConsumerStatus: async (): Promise<ConsumerStatusDto> => {
+    return request<ConsumerStatusDto>('/api/loyalty/api/v1/loyalty/consumer/status');
+  },
+
+  pauseLoyalty: async (): Promise<{ status: string }> => {
+    return request<{ status: string }>('/api/loyalty/api/v1/loyalty/consumer/pause', {
+      method: 'POST',
+    });
+  },
+
+  resumeLoyalty: async (): Promise<{ status: string }> => {
+    return request<{ status: string }>('/api/loyalty/api/v1/loyalty/consumer/resume', {
+      method: 'POST',
+    });
+  },
+
+  setLoyaltyConsumerDelay: async (
+    delayMs: number,
+  ): Promise<{ status: string; processingDelayMs: number }> => {
+    return request<{ status: string; processingDelayMs: number }>(
+      '/api/loyalty/api/v1/loyalty/consumer/delay',
+      {
+        method: 'POST',
+        body: JSON.stringify({ delayMs }),
+      },
+    );
+  },
+
   // 3. Analytics API
   getAnalyticsSummary: async (): Promise<SalesSummaryDto> => {
     const raw = await request<{
@@ -343,6 +397,18 @@ export const api = {
     return request<{ status: string }>('/api/analytics/api/v1/analytics/consumer/resume', {
       method: 'POST',
     });
+  },
+
+  setAnalyticsConsumerDelay: async (
+    delayMs: number,
+  ): Promise<{ status: string; processingDelayMs: number }> => {
+    return request<{ status: string; processingDelayMs: number }>(
+      '/api/analytics/api/v1/analytics/consumer/delay',
+      {
+        method: 'POST',
+        body: JSON.stringify({ delayMs }),
+      },
+    );
   },
 
   // 4. Replay API

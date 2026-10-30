@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodValidationPipe } from '../../../src/common/pipes/zod-validation.pipe';
+import { CreatePurchaseBatchHandler } from '../../../src/purchases/application/commands/create-purchase-batch.handler';
 import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase.command';
 import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase.handler';
 import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase.handler';
@@ -23,6 +24,10 @@ describe('PurchasesController & ZodValidationPipe', () => {
         })),
       } as unknown as CreatePurchaseHandler;
 
+      const mockBatchHandler = {
+        execute: vi.fn(),
+      } as unknown as CreatePurchaseBatchHandler;
+
       const mockInvalidateHandler = {
         execute: vi.fn(),
       } as unknown as InvalidateSyntheticPurchaseHandler;
@@ -33,6 +38,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
       const controller = new PurchasesController(
         mockHandler,
+        mockBatchHandler,
         mockInvalidateHandler,
         mockGetHandler,
       );
@@ -64,6 +70,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
     it('dispatches invalidate command to handler and returns HTTP 200 response shape', async () => {
       const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockBatchHandler = {} as unknown as CreatePurchaseBatchHandler;
       const mockInvalidateHandler = {
         execute: vi.fn(async () => ({
           purchaseId: 'pur_xyz',
@@ -79,6 +86,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
       const controller = new PurchasesController(
         mockCreateHandler,
+        mockBatchHandler,
         mockInvalidateHandler,
         mockGetHandler,
       );
@@ -99,8 +107,34 @@ describe('PurchasesController & ZodValidationPipe', () => {
       });
     });
 
+    it('dispatches createBatch command to handler and returns result', async () => {
+      const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockBatchHandler = {
+        execute: vi.fn(async () => ({
+          totalCreated: 5,
+          durationMs: 42,
+          customerDistribution: { cust_alpha: 5 },
+          purchases: [],
+        })),
+      } as unknown as CreatePurchaseBatchHandler;
+      const mockInvalidateHandler = {} as unknown as InvalidateSyntheticPurchaseHandler;
+      const mockGetHandler = {} as unknown as GetPurchaseHandler;
+
+      const controller = new PurchasesController(
+        mockCreateHandler,
+        mockBatchHandler,
+        mockInvalidateHandler,
+        mockGetHandler,
+      );
+
+      const result = await controller.createBatch({ count: 5, customerId: 'cust_alpha' });
+      expect(mockBatchHandler.execute).toHaveBeenCalled();
+      expect(result.totalCreated).toBe(5);
+    });
+
     it('returns purchase read model when found', async () => {
       const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockBatchHandler = {} as unknown as CreatePurchaseBatchHandler;
       const mockInvalidateHandler = {} as unknown as InvalidateSyntheticPurchaseHandler;
       const mockGetHandler = {
         execute: vi.fn(async () => ({
@@ -118,6 +152,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
       const controller = new PurchasesController(
         mockCreateHandler,
+        mockBatchHandler,
         mockInvalidateHandler,
         mockGetHandler,
       );
@@ -130,6 +165,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
     it('throws NotFoundException when purchase does not exist', async () => {
       const mockCreateHandler = {} as unknown as CreatePurchaseHandler;
+      const mockBatchHandler = {} as unknown as CreatePurchaseBatchHandler;
       const mockInvalidateHandler = {} as unknown as InvalidateSyntheticPurchaseHandler;
       const mockGetHandler = {
         execute: vi.fn(async () => null),
@@ -137,6 +173,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
       const controller = new PurchasesController(
         mockCreateHandler,
+        mockBatchHandler,
         mockInvalidateHandler,
         mockGetHandler,
       );

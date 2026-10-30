@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CreatePurchaseBatchHandler } from './application/commands/create-purchase-batch.handler';
 import { CreatePurchaseHandler } from './application/commands/create-purchase.handler';
 import { InvalidateSyntheticPurchaseHandler } from './application/commands/invalidate-synthetic-purchase.handler';
 import { EVENT_PUBLISHER_PORT } from './application/ports/event-publisher.port';
@@ -23,6 +24,7 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
   controllers: [PurchasesController],
   providers: [
     CreatePurchaseHandler,
+    CreatePurchaseBatchHandler,
     InvalidateSyntheticPurchaseHandler,
     GetPurchaseHandler,
     OutboxRelayService,
@@ -63,6 +65,7 @@ import { PurchasesController } from './interfaces/http/purchases.controller';
   ],
   exports: [
     CreatePurchaseHandler,
+    CreatePurchaseBatchHandler,
     InvalidateSyntheticPurchaseHandler,
     GetPurchaseHandler,
     UNIT_OF_WORK_PORT,

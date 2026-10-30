@@ -8,12 +8,21 @@ import { ApplyPurchaseEventHandler } from '../../application/commands/apply-purc
 import { ApplyPurchaseInvalidationCommand } from '../../application/commands/apply-purchase-invalidation.command';
 import { ApplyPurchaseInvalidationHandler } from '../../application/commands/apply-purchase-invalidation.handler';
 
+import {
+  LoyaltyConsumerControlPort,
+  LoyaltyConsumerControlStatus,
+} from '../../application/ports/consumer-control.port';
+
 @Injectable()
-export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestroy {
+export class KafkaLoyaltyConsumerAdapter
+  implements OnModuleInit, OnModuleDestroy, LoyaltyConsumerControlPort
+{
   private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   private readonly topic: string;
+  private isPaused = false;
+  private processingDelayMs = 0;
 
   constructor(
     @Inject(AppConfigService)
@@ -57,6 +66,10 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
     await this.consumer.run({
       autoCommit: false,
       eachMessage: async ({ topic, partition, message }) => {
+        if (this.processingDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.processingDelayMs));
+        }
+
         let processedEventId: string | undefined;
 
         await processKafkaRecord({
@@ -143,6 +156,50 @@ export class KafkaLoyaltyConsumerAdapter implements OnModuleInit, OnModuleDestro
         ]);
       },
     });
+  }
+
+  async pause(): Promise<void> {
+    this.consumer.pause([{ topic: this.topic }]);
+    this.isPaused = true;
+    this.logger.warn('Loyalty Kafka consumer PAUSED by administrative request', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  async resume(): Promise<void> {
+    this.consumer.resume([{ topic: this.topic }]);
+    this.isPaused = false;
+    this.logger.info('Loyalty Kafka consumer RESUMED by administrative request', {
+      topic: this.topic,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  setProcessingDelay(delayMs: number): void {
+    this.processingDelayMs = Math.max(0, delayMs);
+    this.logger.info(`Simulated processing delay set to ${this.processingDelayMs}ms`, {
+      delayMs: this.processingDelayMs,
+    });
+  }
+
+  getProcessingDelay(): number {
+    return this.processingDelayMs;
+  }
+
+  async getStatus(): Promise<LoyaltyConsumerControlStatus> {
+    const pausedPartitions = this.consumer
+      .paused()
+      .filter((p) => p.topic === this.topic)
+      .flatMap((p) => p.partitions);
+
+    return {
+      groupId: this.config.kafkaGroupId,
+      topic: this.topic,
+      isPaused: this.isPaused,
+      pausedPartitions,
+      processingDelayMs: this.processingDelayMs,
+    };
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -3,6 +3,7 @@ export interface ConsumerControlStatus {
   readonly topic: string;
   readonly isPaused: boolean;
   readonly pausedPartitions: number[];
+  readonly processingDelayMs: number;
 }
 
 export const CONSUMER_CONTROL_PORT = Symbol('CONSUMER_CONTROL_PORT');
@@ -11,4 +12,6 @@ export interface ConsumerControlPort {
   pause(): Promise<void>;
   resume(): Promise<void>;
   getStatus(): Promise<ConsumerControlStatus>;
+  setProcessingDelay(delayMs: number): void;
+  getProcessingDelay(): number;
 }

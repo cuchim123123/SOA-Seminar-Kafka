@@ -40,6 +40,7 @@ export const App: React.FC = () => {
   const [topicMetadata, setTopicMetadata] = useState<TopicPartitionMetadata | null>(null);
   const [loyaltyLag, setLoyaltyLag] = useState<ConsumerGroupLag | null>(null);
   const [analyticsLag, setAnalyticsLag] = useState<ConsumerGroupLag | null>(null);
+  const [loyaltyStatus, setLoyaltyStatus] = useState<ConsumerStatusDto | null>(null);
   const [analyticsStatus, setAnalyticsStatus] = useState<ConsumerStatusDto | null>(null);
   const [salesSummary, setSalesSummary] = useState<SalesSummaryDto | null>(null);
   const [recentLogs, setRecentLogs] = useState<LogEntry[]>([]);
@@ -64,7 +65,7 @@ export const App: React.FC = () => {
 
   const fetchTelemetry = useCallback(async () => {
     try {
-      const [h, meta, lLag, aLag, aStat, summ] = await Promise.all([
+      const [h, meta, lLag, aLag, lStat, aStat, summ] = await Promise.all([
         api.checkServicesHealth().catch(() => ({
           producer: false,
           loyalty: false,
@@ -75,6 +76,7 @@ export const App: React.FC = () => {
         api.getPartitions().catch(() => null),
         api.getConsumerLag('loyalty-v1').catch(() => null),
         api.getConsumerLag('analytics-v1').catch(() => null),
+        api.getLoyaltyConsumerStatus().catch(() => null),
         api.getConsumerStatus().catch(() => null),
         api.getAnalyticsSummary().catch(() => null),
       ]);
@@ -83,6 +85,7 @@ export const App: React.FC = () => {
       if (meta) setTopicMetadata(meta);
       if (lLag) setLoyaltyLag(lLag);
       if (aLag) setAnalyticsLag(aLag);
+      if (lStat) setLoyaltyStatus(lStat);
       if (aStat) setAnalyticsStatus(aStat);
       if (summ) setSalesSummary(summ);
     } catch {
@@ -168,6 +171,7 @@ export const App: React.FC = () => {
           <ConsumerLagPanel
             loyaltyLag={loyaltyLag}
             analyticsLag={analyticsLag}
+            loyaltyStatus={loyaltyStatus}
             analyticsStatus={analyticsStatus}
             onStatusChanged={fetchTelemetry}
           />

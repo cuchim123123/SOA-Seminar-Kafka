@@ -19,6 +19,7 @@ export class KafkaAnalyticsConsumerAdapter
   private readonly consumer: Consumer;
   private readonly topic: string;
   private isPaused = false;
+  private processingDelayMs = 0;
 
   constructor(
     @Inject(AppConfigService)
@@ -60,6 +61,10 @@ export class KafkaAnalyticsConsumerAdapter
     await this.consumer.run({
       autoCommit: false,
       eachMessage: async ({ topic, partition, message }) => {
+        if (this.processingDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.processingDelayMs));
+        }
+
         await processKafkaRecord({
           topic,
           partition,
@@ -126,6 +131,18 @@ export class KafkaAnalyticsConsumerAdapter
     });
   }
 
+  setProcessingDelay(delayMs: number): void {
+    this.processingDelayMs = Math.max(0, Math.round(delayMs));
+    this.logger.info('Analytics consumer simulated processing delay updated', {
+      delayMs: this.processingDelayMs,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  getProcessingDelay(): number {
+    return this.processingDelayMs;
+  }
+
   async getStatus(): Promise<ConsumerControlStatus> {
     const pausedPartitions = this.consumer
       .paused()
@@ -137,6 +154,7 @@ export class KafkaAnalyticsConsumerAdapter
       topic: this.topic,
       isPaused: this.isPaused,
       pausedPartitions,
+      processingDelayMs: this.processingDelayMs,
     };
   }
 

@@ -13,6 +13,8 @@ describe('Consumer Control Handlers', () => {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
+      setProcessingDelay: vi.fn(),
+      getProcessingDelay: vi.fn().mockReturnValue(0),
     };
 
     const handler = new PauseAnalyticsConsumerHandler(mockControl);
@@ -27,6 +29,8 @@ describe('Consumer Control Handlers', () => {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
+      setProcessingDelay: vi.fn(),
+      getProcessingDelay: vi.fn().mockReturnValue(0),
     };
 
     const handler = new ResumeAnalyticsConsumerHandler(mockControl);
@@ -42,12 +46,15 @@ describe('Consumer Control Handlers', () => {
       topic: 'purchase.events',
       isPaused: true,
       pausedPartitions: [0, 1],
+      processingDelayMs: 0,
     };
 
     const mockControl: ConsumerControlPort = {
       pause: vi.fn(),
       resume: vi.fn(),
       getStatus: vi.fn().mockResolvedValue(mockStatus),
+      setProcessingDelay: vi.fn(),
+      getProcessingDelay: vi.fn().mockReturnValue(0),
     };
 
     const handler = new GetConsumerControlStatusHandler(mockControl);
