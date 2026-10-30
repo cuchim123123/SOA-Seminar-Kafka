@@ -193,10 +193,21 @@ export const ConsumerGroupCard: React.FC<ConsumerGroupCardProps> = ({
           borderRadius: 'var(--radius-sm)',
         }}
       >
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Total Unprocessed Lag:</span>
-        <span style={{ fontSize: '1.25rem', fontWeight: 800, color: getAccentColor(), fontFamily: 'var(--font-mono)' }}>
-          {lag?.totalLag || '0'} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>records</span>
-        </span>
+        <div>
+          <span style={{ fontSize: '0.8rem', color: isPaused ? '#92400e' : 'var(--text-muted)', fontWeight: 600 }}>
+            Total Unprocessed Lag:
+          </span>
+          {isPaused && (
+            <div style={{ fontSize: '0.7rem', color: '#b45309', fontWeight: 500 }}>
+              ⏸ Consumer paused — accumulating backlog
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontSize: '1.25rem', fontWeight: 800, color: getAccentColor(), fontFamily: 'var(--font-mono)' }}>
+            {lag?.totalLag || '0'} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>records</span>
+          </span>
+        </div>
       </div>
 
       {/* Per-Partition Lag Breakdown */}

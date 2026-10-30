@@ -301,28 +301,39 @@ export const WorkloadBurstCard: React.FC<WorkloadBurstCardProps> = ({ onStatusCh
         <div
           style={{
             marginTop: '14px',
-            padding: '10px 14px',
+            padding: '12px 16px',
             borderRadius: 'var(--radius-sm)',
             background: '#ecfdf5',
             border: '1px solid #a7f3d0',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px',
+            flexDirection: 'column',
+            gap: '6px',
             fontSize: '0.825rem',
             color: '#065f46',
           }}
         >
-          <div>
-            <strong>✓ Successfully emitted {burstResult.totalCreated} events</strong> in{' '}
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{burstResult.durationMs}ms</span>!
-            <span style={{ marginLeft: '10px', color: '#047857' }}>
-              Distribution: {Object.entries(burstResult.customerDistribution).map(([c, n]) => `${c}: ${n}`).join(', ')}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <strong style={{ fontSize: '0.875rem' }}>✓ Exactly {burstResult.totalCreated} Kafka events emitted</strong> into{' '}
+              <code style={{ fontFamily: 'var(--font-mono)', background: '#d1fae5', padding: '1px 5px', borderRadius: '3px' }}>purchase.events</code>{' '}
+              in <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{burstResult.durationMs}ms</span>
+            </div>
+            <span className="badge-mono badge-emerald">
+              2 Consumer Groups Fan-out ({burstResult.totalCreated * 2} Deliveries)
             </span>
           </div>
-          <div style={{ fontSize: '0.775rem', color: '#059669', fontStyle: 'italic' }}>
-            💡 Watch the consumer lag bars below drain in real-time according to simulated latency!
+
+          <div style={{ fontSize: '0.775rem', color: '#047857', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <span>
+              <strong>Customer Distribution:</strong>{' '}
+              {Object.entries(burstResult.customerDistribution)
+                .map(([c, n]) => `${c}: ${n}`)
+                .join(', ')}
+            </span>
+          </div>
+
+          <div style={{ fontSize: '0.75rem', color: '#059669', borderTop: '1px solid #a7f3d0', paddingTop: '6px', marginTop: '2px' }}>
+            ℹ <strong>Kafka Lag Clarification:</strong> Each of the two consumer groups (<code>loyalty-v1</code> and <code>analytics-v1</code>) receives {burstResult.totalCreated} events. If a consumer is <strong>PAUSED</strong>, its lag counter will display <em>(prior uncommitted backlog + {burstResult.totalCreated})</em>.
           </div>
         </div>
       )}
