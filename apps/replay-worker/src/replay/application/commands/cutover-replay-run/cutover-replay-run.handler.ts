@@ -45,6 +45,7 @@ export class CutoverReplayRunHandler {
 
     return await this.prisma.$transaction(async (tx) => {
       let appliedCount = 0;
+      let skippedCount = 0;
       for (const staged of stagedRecords) {
         const existing = await tx.loyaltyAccount.findUnique({
           where: { customerId: staged.customerId },
@@ -52,6 +53,7 @@ export class CutoverReplayRunHandler {
 
         // Boundary guard: do not overwrite live state if customer has already progressed past replay snapshot
         if (existing && existing.lastCustomerSequence > BigInt(staged.lastCustomerSequence)) {
+          skippedCount++;
           continue;
         }
 
@@ -74,6 +76,12 @@ export class CutoverReplayRunHandler {
           },
         });
         appliedCount++;
+      }
+
+      if (appliedCount === 0) {
+        throw new BadRequestException(
+          `Cannot complete cutover for replay run '${runId}': all staged customer records (${skippedCount}) were skipped because live customer sequence has already advanced past the replay snapshot. Staged state is obsolete.`,
+        );
       }
 
       await tx.replayRun.update({
