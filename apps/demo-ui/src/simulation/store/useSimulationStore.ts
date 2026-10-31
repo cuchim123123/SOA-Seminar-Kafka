@@ -309,6 +309,9 @@ export function useSimulationStore() {
         return;
       }
 
+      if (engine.clock.status === 'STOPPED') {
+        engine.clock.start();
+      }
       engine.dispatchProducerMessage(pNode.id, customKey);
       syncFromEngine();
     },
@@ -437,6 +440,22 @@ export function useSimulationStore() {
   const crashConsumer = useCallback(
     (consumerId: string) => {
       engine.crashConsumer(consumerId);
+      setNodes((nds) =>
+        nds.map((n) => {
+          const engNode = engine.nodes.get(n.id);
+          if (engNode && n.data.kind === 'consumer') {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                assignedPartitions: engNode.data.assignedPartitions,
+                status: engNode.data.status,
+              },
+            };
+          }
+          return n;
+        }),
+      );
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -445,6 +464,23 @@ export function useSimulationStore() {
   const reviveConsumer = useCallback(
     (consumerId: string) => {
       engine.reviveConsumer(consumerId);
+      setNodes((nds) =>
+        nds.map((n) => {
+          const engNode = engine.nodes.get(n.id);
+          if (engNode && n.data.kind === 'consumer') {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                assignedPartitions: engNode.data.assignedPartitions,
+                status: engNode.data.status,
+                isPaused: engNode.data.isPaused,
+              },
+            };
+          }
+          return n;
+        }),
+      );
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -452,29 +488,25 @@ export function useSimulationStore() {
 
   const togglePauseConsumer = useCallback(
     (consumerId: string) => {
-      const node = engine.nodes.get(consumerId);
-      if (node && node.data.kind === 'consumer') {
-        const cData = node.data as unknown as { isPaused?: boolean; status: string };
-        cData.isPaused = !cData.isPaused;
-        cData.status = cData.isPaused ? 'PAUSED' : 'POLLING';
+      engine.togglePauseConsumer(consumerId);
+      const engineNode = engine.nodes.get(consumerId);
+      if (engineNode) {
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === consumerId) {
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  isPaused: engineNode.data.isPaused,
+                  status: engineNode.data.status,
+                },
+              };
+            }
+            return n;
+          }),
+        );
       }
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.id === consumerId) {
-            const current = Boolean((n.data as unknown as { isPaused?: boolean }).isPaused);
-            const next = !current;
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                isPaused: next,
-                status: next ? 'PAUSED' : 'POLLING',
-              },
-            };
-          }
-          return n;
-        }),
-      );
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -482,33 +514,24 @@ export function useSimulationStore() {
 
   const togglePauseConsumerPartition = useCallback(
     (consumerId: string, partitionId: number) => {
-      const node = engine.nodes.get(consumerId);
-      if (node && node.data.kind === 'consumer') {
-        const cData = node.data as unknown as { pausedPartitions?: number[] };
-        const current = cData.pausedPartitions || [];
-        cData.pausedPartitions = current.includes(partitionId)
-          ? current.filter((p) => p !== partitionId)
-          : [...current, partitionId];
+      engine.togglePauseConsumerPartition(consumerId, partitionId);
+      const engineNode = engine.nodes.get(consumerId);
+      if (engineNode) {
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === consumerId) {
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  pausedPartitions: engineNode.data.pausedPartitions,
+                },
+              };
+            }
+            return n;
+          }),
+        );
       }
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.id === consumerId) {
-            const cData = n.data as unknown as { pausedPartitions?: number[] };
-            const current = cData.pausedPartitions || [];
-            const next = current.includes(partitionId)
-              ? current.filter((p) => p !== partitionId)
-              : [...current, partitionId];
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                pausedPartitions: next,
-              },
-            };
-          }
-          return n;
-        }),
-      );
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -563,6 +586,9 @@ export function useSimulationStore() {
     if (!pNode) {
       alert('Please add a Producer to the canvas first.');
       return;
+    }
+    if (engine.clock.status === 'STOPPED') {
+      engine.clock.start();
     }
     engine.dispatchProducerMessage(pNode.id, 'POISON_PILL');
     syncFromEngine();
@@ -639,6 +665,9 @@ export function useSimulationStore() {
       alert('Please add a Producer to the canvas first.');
       return;
     }
+    if (engine.clock.status === 'STOPPED') {
+      engine.clock.start();
+    }
     const customKey = (pNode.data.messageKey as string) || 'U001';
     engine.dispatchDuplicateMessage(customKey);
     syncFromEngine();
@@ -650,6 +679,9 @@ export function useSimulationStore() {
       if (!pNode) {
         alert('Please add a Producer to the canvas first.');
         return;
+      }
+      if (engine.clock.status === 'STOPPED') {
+        engine.clock.start();
       }
       engine.dispatchOrderedBurst(customerId, count);
       syncFromEngine();

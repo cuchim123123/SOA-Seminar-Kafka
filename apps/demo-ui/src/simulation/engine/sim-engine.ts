@@ -110,7 +110,14 @@ export class SimEngine {
         const node = this.nodes.get(memberId);
         if (node && node.data.kind === 'consumer') {
           node.data.assignedPartitions = [...instance.assignedPartitions];
-          node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+          const isPaused = Boolean(node.data.isPaused || node.data.status === 'PAUSED');
+          if (isPaused) {
+            node.data.status = 'PAUSED';
+            instance.status = 'PAUSED';
+          } else {
+            node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+            instance.status = node.data.status;
+          }
         }
       }
     }
@@ -122,6 +129,10 @@ export class SimEngine {
    * Dispatch a single synthetic purchase message from a producer node
    */
   public dispatchProducerMessage(producerNodeId: string, customKey?: string): SimMessage | null {
+    if (this.clock.status === 'STOPPED') {
+      this.clock.start();
+    }
+
     const producerNode = this.nodes.get(producerNodeId);
     if (!producerNode) return null;
 
@@ -270,6 +281,10 @@ export class SimEngine {
    * Dispatch duplicate message to test consumer idempotency
    */
   public dispatchDuplicateMessage(customKey?: string): SimMessage | null {
+    if (this.clock.status === 'STOPPED') {
+      this.clock.start();
+    }
+
     const producerNode = Array.from(this.nodes.values()).find((n) => n.data.kind === 'producer');
     if (!producerNode) return null;
 
@@ -290,6 +305,54 @@ export class SimEngine {
     if (!publishEdge) return null;
 
     const targetNodeId = publishEdge.target;
+    const targetNode = this.nodes.get(targetNodeId);
+
+    // Case 1: Wired to Transactional Outbox Table
+    if (targetNode && targetNode.data.kind === 'outbox-table') {
+      const dispatchEvent = createSimEvent(
+        this.clock.virtualTimeMs,
+        'DISPATCH_MESSAGE',
+        producerNode.id,
+        `🚨 [DUPLICATE INJECTION] Producer re-sent DUPLICATE event ID ${messageToDup.id} (${messageToDup.payload.purchaseId}) for key "${messageToDup.key}" into Outbox Table`,
+        {
+          targetNodeId,
+          edgeId: publishEdge.id,
+          message: messageToDup,
+        },
+      );
+      this.recordEvent(dispatchEvent);
+
+      const transitMs = 250;
+      const arriveTime = this.clock.virtualTimeMs + transitMs;
+
+      this.inFlightTokens.push({
+        id: `token-outbox-dup-${messageToDup.id}-${publishEdge.id}-${Date.now()}`,
+        messageId: messageToDup.id,
+        messageKey: messageToDup.key,
+        edgeId: publishEdge.id,
+        sourceNodeId: producerNode.id,
+        targetNodeId,
+        startTime: this.clock.virtualTimeMs,
+        arriveTime,
+        color: '#f59e0b',
+      });
+
+      const writeOutboxEvent = createSimEvent(
+        arriveTime,
+        'WRITE_OUTBOX',
+        targetNodeId,
+        `Outbox Table buffered pending duplicate record ${messageToDup.payload.purchaseId}`,
+        {
+          edgeId: publishEdge.id,
+          message: messageToDup,
+        },
+      );
+      this.queue.push(writeOutboxEvent);
+      this.notifyStateUpdated();
+      return messageToDup;
+    }
+
+    // Case 2: Directly wired to Kafka Cluster
     const topic = (producerNode.data.targetTopic as string) || 'purchases';
     const targetPartition = this.kafkaCluster.routeKeyToPartition(topic, messageToDup.key);
 
@@ -341,17 +404,78 @@ export class SimEngine {
    * Dispatch a burst of 3 sequential orders for a single customer to test ordering
    */
   public dispatchOrderedBurst(customerKey: string = 'U001', count: number = 3): void {
+    if (this.clock.status === 'STOPPED') {
+      this.clock.start();
+    }
+
     const producerNode = Array.from(this.nodes.values()).find((n) => n.data.kind === 'producer');
     if (!producerNode) return;
 
+    const publishEdge = Array.from(this.edges.values()).find((e) => e.source === producerNode.id);
+    if (!publishEdge) return;
+
+    const targetNodeId = publishEdge.target;
+    const targetNode = this.nodes.get(targetNodeId);
+
+    // Case 1: Wired to Transactional Outbox Table
+    if (targetNode && targetNode.data.kind === 'outbox-table') {
+      for (let i = 1; i <= count; i++) {
+        const msg = createSimMessage(
+          customerKey,
+          1000 * i,
+          this.clock.virtualTimeMs + (i - 1) * 120,
+        );
+        msg.payload.purchaseId = `ORDER-${customerKey}-SEQ0${i}`;
+        const scheduleTime = this.clock.virtualTimeMs + (i - 1) * 120;
+
+        const dispatchEvent = createSimEvent(
+          scheduleTime,
+          'DISPATCH_MESSAGE',
+          producerNode.id,
+          `[BURST ${i}/${count}] Order ${msg.payload.purchaseId} committed to Outbox Table`,
+          {
+            targetNodeId,
+            edgeId: publishEdge.id,
+            message: msg,
+          },
+        );
+        this.recordEvent(dispatchEvent);
+
+        const transitMs = 250;
+        const arriveTime = scheduleTime + transitMs;
+        this.inFlightTokens.push({
+          id: `token-burst-outbox-${msg.id}-${i}`,
+          messageId: msg.id,
+          messageKey: customerKey,
+          edgeId: publishEdge.id,
+          sourceNodeId: producerNode.id,
+          targetNodeId,
+          startTime: scheduleTime,
+          arriveTime,
+          color: '#ea580c',
+        });
+
+        const writeOutboxEvent = createSimEvent(
+          arriveTime,
+          'WRITE_OUTBOX',
+          targetNodeId,
+          `Outbox Table buffered burst record ${msg.payload.purchaseId}`,
+          {
+            edgeId: publishEdge.id,
+            message: msg,
+          },
+        );
+        this.queue.push(writeOutboxEvent);
+      }
+      this.notifyStateUpdated();
+      return;
+    }
+
+    // Case 2: Directly wired to Kafka Cluster
     for (let i = 1; i <= count; i++) {
       const msg = createSimMessage(customerKey, 1000 * i, this.clock.virtualTimeMs + (i - 1) * 120);
       msg.payload.purchaseId = `ORDER-${customerKey}-SEQ0${i}`;
 
-      const publishEdge = Array.from(this.edges.values()).find((e) => e.source === producerNode.id);
-      if (!publishEdge) continue;
-
-      const targetNodeId = publishEdge.target;
       const topic = (producerNode.data.targetTopic as string) || 'purchases';
       const isRoundRobin = this.mechanicsConfig.keyOrderingMode === 'ROUND_ROBIN';
       let targetPartition: number;
@@ -480,7 +604,14 @@ export class SimEngine {
         node.data.committedRecordCount = 0;
         node.data.status = 'IDLE';
       } else if (node.data.kind === 'consumer') {
-        const cData = node.data as unknown as { assignedPartitions?: number[]; status: string };
+        const cData = node.data as unknown as {
+          assignedPartitions?: number[];
+          status: string;
+          isPaused?: boolean;
+          pausedPartitions?: number[];
+        };
+        cData.isPaused = false;
+        cData.pausedPartitions = [];
         cData.status =
           cData.assignedPartitions && cData.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
       }
@@ -541,9 +672,22 @@ export class SimEngine {
 
         const consumerNode = this.nodes.get(targetNodeId);
         if (consumerNode && consumerNode.data.kind === 'consumer') {
+          if (consumerNode.data.status === 'CRASHED') break;
+
           consumerNode.data.status = 'PROCESSING';
-          consumerNode.data.currentProcessingPartition = Number(metadata?.partitionId ?? 0);
-          consumerNode.data.currentProcessingOffset = Number(metadata?.offset ?? 0);
+          const pId = Number(metadata?.partitionId ?? 0);
+          const off = Number(metadata?.offset ?? 0);
+          consumerNode.data.currentProcessingPartition = pId;
+          consumerNode.data.currentProcessingOffset = off;
+
+          const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
+          const group = this.consumerGroups.get(groupId);
+          const instance = group?.members.get(targetNodeId);
+          if (instance) {
+            instance.currentProcessingPartition = pId;
+            instance.currentProcessingOffset = off;
+          }
+
           const delay = (consumerNode.data.processingDelayMs as number) || 120;
 
           // Schedule completion
@@ -565,15 +709,26 @@ export class SimEngine {
 
         const consumerNode = this.nodes.get(sourceNodeId);
         if (consumerNode && consumerNode.data.kind === 'consumer') {
-          consumerNode.data.status = 'POLLING';
+          if (consumerNode.data.status === 'CRASHED') break;
+
+          const isPaused = Boolean(
+            consumerNode.data.isPaused || consumerNode.data.status === 'PAUSED',
+          );
+          consumerNode.data.status = isPaused ? 'PAUSED' : 'POLLING';
           consumerNode.data.currentProcessingPartition = undefined;
           consumerNode.data.currentProcessingOffset = undefined;
           this.processedMessageCount += 1;
 
           const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
           const group = this.consumerGroups.get(groupId);
+          const instance = group?.members.get(sourceNodeId);
+          if (instance) {
+            instance.currentProcessingPartition = undefined;
+            instance.currentProcessingOffset = undefined;
+          }
           const partitionId = Number(metadata.partitionId ?? 0);
           const offset = Number(metadata.offset ?? 0);
+          const topicName = (metadata.topic as string) || 'purchases';
 
           const isPoisonPill =
             message.key === 'POISON_PILL' || message.payload.purchaseId.startsWith('POISON');
@@ -589,7 +744,7 @@ export class SimEngine {
             if (this.mechanicsConfig.dlqRoutingEnabled && dlqEdge) {
               // DLQ Enabled: Commit offset to avoid head-of-line blocking!
               if (group) {
-                group.commitOffset('purchases', partitionId, offset);
+                group.commitOffset(topicName, partitionId, offset);
               }
 
               const dlqNodeId = dlqEdge.target;
@@ -642,7 +797,7 @@ export class SimEngine {
             if (isDuplicate && this.mechanicsConfig.consumerIdempotency) {
               // Idempotency ON: Duplicate detected! Commit offset to advance, but skip DB mutation!
               if (group) {
-                group.commitOffset('purchases', partitionId, offset);
+                group.commitOffset(topicName, partitionId, offset);
               }
 
               consumerNode.data.statusText = '⚠️ Duplicate Skipped (Idempotent)';
@@ -671,7 +826,7 @@ export class SimEngine {
 
               // Commit Kafka offset
               if (group) {
-                group.commitOffset('purchases', partitionId, offset);
+                group.commitOffset(topicName, partitionId, offset);
               }
 
               // Route mutation to database
@@ -714,14 +869,15 @@ export class SimEngine {
           }
 
           // Strict ordering invariant: check if there are further records in partition backlog!
-          if (group) {
-            const partition = this.kafkaCluster.getPartition('purchases', partitionId);
-            const nextCommitted = group.getCommittedNextOffset('purchases', partitionId);
+          const isPartitionCut = Boolean(consumerNode.data.pausedPartitions?.includes(partitionId));
+          if (group && !isPaused && !isPartitionCut) {
+            const partition = this.kafkaCluster.getPartition(topicName, partitionId);
+            const nextCommitted = group.getCommittedNextOffset(topicName, partitionId);
             if (partition && nextCommitted < partition.logEndOffset) {
               const nextRecord = partition.records.find((r) => r.offset === nextCommitted);
               if (nextRecord) {
                 this.scheduleConsumerPoll(
-                  'purchases',
+                  topicName,
                   partitionId,
                   nextRecord.offset,
                   nextRecord.message,
@@ -899,8 +1055,8 @@ export class SimEngine {
         .getPartition(topicName, partitionId)
         ?.records.find((r) => r.offset === nextOffset);
       if (!nextRecord) continue;
-      offset = nextRecord.offset;
-      message = nextRecord.message;
+      const targetOffset = nextRecord.offset;
+      const targetMessage = nextRecord.message;
 
       // Find which member instance owns this partition
       for (const [memberId, instance] of group.members.entries()) {
@@ -930,7 +1086,7 @@ export class SimEngine {
 
           // Auto-commit: offset advances at poll time, before the handler finishes (at-most-once risk)
           if (this.mechanicsConfig.commitMode === 'auto') {
-            group.seekNextOffset(topicName, partitionId, offset + 1);
+            group.seekNextOffset(topicName, partitionId, targetOffset + 1);
           }
 
           // Find edge connecting Kafka Cluster -> Consumer
@@ -941,9 +1097,9 @@ export class SimEngine {
 
           if (dispatchEdge) {
             this.inFlightTokens.push({
-              id: `token-poll-${message.id}-${dispatchEdge.id}`,
-              messageId: message.id,
-              messageKey: message.key,
+              id: `token-poll-${targetMessage.id}-${dispatchEdge.id}`,
+              messageId: targetMessage.id,
+              messageKey: targetMessage.key,
               edgeId: dispatchEdge.id,
               sourceNodeId: dispatchEdge.source,
               targetNodeId: memberId,
@@ -957,12 +1113,12 @@ export class SimEngine {
             arriveTime,
             'START_PROCESSING',
             dispatchEdge ? dispatchEdge.source : 'kafka-cluster',
-            `Consumer ${memberId} polled record offset #${offset} from P${partitionId}`,
+            `Consumer ${memberId} polled record offset #${targetOffset} from P${partitionId}`,
             {
               targetNodeId: memberId,
               edgeId: dispatchEdge?.id,
-              message,
-              metadata: { partitionId, offset, topic: topicName },
+              message: targetMessage,
+              metadata: { partitionId, offset: targetOffset, topic: topicName },
             },
           );
           this.queue.push(startEvent);
@@ -1000,15 +1156,19 @@ export class SimEngine {
     }
   }
 
-  private resumePartitionBacklog(group: SimConsumerGroupModel, partitionId: number): void {
-    const partition = this.kafkaCluster.getPartition('purchases', partitionId);
+  public resumePartitionBacklog(
+    group: SimConsumerGroupModel,
+    partitionId: number,
+    topicName: string = 'purchases',
+  ): void {
+    const partition = this.kafkaCluster.getPartition(topicName, partitionId);
     if (!partition) return;
     const next = partition.records.find(
-      (r) => r.offset === group.getCommittedNextOffset('purchases', partitionId),
+      (r) => r.offset === group.getCommittedNextOffset(topicName, partitionId),
     );
     if (next) {
       this.scheduleConsumerPoll(
-        'purchases',
+        topicName,
         partitionId,
         next.offset,
         next.message,
@@ -1084,6 +1244,7 @@ export class SimEngine {
     const consumerNode = this.nodes.get(consumerNodeId);
     if (!consumerNode || consumerNode.data.kind !== 'consumer') return;
 
+    const activePartition = consumerNode.data.currentProcessingPartition;
     consumerNode.data.status = 'CRASHED';
     consumerNode.data.assignedPartitions = [];
     consumerNode.data.currentProcessingPartition = undefined;
@@ -1095,14 +1256,39 @@ export class SimEngine {
     const pCount = topic ? topic.partitions.size : 4;
 
     if (group) {
+      if (activePartition !== undefined) {
+        group.unlockPartition(Number(activePartition));
+      }
       group.crashMember(consumerNodeId, pCount);
+
+      // Purge pending in-flight processing/start events for the crashed consumer
+      this.queue.removeWhere(
+        (e) =>
+          (e.type === 'START_PROCESSING' && e.targetNodeId === consumerNodeId) ||
+          (e.type === 'COMPLETE_PROCESSING' && e.sourceNodeId === consumerNodeId),
+      );
 
       // Sync remaining members
       for (const [memberId, instance] of group.members.entries()) {
         const node = this.nodes.get(memberId);
         if (node && node.data.kind === 'consumer' && node.id !== consumerNodeId) {
           node.data.assignedPartitions = [...instance.assignedPartitions];
-          node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+          if (node.data.status !== 'PAUSED') {
+            node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+          }
+        }
+      }
+
+      // Resume backlog on surviving active members for reassigned partitions
+      for (const [memberId, instance] of group.members.entries()) {
+        if (
+          memberId !== consumerNodeId &&
+          instance.status !== 'CRASHED' &&
+          instance.status !== 'PAUSED'
+        ) {
+          for (const p of instance.assignedPartitions) {
+            this.resumePartitionBacklog(group, p, topic?.name || 'purchases');
+          }
         }
       }
     }
@@ -1124,6 +1310,7 @@ export class SimEngine {
     if (!consumerNode || consumerNode.data.kind !== 'consumer') return;
 
     consumerNode.data.status = 'POLLING';
+    consumerNode.data.isPaused = false;
 
     const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
     const group = this.consumerGroups.get(groupId);
@@ -1138,7 +1325,18 @@ export class SimEngine {
         const node = this.nodes.get(memberId);
         if (node && node.data.kind === 'consumer') {
           node.data.assignedPartitions = [...instance.assignedPartitions];
-          node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+          if (node.data.status !== 'PAUSED') {
+            node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
+          }
+        }
+      }
+
+      // Resume backlogs across all online members with newly assigned partitions
+      for (const instance of group.members.values()) {
+        if (instance.status !== 'CRASHED' && instance.status !== 'PAUSED') {
+          for (const p of instance.assignedPartitions) {
+            this.resumePartitionBacklog(group, p, topic?.name || 'purchases');
+          }
         }
       }
     }
@@ -1153,6 +1351,91 @@ export class SimEngine {
     );
 
     this.notifyStateUpdated();
+  }
+
+  public togglePauseConsumer(consumerId: string): boolean {
+    const consumerNode = this.nodes.get(consumerId);
+    if (!consumerNode || consumerNode.data.kind !== 'consumer') return false;
+
+    const cData = consumerNode.data as unknown as {
+      isPaused?: boolean;
+      status: string;
+      groupId?: string;
+      assignedPartitions?: number[];
+    };
+    cData.isPaused = !cData.isPaused;
+    cData.status = cData.isPaused
+      ? 'PAUSED'
+      : cData.assignedPartitions && cData.assignedPartitions.length > 0
+        ? 'POLLING'
+        : 'IDLE';
+
+    const groupId = cData.groupId || 'loyalty-v1';
+    const group = this.consumerGroups.get(groupId);
+    const instance = group?.members.get(consumerId);
+    if (instance) {
+      instance.status = cData.status as SimConsumerInstance['status'];
+    }
+
+    this.recordEvent(
+      createSimEvent(
+        this.clock.virtualTimeMs,
+        'DISPATCH_MESSAGE',
+        consumerId,
+        cData.isPaused
+          ? `⏸️ [POLL PAUSED] Consumer ${consumerId} paused polling! New messages will accumulate in partition backlogs.`
+          : `▶️ [POLL RESUMED] Consumer ${consumerId} resumed polling! Draining backlog across assigned partitions.`,
+      ),
+    );
+
+    // If resuming, drain backlog for all assigned partitions!
+    if (!cData.isPaused && group) {
+      const assigned = cData.assignedPartitions || instance?.assignedPartitions || [];
+      for (const p of assigned) {
+        this.resumePartitionBacklog(group, p);
+      }
+    }
+
+    this.notifyStateUpdated();
+    return Boolean(cData.isPaused);
+  }
+
+  public togglePauseConsumerPartition(consumerId: string, partitionId: number): boolean {
+    const consumerNode = this.nodes.get(consumerId);
+    if (!consumerNode || consumerNode.data.kind !== 'consumer') return false;
+
+    const cData = consumerNode.data as unknown as {
+      pausedPartitions?: number[];
+      groupId?: string;
+    };
+    const current = cData.pausedPartitions || [];
+    const isCurrentlyCut = current.includes(partitionId);
+    const next = isCurrentlyCut
+      ? current.filter((p) => p !== partitionId)
+      : [...current, partitionId];
+    cData.pausedPartitions = next;
+
+    const groupId = cData.groupId || 'loyalty-v1';
+    const group = this.consumerGroups.get(groupId);
+
+    this.recordEvent(
+      createSimEvent(
+        this.clock.virtualTimeMs,
+        'DISPATCH_MESSAGE',
+        consumerId,
+        isCurrentlyCut
+          ? `🔌 [WIRE RECONNECTED] Consumer ${consumerId} reconnected polling wire for partition P${partitionId}! Draining backlog.`
+          : `✂️ [WIRE CUT] Consumer ${consumerId} severed polling wire for partition P${partitionId}! Backlog will accumulate.`,
+      ),
+    );
+
+    // If reconnecting wire, drain backlog on that partition!
+    if (isCurrentlyCut && group) {
+      this.resumePartitionBacklog(group, partitionId);
+    }
+
+    this.notifyStateUpdated();
+    return !isCurrentlyCut;
   }
 
   private notifyStateUpdated(): void {

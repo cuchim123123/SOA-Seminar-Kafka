@@ -284,5 +284,233 @@ describe('Milestone 1 — Simulation Engine & Mechanics', () => {
       const dbNode = engine.nodes.get('database-1');
       expect(dbNode?.data.committedRecordCount).toBe(1);
     });
+
+    it('pauses polling, accumulates partition lag, and drains backlog immediately upon resumption', () => {
+      engine.clock.start();
+
+      // 1. Pause consumer polling
+      const isPaused = engine.togglePauseConsumer('consumer-1');
+      expect(isPaused).toBe(true);
+
+      const consumerNode = engine.nodes.get('consumer-1');
+      expect(consumerNode?.data.status).toBe('PAUSED');
+
+      // 2. Dispatch a message while paused
+      const msg = engine.dispatchProducerMessage('producer-1', 'U001');
+      expect(msg).toBeDefined();
+
+      // Step 1: Arrives at Kafka broker
+      const ev1 = engine.step();
+      expect(ev1?.type).toBe('APPEND_PARTITION');
+
+      // Consumer is paused, so NO START_PROCESSING event was scheduled!
+      expect(engine.queue.size()).toBe(0);
+
+      // Verify lag accumulated in consumer group
+      const targetP = Number(ev1?.metadata?.partitionId ?? 0);
+      const group = engine.consumerGroups.get('loyalty-v1');
+      expect(group?.calculateLag('purchases', targetP, 1)).toBe(1);
+
+      // 3. Resume consumer polling -> should immediately drain backlog!
+      const isStillPaused = engine.togglePauseConsumer('consumer-1');
+      expect(isStillPaused).toBe(false);
+      expect(consumerNode?.data.status).toBe('POLLING');
+      expect(engine.queue.size()).toBe(1);
+
+      // Step 2: Poll and Start Processing
+      const ev2 = engine.step();
+      expect(ev2?.type).toBe('START_PROCESSING');
+
+      // Step 3: Complete Processing
+      const ev3 = engine.step();
+      expect(ev3?.type).toBe('COMPLETE_PROCESSING');
+
+      // Step 4: Write to Database
+      const ev4 = engine.step();
+      expect(ev4?.type).toBe('WRITE_DATABASE');
+
+      const dbNode = engine.nodes.get('database-1');
+      expect(dbNode?.data.committedRecordCount).toBe(1);
+      expect(group?.calculateLag('purchases', targetP, 1)).toBe(0);
+    });
+
+    it('cuts individual partition polling wire and resumes backlog when reconnected', () => {
+      engine.clock.start();
+
+      // Find which partition U001 routes to
+      const targetP = engine.kafkaCluster.routeKeyToPartition('purchases', 'U001');
+
+      // Cut polling wire for target partition
+      engine.togglePauseConsumerPartition('consumer-1', targetP);
+      const consumerNode = engine.nodes.get('consumer-1');
+      expect((consumerNode?.data.pausedPartitions as number[] | undefined)?.includes(targetP)).toBe(
+        true,
+      );
+
+      // Dispatch message
+      engine.dispatchProducerMessage('producer-1', 'U001');
+
+      // Step 1: Arrives at Broker
+      const ev1 = engine.step();
+      expect(ev1?.type).toBe('APPEND_PARTITION');
+
+      // Polling wire is severed for this partition -> queue is empty, lag accumulates!
+      expect(engine.queue.size()).toBe(0);
+      const group = engine.consumerGroups.get('loyalty-v1');
+      expect(group?.calculateLag('purchases', targetP, 1)).toBe(1);
+
+      // Reconnect wire -> drains backlog!
+      engine.togglePauseConsumerPartition('consumer-1', targetP);
+      expect((consumerNode?.data.pausedPartitions as number[] | undefined)?.includes(targetP)).toBe(
+        false,
+      );
+      expect(engine.queue.size()).toBe(1);
+
+      // Execute through to database
+      engine.step(); // START_PROCESSING
+      engine.step(); // COMPLETE_PROCESSING
+      engine.step(); // WRITE_DATABASE
+
+      const dbNode = engine.nodes.get('database-1');
+      expect(dbNode?.data.committedRecordCount).toBe(1);
+    });
+
+    it('clears in-flight partition locks and resumes backlog when a consumer crashes mid-stream', () => {
+      // Register second consumer so partitions can fail over
+      const c2Node: SimCustomNode = {
+        id: 'consumer-2',
+        type: 'consumerNode',
+        position: { x: 400, y: 150 },
+        data: {
+          id: 'consumer-2',
+          kind: 'consumer',
+          title: 'Consumer 2',
+          status: 'POLLING',
+          groupId: 'loyalty-v1',
+          processingDelayMs: 50,
+        } as unknown as SimCustomNode['data'],
+      };
+      const edgeK2 = {
+        id: 'edge-k-c2',
+        source: 'kafka-1',
+        target: 'consumer-2',
+        type: 'simFlowEdge',
+      } as SimCustomEdge;
+      const edgeC2D = {
+        id: 'edge-c2-d',
+        source: 'consumer-2',
+        target: 'database-1',
+        type: 'simFlowEdge',
+      } as SimCustomEdge;
+
+      engine.nodes.set('consumer-2', c2Node);
+      engine.edges.set('edge-k-c2', edgeK2);
+      engine.edges.set('edge-c2-d', edgeC2D);
+      const currentNodes = Array.from(engine.nodes.values());
+      const currentEdges = Array.from(engine.edges.values());
+      engine.setTopology(currentNodes, currentEdges);
+
+      engine.clock.start();
+
+      // Dispatch message
+      engine.dispatchProducerMessage('producer-1', 'U001');
+      engine.step(); // APPEND_PARTITION
+      const startEv = engine.step(); // START_PROCESSING
+      expect(startEv?.type).toBe('START_PROCESSING');
+
+      const targetConsumerId = startEv?.targetNodeId as string;
+      const targetP = Number(startEv?.metadata?.partitionId ?? 0);
+      const group = engine.consumerGroups.get('loyalty-v1')!;
+
+      // Partition is locked during processing
+      expect(group.isPartitionInFlight(targetP)).toBe(true);
+
+      // Crash the processing consumer before it finishes
+      engine.crashConsumer(targetConsumerId);
+
+      // The surviving consumer has taken over the partition and acquired the in-flight lock for failover
+      const survivingConsumerId = targetConsumerId === 'consumer-1' ? 'consumer-2' : 'consumer-1';
+      const survivingMember = group.members.get(survivingConsumerId);
+      expect(survivingMember?.assignedPartitions.includes(targetP)).toBe(true);
+      expect(group.isPartitionInFlight(targetP)).toBe(true);
+
+      // Queue has resumed processing on surviving consumer!
+      expect(engine.queue.size()).toBeGreaterThan(0);
+      const evResume = engine.step();
+      expect(evResume?.type).toBe('START_PROCESSING');
+      expect(evResume?.targetNodeId).toBe(survivingConsumerId);
+    });
+
+    it('routes ordered bursts and duplicate messages through Transactional Outbox and CDC relay', () => {
+      const outboxNodes: SimCustomNode[] = [
+        {
+          id: 'producer-1',
+          type: 'producerNode',
+          position: { x: 0, y: 0 },
+          data: { id: 'producer-1', kind: 'producer', title: 'Producer' } as SimCustomNode['data'],
+        },
+        {
+          id: 'outbox-1',
+          type: 'outboxTableNode',
+          position: { x: 200, y: 0 },
+          data: {
+            id: 'outbox-1',
+            kind: 'outbox-table',
+            title: 'Outbox Table',
+            pendingRecordsCount: 0,
+            publishedRecordsCount: 0,
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'cdc-1',
+          type: 'cdcRelayNode',
+          position: { x: 400, y: 0 },
+          data: {
+            id: 'cdc-1',
+            kind: 'cdc-relay',
+            title: 'Debezium CDC',
+            targetTopic: 'purchases',
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'kafka-1',
+          type: 'kafkaClusterNode',
+          position: { x: 600, y: 0 },
+          data: { id: 'kafka-1', kind: 'kafka-cluster', title: 'Kafka' } as SimCustomNode['data'],
+        },
+      ];
+
+      const outboxEdges: SimCustomEdge[] = [
+        {
+          id: 'e1',
+          source: 'producer-1',
+          target: 'outbox-1',
+          type: 'simFlowEdge',
+        } as SimCustomEdge,
+        { id: 'e2', source: 'outbox-1', target: 'cdc-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e3', source: 'cdc-1', target: 'kafka-1', type: 'simFlowEdge' } as SimCustomEdge,
+      ];
+
+      engine.setTopology(outboxNodes, outboxEdges);
+      engine.clock.start();
+
+      // Dispatch duplicate message
+      engine.dispatchDuplicateMessage('U001');
+
+      // Must be WRITE_OUTBOX
+      const ev1 = engine.step();
+      expect(ev1?.type).toBe('WRITE_OUTBOX');
+      const outboxNode = engine.nodes.get('outbox-1');
+      expect(outboxNode?.data.pendingRecordsCount).toBe(1);
+
+      // CDC relay tails row
+      const ev2 = engine.step();
+      expect(ev2?.type).toBe('CDC_RELAY_STREAM');
+
+      // CDC publishes to Kafka broker
+      const ev3 = engine.step();
+      expect(ev3?.type).toBe('APPEND_PARTITION');
+      expect(ev3?.sourceNodeId).toBe('kafka-1');
+    });
   });
 });

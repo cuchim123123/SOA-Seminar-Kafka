@@ -4,7 +4,7 @@ export interface SimConsumerInstance {
   id: string;
   groupId: string;
   assignedPartitions: number[];
-  status: 'POLLING' | 'PROCESSING' | 'IDLE' | 'REBALANCING' | 'CRASHED';
+  status: 'POLLING' | 'PROCESSING' | 'PAUSED' | 'IDLE' | 'REBALANCING' | 'CRASHED';
   processingDelayMs: number;
   currentProcessingPartition?: number;
   currentProcessingOffset?: number;
@@ -72,7 +72,7 @@ export class SimConsumerGroupModel {
     if (onlineMemberIds.length === 0 || totalPartitions === 0) {
       for (const member of this.members.values()) {
         member.assignedPartitions = [];
-        if (member.status !== 'CRASHED') {
+        if (member.status !== 'CRASHED' && member.status !== 'PAUSED') {
           member.status = 'IDLE';
         }
       }
@@ -107,7 +107,7 @@ export class SimConsumerGroupModel {
       const member = this.members.get(id);
       if (member) {
         member.assignedPartitions = [...partitions];
-        if (member.status !== 'CRASHED') {
+        if (member.status !== 'CRASHED' && member.status !== 'PAUSED') {
           member.status = partitions.length > 0 ? 'POLLING' : 'IDLE';
         }
         if (partitions.length === 0) {
@@ -123,6 +123,12 @@ export class SimConsumerGroupModel {
   public crashMember(memberId: string, totalPartitions: number): Map<string, number[]> {
     const member = this.members.get(memberId);
     if (member) {
+      if (member.currentProcessingPartition !== undefined) {
+        this.unlockPartition(member.currentProcessingPartition);
+      }
+      for (const p of member.assignedPartitions) {
+        this.unlockPartition(p);
+      }
       member.status = 'CRASHED';
       member.assignedPartitions = [];
       member.currentProcessingPartition = undefined;
@@ -175,5 +181,9 @@ export class SimConsumerGroupModel {
 
   public unlockPartition(partition: number): void {
     this.inFlightPartitions.delete(partition);
+  }
+
+  public unlockAllPartitions(): void {
+    this.inFlightPartitions.clear();
   }
 }

@@ -35,6 +35,14 @@ export class SimPriorityQueue {
     return [...this.heap].sort((a, b) => this.compare(a, b));
   }
 
+  public removeWhere(predicate: (event: SimEvent) => boolean): void {
+    const remaining = this.heap.filter((e) => !predicate(e));
+    this.heap = [];
+    for (const e of remaining) {
+      this.push(e);
+    }
+  }
+
   private compare(a: SimEvent, b: SimEvent): number {
     if (a.scheduledTime !== b.scheduledTime) {
       return a.scheduledTime - b.scheduledTime;
