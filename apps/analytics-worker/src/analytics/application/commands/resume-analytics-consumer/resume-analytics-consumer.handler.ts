@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { CONSUMER_CONTROL_PORT, ConsumerControlPort } from '../ports/consumer-control.port';
+import { CONSUMER_CONTROL_PORT, ConsumerControlPort } from '../../ports/consumer-control.port';
 import { ResumeAnalyticsConsumerCommand } from './resume-analytics-consumer.command';
 
 @Injectable()

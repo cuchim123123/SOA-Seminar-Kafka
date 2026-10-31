@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post } from '@nestjs/common';
 import {
   LOYALTY_CONSUMER_CONTROL_PORT,
   LoyaltyConsumerControlPort,
@@ -24,6 +24,22 @@ export class LoyaltyConsumerControlController {
     return { status: 'resumed', isPaused: false };
   }
 
+  @Post('partitions/:partition/pause')
+  async pausePartition(
+    @Param('partition', ParseIntPipe) partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> {
+    await this.consumerControl.pausePartition(partition);
+    return { status: 'paused', partition, isPaused: true };
+  }
+
+  @Post('partitions/:partition/resume')
+  async resumePartition(
+    @Param('partition', ParseIntPipe) partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> {
+    await this.consumerControl.resumePartition(partition);
+    return { status: 'resumed', partition, isPaused: false };
+  }
+
   @Post('delay')
   async setDelay(
     @Body() body: { delayMs: number },
@@ -36,5 +52,31 @@ export class LoyaltyConsumerControlController {
   @Get('status')
   async getStatus(): Promise<LoyaltyConsumerControlStatus> {
     return this.consumerControl.getStatus();
+  }
+
+  @Post('scale')
+  async scale(
+    @Body() body: { targetInstances: number },
+  ): Promise<{ status: string; targetCount: number; instances: unknown[] }> {
+    const target = typeof body?.targetInstances === 'number' ? body.targetInstances : 1;
+    const res = await this.consumerControl.scaleInstances(target);
+    return { status: 'scaled', targetCount: res.targetCount, instances: res.instances };
+  }
+
+  @Post('kill-replica')
+  async killReplica(
+    @Body() body?: { instanceId?: string },
+  ): Promise<{ status: string; killedInstanceId: string; remainingCount: number }> {
+    const res = await this.consumerControl.killReplicaInstance(body?.instanceId);
+    return {
+      status: 'killed',
+      killedInstanceId: res.killedInstanceId,
+      remainingCount: res.remainingCount,
+    };
+  }
+
+  @Get('rebalance-history')
+  getRebalanceHistory() {
+    return this.consumerControl.getRebalanceHistory();
   }
 }

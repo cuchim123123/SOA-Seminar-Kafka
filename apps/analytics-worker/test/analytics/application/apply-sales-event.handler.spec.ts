@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApplySalesEventCommand } from '../../../src/analytics/application/commands/apply-sales-event.command';
-import { ApplySalesEventHandler } from '../../../src/analytics/application/commands/apply-sales-event.handler';
+import {
+  ApplySalesEventCommand,
+  ApplySalesEventHandler,
+} from '../../../src/analytics/application/commands/apply-sales-event';
 import {
   AnalyticsUnitOfWorkContext,
   AnalyticsUnitOfWorkPort,

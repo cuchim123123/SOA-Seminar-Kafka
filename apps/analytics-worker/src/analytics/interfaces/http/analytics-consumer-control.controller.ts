@@ -1,15 +1,21 @@
-import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
-import { PauseAnalyticsConsumerCommand } from '../../application/commands/pause-analytics-consumer.command';
-import { PauseAnalyticsConsumerHandler } from '../../application/commands/pause-analytics-consumer.handler';
-import { ResumeAnalyticsConsumerCommand } from '../../application/commands/resume-analytics-consumer.command';
-import { ResumeAnalyticsConsumerHandler } from '../../application/commands/resume-analytics-consumer.handler';
+import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post } from '@nestjs/common';
+import {
+  PauseAnalyticsConsumerCommand,
+  PauseAnalyticsConsumerHandler,
+} from '../../application/commands/pause-analytics-consumer';
+import {
+  ResumeAnalyticsConsumerCommand,
+  ResumeAnalyticsConsumerHandler,
+} from '../../application/commands/resume-analytics-consumer';
 import {
   CONSUMER_CONTROL_PORT,
   ConsumerControlPort,
   ConsumerControlStatus,
 } from '../../application/ports/consumer-control.port';
-import { GetConsumerControlStatusHandler } from '../../application/queries/get-consumer-control-status.handler';
-import { GetConsumerControlStatusQuery } from '../../application/queries/get-consumer-control-status.query';
+import {
+  GetConsumerControlStatusHandler,
+  GetConsumerControlStatusQuery,
+} from '../../application/queries/get-consumer-control-status';
 
 @Controller('api/v1/analytics/consumer')
 export class AnalyticsConsumerControlController {
@@ -34,6 +40,22 @@ export class AnalyticsConsumerControlController {
   async resume(): Promise<{ status: string; isPaused: boolean }> {
     const result = await this.resumeHandler.execute(new ResumeAnalyticsConsumerCommand({}));
     return { status: 'resumed', isPaused: result.isPaused };
+  }
+
+  @Post('partitions/:partition/pause')
+  async pausePartition(
+    @Param('partition', ParseIntPipe) partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> {
+    await this.consumerControl.pausePartition(partition);
+    return { status: 'paused', partition, isPaused: true };
+  }
+
+  @Post('partitions/:partition/resume')
+  async resumePartition(
+    @Param('partition', ParseIntPipe) partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> {
+    await this.consumerControl.resumePartition(partition);
+    return { status: 'resumed', partition, isPaused: false };
   }
 
   @Post('delay')

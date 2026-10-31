@@ -14,8 +14,9 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1)
-    .default('postgresql://postgres:postgres@localhost:5432/analytics_db?schema=public'),
+    .default('postgresql://postgres:postgres@localhost:5433/analytics_db?schema=public'),
   ANALYTICS_DATABASE_URL: z.string().optional(),
+  KAFKA_FROM_BEGINNING: z.coerce.boolean().default(false),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

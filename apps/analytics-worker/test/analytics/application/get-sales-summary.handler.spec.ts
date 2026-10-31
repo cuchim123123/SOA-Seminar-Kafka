@@ -3,8 +3,10 @@ import {
   SalesSummaryReadDaoPort,
   SalesSummaryReadModel,
 } from '../../../src/analytics/application/ports/sales-summary-read-dao.port';
-import { GetSalesSummaryHandler } from '../../../src/analytics/application/queries/get-sales-summary.handler';
-import { GetSalesSummaryQuery } from '../../../src/analytics/application/queries/get-sales-summary.query';
+import {
+  GetSalesSummaryHandler,
+  GetSalesSummaryQuery,
+} from '../../../src/analytics/application/queries/get-sales-summary';
 
 describe('GetSalesSummaryHandler', () => {
   it('penetrates storage directly via Read DAO without touching domain repository', async () => {

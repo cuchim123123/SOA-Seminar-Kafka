@@ -13,11 +13,15 @@ import { AppModule } from '../../src/app.module';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { RAW_ENV_TOKEN } from '../../src/config/config.module';
 import { PrismaService } from '../../src/database/prisma.service';
-import { StartBoundedReplayHandler } from '../../src/replay/application/commands/start-bounded-replay.handler';
-import { CompareReplayWithLiveHandler } from '../../src/replay/application/queries/compare-replay-with-live.handler';
-import { CompareReplayWithLiveQuery } from '../../src/replay/application/queries/compare-replay-with-live.query';
-import { GetReplayStagingHandler } from '../../src/replay/application/queries/get-replay-staging.handler';
-import { GetReplayStagingQuery } from '../../src/replay/application/queries/get-replay-staging.query';
+import { StartBoundedReplayHandler } from '../../src/replay/application/commands/start-bounded-replay';
+import {
+  CompareReplayWithLiveHandler,
+  CompareReplayWithLiveQuery,
+} from '../../src/replay/application/queries/compare-replay-with-live';
+import {
+  GetReplayStagingHandler,
+  GetReplayStagingQuery,
+} from '../../src/replay/application/queries/get-replay-staging';
 
 describe('Two-Pass Correction Integration Test (P5-03)', () => {
   let app: INestApplication;
@@ -41,7 +45,7 @@ describe('Two-Pass Correction Integration Test (P5-03)', () => {
         PURCHASE_TOPIC: 'purchase.events',
         LOYALTY_DATABASE_URL:
           process.env.LOYALTY_DATABASE_URL ||
-          'postgresql://postgres:postgres@localhost:5432/loyalty_db?schema=public',
+          'postgresql://postgres:postgres@localhost:5433/loyalty_db?schema=public',
       })
       .compile();
 

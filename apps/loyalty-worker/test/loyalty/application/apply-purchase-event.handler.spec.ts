@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApplyPurchaseEventCommand } from '../../../src/loyalty/application/commands/apply-purchase-event.command';
-import { ApplyPurchaseEventHandler } from '../../../src/loyalty/application/commands/apply-purchase-event.handler';
+import { ApplyPurchaseEventCommand } from '../../../src/loyalty/application/commands/apply-purchase-event/apply-purchase-event.command';
+import { ApplyPurchaseEventHandler } from '../../../src/loyalty/application/commands/apply-purchase-event/apply-purchase-event.handler';
 import { ConsumerIdempotencyRepositoryPort } from '../../../src/loyalty/application/ports/consumer-idempotency-repository.port';
 import { LoyaltyAccountRepositoryPort } from '../../../src/loyalty/application/ports/loyalty-account-repository.port';
 import {

@@ -2,8 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { validateEnv } from '../../src/config/env.validation';
 import { PrismaService } from '../../src/database/prisma.service';
-import { ApplyPurchaseEventCommand } from '../../src/loyalty/application/commands/apply-purchase-event.command';
-import { ApplyPurchaseEventHandler } from '../../src/loyalty/application/commands/apply-purchase-event.handler';
+import { ApplyPurchaseEventCommand } from '../../src/loyalty/application/commands/apply-purchase-event/apply-purchase-event.command';
+import { ApplyPurchaseEventHandler } from '../../src/loyalty/application/commands/apply-purchase-event/apply-purchase-event.handler';
 import { PostgresLoyaltyUnitOfWorkAdapter } from '../../src/loyalty/infrastructure/adapters/postgres-loyalty-unit-of-work.adapter';
 
 describe('Fault Injection Integration Suite (P4-06)', () => {

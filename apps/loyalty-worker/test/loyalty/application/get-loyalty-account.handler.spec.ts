@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.entity';
-import { GetLoyaltyAccountHandler } from '../../../src/loyalty/application/queries/get-loyalty-account.handler';
-import { GetLoyaltyAccountQuery } from '../../../src/loyalty/application/queries/get-loyalty-account.query';
+import { GetLoyaltyAccountHandler } from '../../../src/loyalty/application/queries/get-loyalty-account/get-loyalty-account.handler';
+import { GetLoyaltyAccountQuery } from '../../../src/loyalty/application/queries/get-loyalty-account/get-loyalty-account.query';
 import { InMemoryLoyaltyAccountRepositoryAdapter } from '../../../src/loyalty/infrastructure/adapters/in-memory-loyalty-account-repository.adapter';
 
 describe('GetLoyaltyAccountHandler', () => {

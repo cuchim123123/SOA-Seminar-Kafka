@@ -12,7 +12,7 @@ import { AppModule } from '../../src/app.module';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { RAW_ENV_TOKEN } from '../../src/config/config.module';
 import { PrismaService } from '../../src/database/prisma.service';
-import { StartBoundedReplayHandler } from '../../src/replay/application/commands/start-bounded-replay.handler';
+import { StartBoundedReplayHandler } from '../../src/replay/application/commands/start-bounded-replay';
 
 describe('Bounded Replay Integration Test (P5-02)', () => {
   let app: INestApplication;
@@ -36,7 +36,7 @@ describe('Bounded Replay Integration Test (P5-02)', () => {
         PURCHASE_TOPIC: 'purchase.events',
         LOYALTY_DATABASE_URL:
           process.env.LOYALTY_DATABASE_URL ||
-          'postgresql://postgres:postgres@localhost:5432/loyalty_db?schema=public',
+          'postgresql://postgres:postgres@localhost:5433/loyalty_db?schema=public',
       })
       .compile();
 

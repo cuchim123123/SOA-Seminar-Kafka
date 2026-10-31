@@ -5,29 +5,31 @@ import { StructuredLogger } from '../src/logging/structured-logger.service';
 describe('processKafkaRecord', () => {
   const logger = new StructuredLogger('TestConsumer', { serviceName: 'test-service' });
 
-  it('skips empty payload with warning', async () => {
+  it('rejects empty payload without processing', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     const handlerSpy = vi.fn();
 
-    await processKafkaRecord({
-      topic: 'test.events',
-      partition: 0,
-      offset: '10',
-      rawValue: undefined,
-      logger,
-      deserializer: (r) => JSON.parse(r),
-      handler: handlerSpy,
-    });
+    await expect(
+      processKafkaRecord({
+        topic: 'test.events',
+        partition: 0,
+        offset: '10',
+        rawValue: undefined,
+        logger,
+        deserializer: (r) => JSON.parse(r),
+        handler: handlerSpy,
+      }),
+    ).rejects.toThrow('Empty Kafka payload');
 
     expect(warnSpy).toHaveBeenCalledWith(
-      'Received empty message payload — skipping record',
+      'Received empty message payload — refusing offset commit',
       expect.objectContaining({ topic: 'test.events', offset: '10' }),
     );
     expect(handlerSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
-  it('catches poison pill, logs structured error, and safely isolates without rethrowing', async () => {
+  it('rejects poison pill so the caller cannot commit its offset', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
     const handlerSpy = vi.fn();
 
@@ -43,7 +45,7 @@ describe('processKafkaRecord', () => {
         },
         handler: handlerSpy,
       }),
-    ).resolves.not.toThrow();
+    ).rejects.toThrow('Malformed message envelope');
 
     expect(errorSpy).toHaveBeenCalledWith(
       'Poison pill detected — unable to deserialize message',

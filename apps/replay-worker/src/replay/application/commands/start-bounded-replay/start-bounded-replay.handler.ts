@@ -3,25 +3,28 @@ import { uuidv7 } from 'uuidv7';
 import {
   InsufficientRetentionError,
   PartitionRetentionDiagnostic,
-} from '../../domain/errors/insufficient-retention.error';
-import { ReplayCustomerCorrector, ReplayInputEvent } from '../../domain/replay-customer-corrector';
-import { ReplayRun } from '../../domain/replay-run.entity';
+} from '../../../domain/errors/insufficient-retention.error';
+import {
+  ReplayCustomerCorrector,
+  ReplayInputEvent,
+} from '../../../domain/replay-customer-corrector';
+import { ReplayRun } from '../../../domain/replay-run.entity';
 import {
   BOUNDED_REPLAY_SCANNER_PORT,
   BoundedReplayScannerPort,
-} from '../ports/bounded-replay-scanner.port';
+} from '../../ports/bounded-replay-scanner.port';
 import {
   REPLAY_RUN_REPOSITORY_PORT,
   ReplayRunRepositoryPort,
-} from '../ports/replay-run-repository.port';
+} from '../../ports/replay-run-repository.port';
 import {
   REPLAY_STAGING_REPOSITORY_PORT,
   ReplayStagingRepositoryPort,
-} from '../ports/replay-staging-repository.port';
+} from '../../ports/replay-staging-repository.port';
 import {
   TOPIC_BOUNDARY_INSPECTOR_PORT,
   TopicBoundaryInspectorPort,
-} from '../ports/topic-boundary-inspector.port';
+} from '../../ports/topic-boundary-inspector.port';
 import { StartBoundedReplayCommand } from './start-bounded-replay.command';
 
 export interface StartBoundedReplayResult {
@@ -73,16 +76,20 @@ export class StartBoundedReplayHandler {
     // 3. Verify retention horizon covers required history (P5-04)
     const requiredOffsets = command.requiredStartOffsets;
     const truncatedPartitions: PartitionRetentionDiagnostic[] = [];
+    const simulateFailure = command.simulateRetentionFailure ?? false;
 
     for (const [partitionStr, startOffsetStr] of Object.entries(boundaries.startOffsets)) {
       const partition = Number(partitionStr);
-      const earliestRetained = BigInt(startOffsetStr);
+      let earliestRetained = BigInt(startOffsetStr);
+      if (simulateFailure && partition === 0) {
+        earliestRetained += 100n;
+      }
       const required = BigInt(requiredOffsets?.[partition] ?? '0');
 
       if (earliestRetained > required) {
         truncatedPartitions.push({
           partition,
-          earliestRetainedOffset: startOffsetStr,
+          earliestRetainedOffset: earliestRetained.toString(),
           requiredStartOffset: required.toString(),
           purgedOffsetCount: (earliestRetained - required).toString(),
         });
@@ -139,6 +146,7 @@ export class StartBoundedReplayHandler {
             ) as Record<string, unknown>;
 
             scannedEvents.push({
+              eventId: typeof env.eventId === 'string' ? env.eventId : undefined,
               eventType,
               aggregateId,
               customerSequence,

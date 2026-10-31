@@ -1,4 +1,4 @@
-import { Tier } from '../../domain/loyalty-policy';
+import { Tier } from '../../../domain/loyalty-policy';
 
 export interface GetLoyaltyAccountResult {
   readonly customerId: string;

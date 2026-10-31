@@ -1,23 +1,24 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import {
   CutoverReplayRunCommand,
+  CutoverReplayRunHandler,
   CutoverReplayRunResult,
-} from '../../application/commands/cutover-replay-run.command';
-import { CutoverReplayRunHandler } from '../../application/commands/cutover-replay-run.handler';
-import { StartBoundedReplayCommand } from '../../application/commands/start-bounded-replay.command';
-import { StartBoundedReplayHandler } from '../../application/commands/start-bounded-replay.handler';
+} from '../../application/commands/cutover-replay-run';
+import {
+  StartBoundedReplayCommand,
+  StartBoundedReplayHandler,
+} from '../../application/commands/start-bounded-replay';
 import {
   CompareReplayWithLiveHandler,
+  CompareReplayWithLiveQuery,
   CustomerLiveStagingComparisonDto,
-} from '../../application/queries/compare-replay-with-live.handler';
-import { CompareReplayWithLiveQuery } from '../../application/queries/compare-replay-with-live.query';
-import { GetReplayRunHandler } from '../../application/queries/get-replay-run.handler';
-import { GetReplayRunQuery } from '../../application/queries/get-replay-run.query';
+} from '../../application/queries/compare-replay-with-live';
+import { GetReplayRunHandler, GetReplayRunQuery } from '../../application/queries/get-replay-run';
 import {
   GetReplayStagingHandler,
+  GetReplayStagingQuery,
   StagingCustomerDto,
-} from '../../application/queries/get-replay-staging.handler';
-import { GetReplayStagingQuery } from '../../application/queries/get-replay-staging.query';
+} from '../../application/queries/get-replay-staging';
 import { ReplayRunResponseDto } from './dto/replay-run-response.dto';
 import { StartReplayDto } from './dto/start-replay.dto';
 
@@ -49,6 +50,7 @@ export class ReplayController {
         runId: dto?.runId,
         topic: dto?.topic,
         requiredStartOffsets,
+        simulateRetentionFailure: dto?.simulateRetentionFailure,
       }),
     );
 

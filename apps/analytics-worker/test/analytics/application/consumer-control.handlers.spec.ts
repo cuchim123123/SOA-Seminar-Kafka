@@ -1,17 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PauseAnalyticsConsumerCommand } from '../../../src/analytics/application/commands/pause-analytics-consumer.command';
-import { PauseAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/pause-analytics-consumer.handler';
-import { ResumeAnalyticsConsumerCommand } from '../../../src/analytics/application/commands/resume-analytics-consumer.command';
-import { ResumeAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/resume-analytics-consumer.handler';
+import {
+  PauseAnalyticsConsumerCommand,
+  PauseAnalyticsConsumerHandler,
+} from '../../../src/analytics/application/commands/pause-analytics-consumer';
+import {
+  ResumeAnalyticsConsumerCommand,
+  ResumeAnalyticsConsumerHandler,
+} from '../../../src/analytics/application/commands/resume-analytics-consumer';
 import { ConsumerControlPort } from '../../../src/analytics/application/ports/consumer-control.port';
-import { GetConsumerControlStatusHandler } from '../../../src/analytics/application/queries/get-consumer-control-status.handler';
-import { GetConsumerControlStatusQuery } from '../../../src/analytics/application/queries/get-consumer-control-status.query';
+import {
+  GetConsumerControlStatusHandler,
+  GetConsumerControlStatusQuery,
+} from '../../../src/analytics/application/queries/get-consumer-control-status';
 
 describe('Consumer Control Handlers', () => {
   it('PauseAnalyticsConsumerHandler invokes pause on control port', async () => {
     const mockControl: ConsumerControlPort = {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
+      pausePartition: vi.fn().mockResolvedValue(undefined),
+      resumePartition: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
       setProcessingDelay: vi.fn(),
       getProcessingDelay: vi.fn().mockReturnValue(0),
@@ -28,6 +36,8 @@ describe('Consumer Control Handlers', () => {
     const mockControl: ConsumerControlPort = {
       pause: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
+      pausePartition: vi.fn().mockResolvedValue(undefined),
+      resumePartition: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn(),
       setProcessingDelay: vi.fn(),
       getProcessingDelay: vi.fn().mockReturnValue(0),
@@ -52,6 +62,8 @@ describe('Consumer Control Handlers', () => {
     const mockControl: ConsumerControlPort = {
       pause: vi.fn(),
       resume: vi.fn(),
+      pausePartition: vi.fn().mockResolvedValue(undefined),
+      resumePartition: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockResolvedValue(mockStatus),
       setProcessingDelay: vi.fn(),
       getProcessingDelay: vi.fn().mockReturnValue(0),

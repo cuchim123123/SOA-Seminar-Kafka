@@ -3,7 +3,7 @@ import {
   SALES_SUMMARY_READ_DAO_PORT,
   SalesSummaryReadDaoPort,
   SalesSummaryReadModel,
-} from '../ports/sales-summary-read-dao.port';
+} from '../../ports/sales-summary-read-dao.port';
 import { GetSalesSummaryQuery } from './get-sales-summary.query';
 
 @Injectable()

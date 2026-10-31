@@ -3,8 +3,10 @@ import { deserializeEnvelope } from '@lab/contracts';
 import { processKafkaRecord, StructuredLogger } from '@lab/observability';
 import { Consumer, Kafka } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
-import { ApplySalesEventCommand } from '../../application/commands/apply-sales-event.command';
-import { ApplySalesEventHandler } from '../../application/commands/apply-sales-event.handler';
+import {
+  ApplySalesEventCommand,
+  ApplySalesEventHandler,
+} from '../../application/commands/apply-sales-event';
 import {
   ConsumerControlStatus,
   ConsumerControlPort,
@@ -50,7 +52,7 @@ export class KafkaAnalyticsConsumerAdapter
     await this.consumer.connect();
     await this.consumer.subscribe({
       topic: this.topic,
-      fromBeginning: true,
+      fromBeginning: this.config.kafkaFromBeginning,
     });
 
     this.logger.info('Analytics consumer subscribed and started message loop', {
@@ -129,6 +131,27 @@ export class KafkaAnalyticsConsumerAdapter
       topic: this.topic,
       groupId: this.config.kafkaGroupId,
     });
+  }
+
+  async pausePartition(partition: number): Promise<void> {
+    this.consumer.pause([{ topic: this.topic, partitions: [partition] }]);
+    this.logger.warn(`Analytics Kafka consumer PAUSED partition ${partition} by operator request`, {
+      topic: this.topic,
+      partition,
+      groupId: this.config.kafkaGroupId,
+    });
+  }
+
+  async resumePartition(partition: number): Promise<void> {
+    this.consumer.resume([{ topic: this.topic, partitions: [partition] }]);
+    this.logger.info(
+      `Analytics Kafka consumer RESUMED partition ${partition} by operator request`,
+      {
+        topic: this.topic,
+        partition,
+        groupId: this.config.kafkaGroupId,
+      },
+    );
   }
 
   setProcessingDelay(delayMs: number): void {

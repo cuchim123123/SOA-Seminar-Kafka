@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../../database/prisma.service';
 import { CutoverReplayRunCommand, CutoverReplayRunResult } from './cutover-replay-run.command';
 
 @Injectable()
@@ -20,7 +20,16 @@ export class CutoverReplayRunHandler {
       throw new NotFoundException(`Replay run '${runId}' not found`);
     }
 
-    if (run.status !== 'COMPLETED' && run.status !== 'CUTOVER_COMPLETED') {
+    if (run.status === 'CUTOVER_COMPLETED') {
+      return {
+        runId,
+        status: 'CUTOVER_COMPLETED',
+        appliedCustomersCount: 0,
+        cutoverAt: run.updatedAt ? run.updatedAt.toISOString() : new Date().toISOString(),
+      };
+    }
+
+    if (run.status !== 'COMPLETED') {
       throw new BadRequestException(
         `Cannot execute cutover for replay run '${runId}' with status '${run.status}'. Run must be COMPLETED.`,
       );
@@ -37,6 +46,15 @@ export class CutoverReplayRunHandler {
     return await this.prisma.$transaction(async (tx) => {
       let appliedCount = 0;
       for (const staged of stagedRecords) {
+        const existing = await tx.loyaltyAccount.findUnique({
+          where: { customerId: staged.customerId },
+        });
+
+        // Boundary guard: do not overwrite live state if customer has already progressed past replay snapshot
+        if (existing && existing.lastCustomerSequence > BigInt(staged.lastCustomerSequence)) {
+          continue;
+        }
+
         await tx.loyaltyAccount.upsert({
           where: { customerId: staged.customerId },
           create: {

@@ -2,7 +2,7 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   REPLAY_RUN_REPOSITORY_PORT,
   ReplayRunRepositoryPort,
-} from '../ports/replay-run-repository.port';
+} from '../../ports/replay-run-repository.port';
 import { GetReplayRunQuery } from './get-replay-run.query';
 
 export interface ReplayRunDetails {

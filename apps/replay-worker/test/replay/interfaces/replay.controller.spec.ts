@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CutoverReplayRunHandler } from '../../../src/replay/application/commands/cutover-replay-run.handler';
-import { StartBoundedReplayHandler } from '../../../src/replay/application/commands/start-bounded-replay.handler';
-import { CompareReplayWithLiveHandler } from '../../../src/replay/application/queries/compare-replay-with-live.handler';
-import { GetReplayRunHandler } from '../../../src/replay/application/queries/get-replay-run.handler';
-import { GetReplayStagingHandler } from '../../../src/replay/application/queries/get-replay-staging.handler';
+import { CutoverReplayRunHandler } from '../../../src/replay/application/commands/cutover-replay-run';
+import { StartBoundedReplayHandler } from '../../../src/replay/application/commands/start-bounded-replay';
+import { CompareReplayWithLiveHandler } from '../../../src/replay/application/queries/compare-replay-with-live';
+import { GetReplayRunHandler } from '../../../src/replay/application/queries/get-replay-run';
+import { GetReplayStagingHandler } from '../../../src/replay/application/queries/get-replay-staging';
 import { ReplayController } from '../../../src/replay/interfaces/http/replay.controller';
 
 describe('ReplayController', () => {

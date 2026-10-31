@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   REPLAY_STAGING_REPOSITORY_PORT,
   ReplayStagingRepositoryPort,
-} from '../ports/replay-staging-repository.port';
+} from '../../ports/replay-staging-repository.port';
 import { GetReplayStagingQuery } from './get-replay-staging.query';
 
 export interface StagingCustomerDto {

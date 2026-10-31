@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
 import { Consumer, Kafka } from 'kafkajs';
+import { deserializeEnvelope } from '@lab/contracts';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
   BoundedReplayScannerPort,
@@ -78,6 +79,7 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
             offsets: options.highWatermarks,
           });
 
+          let committed = false;
           try {
             await consumer.commitOffsets(
               targetPartitions.map((partition) => ({
@@ -86,6 +88,7 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
                 offset: options.highWatermarks[partition],
               })),
             );
+            committed = true;
           } catch (commitErr) {
             this.logger.warn(
               'consumer.commitOffsets encountered an error, falling back to admin.setOffsets',
@@ -97,23 +100,27 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
 
           await consumer.disconnect().catch(() => {});
 
-          const admin = this.kafka.admin();
-          await admin.connect();
-          try {
-            await admin.setOffsets({
-              groupId: options.groupId,
-              topic: options.topic,
-              partitions: targetPartitions.map((partition) => ({
-                partition,
-                offset: options.highWatermarks[partition],
-              })),
-            });
-          } catch (adminErr) {
-            this.logger.warn('admin.setOffsets fallback note', {
-              error: adminErr instanceof Error ? adminErr.message : String(adminErr),
-            });
-          } finally {
-            await admin.disconnect().catch(() => {});
+          if (!committed) {
+            const admin = this.kafka.admin();
+            await admin.connect();
+            try {
+              await admin.setOffsets({
+                groupId: options.groupId,
+                topic: options.topic,
+                partitions: targetPartitions.map((partition) => ({
+                  partition,
+                  offset: options.highWatermarks[partition],
+                })),
+              });
+              committed = true;
+            } catch (adminErr) {
+              this.logger.error('Failed to commit replay offsets via admin fallback', adminErr, {
+                groupId: options.groupId,
+              });
+              throw adminErr;
+            } finally {
+              await admin.disconnect().catch(() => {});
+            }
           }
 
           this.logger.info('Bounded replay scan finished successfully', {
@@ -132,13 +139,33 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
 
       const resetIdleTimeout = () => {
         if (idleTimeout) clearTimeout(idleTimeout);
-        // If no records received for 4 seconds and at least one record was processed or all partitions checked
+        // If no records received for 4 seconds, verify boundary satisfaction
         idleTimeout = setTimeout(() => {
-          this.logger.info('Idle timeout reached during bounded scan; finalizing run', {
-            groupId: options.groupId,
-            scannedCount,
-            donePartitions: Array.from(partitionDone),
-          });
+          const incompletePartitions = targetPartitions.filter((p) => !partitionDone.has(p));
+          if (incompletePartitions.length > 0) {
+            const errorMsg = `Bounded replay scan timed out before all partitions reached high watermarks. Incomplete partitions: [${incompletePartitions.join(', ')}]. Scanned count: ${scannedCount}.`;
+            this.logger.error(errorMsg, undefined, {
+              groupId: options.groupId,
+              incompletePartitions,
+              donePartitions: Array.from(partitionDone),
+              scannedCount,
+            });
+            if (!isCompleted) {
+              isCompleted = true;
+              void consumer.disconnect().catch(() => {});
+              reject(new Error(errorMsg));
+            }
+            return;
+          }
+
+          this.logger.info(
+            'Idle timeout reached during bounded scan with all boundaries satisfied; finalizing run',
+            {
+              groupId: options.groupId,
+              scannedCount,
+              donePartitions: Array.from(partitionDone),
+            },
+          );
           void finish();
         }, 4000);
       };
@@ -159,13 +186,13 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
                 let parsedValue: unknown = null;
                 if (message.value) {
                   try {
-                    parsedValue = JSON.parse(message.value.toString());
-                  } catch (parseError) {
-                    this.logger.warn('Skipping malformed message during replay scan', {
+                    parsedValue = deserializeEnvelope(message.value.toString());
+                  } catch (deserErr) {
+                    this.logger.warn('Skipping malformed or poison message during replay scan', {
                       topic,
                       partition,
                       offset: message.offset,
-                      error: parseError instanceof Error ? parseError.message : String(parseError),
+                      error: deserErr instanceof Error ? deserErr.message : String(deserErr),
                     });
                   }
                 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GetSalesSummaryHandler } from '../../../src/analytics/application/queries/get-sales-summary.handler';
+import { GetSalesSummaryHandler } from '../../../src/analytics/application/queries/get-sales-summary';
 import { AnalyticsController } from '../../../src/analytics/interfaces/http/analytics.controller';
 
 describe('AnalyticsController', () => {

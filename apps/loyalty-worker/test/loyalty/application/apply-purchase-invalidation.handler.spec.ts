@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApplyPurchaseInvalidationCommand } from '../../../src/loyalty/application/commands/apply-purchase-invalidation.command';
-import { ApplyPurchaseInvalidationHandler } from '../../../src/loyalty/application/commands/apply-purchase-invalidation.handler';
+import { ApplyPurchaseInvalidationCommand } from '../../../src/loyalty/application/commands/apply-purchase-invalidation/apply-purchase-invalidation.command';
+import { ApplyPurchaseInvalidationHandler } from '../../../src/loyalty/application/commands/apply-purchase-invalidation/apply-purchase-invalidation.handler';
 import { ConsumerIdempotencyRepositoryPort } from '../../../src/loyalty/application/ports/consumer-idempotency-repository.port';
 import { LoyaltyAccountRepositoryPort } from '../../../src/loyalty/application/ports/loyalty-account-repository.port';
 import {

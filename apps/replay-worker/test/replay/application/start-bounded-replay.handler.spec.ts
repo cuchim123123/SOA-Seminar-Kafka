@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { StartBoundedReplayCommand } from '../../../src/replay/application/commands/start-bounded-replay.command';
-import { StartBoundedReplayHandler } from '../../../src/replay/application/commands/start-bounded-replay.handler';
+import {
+  StartBoundedReplayCommand,
+  StartBoundedReplayHandler,
+} from '../../../src/replay/application/commands/start-bounded-replay';
 import { BoundedReplayScannerPort } from '../../../src/replay/application/ports/bounded-replay-scanner.port';
 import { ReplayRunRepositoryPort } from '../../../src/replay/application/ports/replay-run-repository.port';
 import { ReplayStagingRepositoryPort } from '../../../src/replay/application/ports/replay-staging-repository.port';

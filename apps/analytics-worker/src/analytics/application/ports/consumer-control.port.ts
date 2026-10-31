@@ -11,6 +11,8 @@ export const CONSUMER_CONTROL_PORT = Symbol('CONSUMER_CONTROL_PORT');
 export interface ConsumerControlPort {
   pause(): Promise<void>;
   resume(): Promise<void>;
+  pausePartition(partition: number): Promise<void>;
+  resumePartition(partition: number): Promise<void>;
   getStatus(): Promise<ConsumerControlStatus>;
   setProcessingDelay(delayMs: number): void;
   getProcessingDelay(): number;

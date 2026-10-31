@@ -1,6 +1,8 @@
 import { Controller, Get, Inject } from '@nestjs/common';
-import { GetSalesSummaryHandler } from '../../application/queries/get-sales-summary.handler';
-import { GetSalesSummaryQuery } from '../../application/queries/get-sales-summary.query';
+import {
+  GetSalesSummaryHandler,
+  GetSalesSummaryQuery,
+} from '../../application/queries/get-sales-summary';
 import { SalesSummaryResponseDto } from './dto/sales-summary-response.dto';
 
 @Controller(['api/v1/analytics', 'api/v1/demo'])

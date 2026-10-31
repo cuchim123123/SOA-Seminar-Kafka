@@ -2,8 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { validateEnv } from '../../src/config/env.validation';
 import { PrismaService } from '../../src/database/prisma.service';
-import { ApplySalesEventCommand } from '../../src/analytics/application/commands/apply-sales-event.command';
-import { ApplySalesEventHandler } from '../../src/analytics/application/commands/apply-sales-event.handler';
+import {
+  ApplySalesEventCommand,
+  ApplySalesEventHandler,
+} from '../../src/analytics/application/commands/apply-sales-event';
 import { PostgresAnalyticsUnitOfWorkAdapter } from '../../src/analytics/infrastructure/adapters/postgres-analytics-unit-of-work.adapter';
 import { PostgresSalesSummaryReadDaoAdapter } from '../../src/analytics/infrastructure/adapters/postgres-sales-summary-read-dao.adapter';
 

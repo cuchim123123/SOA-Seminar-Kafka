@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { LoyaltyAccount } from '../../domain/loyalty-account.entity';
+import { LoyaltyAccount } from '../../../domain/loyalty-account.entity';
 import {
   LOYALTY_UNIT_OF_WORK_PORT,
   LoyaltyUnitOfWorkPort,
-} from '../ports/loyalty-unit-of-work.port';
+} from '../../ports/loyalty-unit-of-work.port';
 import {
   ApplyPurchaseInvalidationCommand,
   ApplyPurchaseInvalidationResult,

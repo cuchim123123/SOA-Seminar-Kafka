@@ -9,6 +9,7 @@ export interface IAppConfig {
   readonly kafkaGroupId: string;
   readonly purchaseTopic: string;
   readonly databaseUrl: string;
+  readonly kafkaFromBeginning: boolean;
 }
 
 @Injectable()
@@ -43,5 +44,9 @@ export class AppConfigService implements IAppConfig {
 
   get databaseUrl(): string {
     return this.config.ANALYTICS_DATABASE_URL || this.config.DATABASE_URL;
+  }
+
+  get kafkaFromBeginning(): boolean {
+    return this.config.KAFKA_FROM_BEGINNING;
   }
 }

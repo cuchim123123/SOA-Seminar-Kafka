@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../../database/prisma.service';
 import { CompareReplayWithLiveQuery } from './compare-replay-with-live.query';
 
 export interface CustomerLiveStagingComparisonDto {

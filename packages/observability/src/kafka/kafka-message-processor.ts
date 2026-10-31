@@ -18,7 +18,7 @@ export interface ProcessKafkaRecordParams<T> {
  *
  * Guarantees:
  * 1. Single unified structured log entry per successfully processed record (no log scattering).
- * 2. Poison pill isolation: Corrupted or unparseable messages are diagnosed and skipped without killing consumer.
+ * 2. Poison pill isolation: Corrupted messages fail processing without advancing offsets.
  * 3. Offset safety: Transient or unhandled business errors are rethrown to KafkaJS, preventing premature offset commits.
  */
 export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>): Promise<void> {
@@ -36,14 +36,14 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
 
   // 1. Guard against empty payload
   if (!rawValue) {
-    logger.warn('Received empty message payload — skipping record', {
+    logger.warn('Received empty message payload — refusing offset commit', {
       topic,
       partition,
       offset,
       key,
       groupId: consumerGroupId,
     });
-    return;
+    throw new PoisonPillError('Empty Kafka payload');
   }
 
   const startTime = performance.now();
@@ -72,8 +72,8 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
       error: poisonError,
     });
 
-    // Non-retriable poison pill is isolated to prevent partition blockage.
-    return;
+    // Never acknowledge a record that could not be validated.
+    throw poisonError;
   }
 
   // 3. Execute business use-case handler with timing and resilience

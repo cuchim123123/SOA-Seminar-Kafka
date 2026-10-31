@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ApplyPurchaseEventHandler } from './application/commands/apply-purchase-event.handler';
-import { ApplyPurchaseInvalidationHandler } from './application/commands/apply-purchase-invalidation.handler';
+import { ApplyPurchaseEventHandler } from './application/commands/apply-purchase-event/apply-purchase-event.handler';
+import { ApplyPurchaseInvalidationHandler } from './application/commands/apply-purchase-invalidation/apply-purchase-invalidation.handler';
 import { LOYALTY_CONSUMER_CONTROL_PORT } from './application/ports/consumer-control.port';
 import { LOYALTY_ACCOUNT_READ_DAO_PORT } from './application/ports/loyalty-account-read-dao.port';
 import { LOYALTY_ACCOUNT_REPOSITORY_PORT } from './application/ports/loyalty-account-repository.port';
 import { LOYALTY_UNIT_OF_WORK_PORT } from './application/ports/loyalty-unit-of-work.port';
-import { GetLoyaltyAccountHandler } from './application/queries/get-loyalty-account.handler';
+import { GetLoyaltyAccountHandler } from './application/queries/get-loyalty-account/get-loyalty-account.handler';
 import { KafkaLoyaltyConsumerAdapter } from './infrastructure/adapters/kafka-loyalty-consumer.adapter';
 import { PostgresLoyaltyAccountReadDaoAdapter } from './infrastructure/adapters/postgres-loyalty-account-read-dao.adapter';
 import { PostgresLoyaltyAccountRepositoryAdapter } from './infrastructure/adapters/postgres-loyalty-account-repository.adapter';

@@ -12,8 +12,10 @@ import { AppModule } from '../../src/app.module';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { RAW_ENV_TOKEN } from '../../src/config/config.module';
 import { PrismaService } from '../../src/database/prisma.service';
-import { StartBoundedReplayCommand } from '../../src/replay/application/commands/start-bounded-replay.command';
-import { StartBoundedReplayHandler } from '../../src/replay/application/commands/start-bounded-replay.handler';
+import {
+  StartBoundedReplayCommand,
+  StartBoundedReplayHandler,
+} from '../../src/replay/application/commands/start-bounded-replay';
 import { InsufficientRetentionError } from '../../src/replay/domain/errors/insufficient-retention.error';
 
 describe('Retention Failure Reporting Integration Test (P5-04)', () => {
@@ -41,7 +43,7 @@ describe('Retention Failure Reporting Integration Test (P5-04)', () => {
         PURCHASE_TOPIC: 'purchase.events',
         LOYALTY_DATABASE_URL:
           process.env.LOYALTY_DATABASE_URL ||
-          'postgresql://postgres:postgres@localhost:5432/loyalty_db?schema=public',
+          'postgresql://postgres:postgres@localhost:5433/loyalty_db?schema=public',
       })
       .compile();
 

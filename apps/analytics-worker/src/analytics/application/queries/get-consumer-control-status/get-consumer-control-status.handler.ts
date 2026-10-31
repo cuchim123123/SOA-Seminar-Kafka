@@ -3,7 +3,7 @@ import {
   ConsumerControlStatus,
   CONSUMER_CONTROL_PORT,
   ConsumerControlPort,
-} from '../ports/consumer-control.port';
+} from '../../ports/consumer-control.port';
 import { GetConsumerControlStatusQuery } from './get-consumer-control-status.query';
 
 @Injectable()

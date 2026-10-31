@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   ANALYTICS_UNIT_OF_WORK_PORT,
   AnalyticsUnitOfWorkPort,
-} from '../ports/analytics-unit-of-work.port';
+} from '../../ports/analytics-unit-of-work.port';
 import { ApplySalesEventCommand, ApplySalesEventResult } from './apply-sales-event.command';
 
 @Injectable()

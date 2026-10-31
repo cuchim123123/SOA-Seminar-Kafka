@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   LOYALTY_ACCOUNT_READ_DAO_PORT,
   LoyaltyAccountReadDaoPort,
-} from '../ports/loyalty-account-read-dao.port';
+} from '../../ports/loyalty-account-read-dao.port';
 import { GetLoyaltyAccountQuery } from './get-loyalty-account.query';
 import { GetLoyaltyAccountResult } from './get-loyalty-account.result';
 

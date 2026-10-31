@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
-import { GetLoyaltyAccountHandler } from '../../../src/loyalty/application/queries/get-loyalty-account.handler';
+import { GetLoyaltyAccountHandler } from '../../../src/loyalty/application/queries/get-loyalty-account/get-loyalty-account.handler';
 import { LoyaltyAccount } from '../../../src/loyalty/domain/loyalty-account.entity';
 import { InMemoryLoyaltyAccountRepositoryAdapter } from '../../../src/loyalty/infrastructure/adapters/in-memory-loyalty-account-repository.adapter';
 import { LoyaltyController } from '../../../src/loyalty/interfaces/http/loyalty.controller';

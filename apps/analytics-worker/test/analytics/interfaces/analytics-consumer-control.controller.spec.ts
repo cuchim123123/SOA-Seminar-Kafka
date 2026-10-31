@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PauseAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/pause-analytics-consumer.handler';
-import { ResumeAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/resume-analytics-consumer.handler';
+import { PauseAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/pause-analytics-consumer';
+import { ResumeAnalyticsConsumerHandler } from '../../../src/analytics/application/commands/resume-analytics-consumer';
 import { ConsumerControlPort } from '../../../src/analytics/application/ports/consumer-control.port';
-import { GetConsumerControlStatusHandler } from '../../../src/analytics/application/queries/get-consumer-control-status.handler';
+import { GetConsumerControlStatusHandler } from '../../../src/analytics/application/queries/get-consumer-control-status';
 import { AnalyticsConsumerControlController } from '../../../src/analytics/interfaces/http/analytics-consumer-control.controller';
 
 describe('AnalyticsConsumerControlController', () => {
@@ -27,6 +27,8 @@ describe('AnalyticsConsumerControlController', () => {
     const mockConsumerControl = {
       setProcessingDelay: vi.fn(),
       getProcessingDelay: vi.fn().mockReturnValue(150),
+      pausePartition: vi.fn().mockResolvedValue(undefined),
+      resumePartition: vi.fn().mockResolvedValue(undefined),
     } as unknown as ConsumerControlPort;
 
     const controller = new AnalyticsConsumerControlController(
@@ -41,6 +43,14 @@ describe('AnalyticsConsumerControlController', () => {
 
     const resumeResult = await controller.resume();
     expect(resumeResult).toEqual({ status: 'resumed', isPaused: false });
+
+    const pausePartitionResult = await controller.pausePartition(2);
+    expect(mockConsumerControl.pausePartition).toHaveBeenCalledWith(2);
+    expect(pausePartitionResult).toEqual({ status: 'paused', partition: 2, isPaused: true });
+
+    const resumePartitionResult = await controller.resumePartition(2);
+    expect(mockConsumerControl.resumePartition).toHaveBeenCalledWith(2);
+    expect(resumePartitionResult).toEqual({ status: 'resumed', partition: 2, isPaused: false });
 
     const delayResult = await controller.setDelay({ delayMs: 150 });
     expect(mockConsumerControl.setProcessingDelay).toHaveBeenCalledWith(150);
