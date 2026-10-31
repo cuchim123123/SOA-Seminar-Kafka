@@ -1,3 +1,15 @@
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile('.env');
+  } catch {
+    try {
+      process.loadEnvFile('../../.env');
+    } catch {
+      // .env fallback ignored
+    }
+  }
+}
+
 import 'reflect-metadata';
 import {
   GlobalHttpExceptionFilter,

@@ -21,7 +21,7 @@ export class AppConfigService implements IAppConfig {
   }
 
   get port(): number {
-    return this.config.PORT;
+    return this.config.ANALYTICS_WORKER_PORT ?? this.config.PORT;
   }
 
   get kafkaBrokers(): string[] {
