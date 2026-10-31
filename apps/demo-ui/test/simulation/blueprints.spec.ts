@@ -44,7 +44,7 @@ describe('System Architecture Blueprints', () => {
     const enterprise = SYSTEM_BLUEPRINTS.find((b) => b.id === 'full-enterprise-production')!;
     expect(enterprise).toBeDefined();
     expect(enterprise.nodes.length).toBe(10);
-    expect(enterprise.edges.length).toBe(10);
+    expect(enterprise.edges.length).toBe(11);
 
     const engine = new SimEngine();
     const clonedNodes: SimCustomNode[] = JSON.parse(JSON.stringify(enterprise.nodes));

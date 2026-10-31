@@ -50,6 +50,8 @@ export class SimClusterOperations {
             cData.isPaused ||
             cData.status === 'PAUSED' ||
             cData.status === 'CRASHED' ||
+            cData.status === 'ERROR' ||
+            instance.currentProcessingPartition !== undefined ||
             cData.pausedPartitions?.includes(partitionId)
           ) {
             continue;
@@ -137,7 +139,10 @@ export class SimClusterOperations {
   ): boolean {
     const group = engine.consumerGroups.get(groupId);
     const partition = engine.kafkaCluster.getPartition('purchases', partitionId);
-    if (!group || !partition || group.isPartitionInFlight(partitionId)) return false;
+    if (!group || !partition) return false;
+
+    // Release partition lock so seek takes effect immediately
+    group.unlockPartition(partitionId);
 
     const target = Math.min(Math.max(0, nextOffset), partition.logEndOffset);
     group.seekNextOffset('purchases', partitionId, target);
@@ -166,8 +171,17 @@ export class SimClusterOperations {
     const topic = engine.kafkaCluster.topics.get('purchases');
     if (!group || !topic) return;
 
+    // Reset unlocks all partitions and clears error status on consumers in this group
+    group.unlockAllPartitions();
+    for (const memberId of group.members.keys()) {
+      const node = engine.nodes.get(memberId);
+      if (node && node.data.kind === 'consumer' && node.data.status === 'ERROR') {
+        node.data.status = 'POLLING';
+        node.data.statusText = undefined;
+      }
+    }
+
     for (const [pId, part] of topic.partitions.entries()) {
-      if (group.isPartitionInFlight(pId)) continue;
       const target = policy === 'earliest' ? 0 : part.logEndOffset;
       group.seekNextOffset('purchases', pId, target);
       if (policy === 'earliest') {

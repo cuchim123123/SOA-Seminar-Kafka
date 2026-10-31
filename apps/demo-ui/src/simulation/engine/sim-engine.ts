@@ -83,7 +83,16 @@ export class SimEngine {
       const pCount = (clusterNode.data.partitionCount as number) || 4;
       const rf = (clusterNode.data.replicationFactor as number) || 3;
       const minIsr = (clusterNode.data.minInsyncReplicas as number) || 2;
-      this.kafkaCluster.createTopic(topicName, pCount, rf, minIsr);
+      const existingTopic = this.kafkaCluster.topics.get(topicName);
+      if (!existingTopic) {
+        this.kafkaCluster.createTopic(topicName, pCount, rf, minIsr);
+      } else {
+        if (existingTopic.partitions.size !== pCount) {
+          this.kafkaCluster.setPartitionCount(topicName, pCount);
+        }
+        existingTopic.replicationFactor = rf;
+        existingTopic.minInsyncReplicas = minIsr;
+      }
     }
 
     // Synchronize consumer groups from topology
@@ -313,13 +322,16 @@ export class SimEngine {
 
   public notifyStateUpdated(): void {
     // Calculate live per-partition lag and attach to Kafka Cluster nodes
-    const primaryGroup = this.consumerGroups.get('loyalty-v1');
+    const primaryGroup =
+      this.consumerGroups.get('loyalty-v1') || Array.from(this.consumerGroups.values())[0];
     const topic = this.kafkaCluster.topics.get('purchases');
-    if (topic && primaryGroup) {
+    if (topic) {
       const partitionLags: Record<number, number> = {};
       const partitionLogEndOffsets: Record<number, number> = {};
       for (const [pId, part] of topic.partitions.entries()) {
-        partitionLags[pId] = primaryGroup.calculateLag('purchases', pId, part.logEndOffset);
+        partitionLags[pId] = primaryGroup
+          ? primaryGroup.calculateLag('purchases', pId, part.logEndOffset)
+          : 0;
         partitionLogEndOffsets[pId] = part.logEndOffset;
       }
 

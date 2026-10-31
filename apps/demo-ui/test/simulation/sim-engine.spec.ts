@@ -719,5 +719,98 @@ describe('Milestone 1 — Simulation Engine & Mechanics', () => {
       const consNode = engine.nodes.get('cons-1');
       expect(consNode?.data.status).toBe('ERROR');
     });
+
+    it('preserves topic records and monotonically advances offsets across re-renders and consecutive requests', () => {
+      const nodes: SimCustomNode[] = [
+        {
+          id: 'producer-1',
+          type: 'producerNode',
+          position: { x: 0, y: 0 },
+          data: {
+            id: 'producer-1',
+            kind: 'producer',
+            messageKey: 'U001',
+            targetTopic: 'purchases',
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'kafka-1',
+          type: 'kafkaClusterNode',
+          position: { x: 200, y: 0 },
+          data: {
+            id: 'kafka-1',
+            kind: 'kafka-cluster',
+            activeTopic: 'purchases',
+            partitionCount: 2,
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'cons-1',
+          type: 'consumerNode',
+          position: { x: 400, y: 0 },
+          data: {
+            id: 'cons-1',
+            kind: 'consumer',
+            groupId: 'loyalty-v1',
+            subscribedTopic: 'purchases',
+            assignedPartitions: [0, 1],
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'db-1',
+          type: 'databaseNode',
+          position: { x: 600, y: 0 },
+          data: { id: 'db-1', kind: 'database' } as SimCustomNode['data'],
+        },
+      ];
+      const edges: SimCustomEdge[] = [
+        {
+          id: 'e-pk',
+          source: 'producer-1',
+          target: 'kafka-1',
+          type: 'simFlowEdge',
+        } as SimCustomEdge,
+        { id: 'e-kc', source: 'kafka-1', target: 'cons-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e-cd', source: 'cons-1', target: 'db-1', type: 'simFlowEdge' } as SimCustomEdge,
+      ];
+
+      engine.setTopology(nodes, edges);
+      engine.clock.start();
+
+      // Dispatch request 1
+      engine.dispatchProducerMessage('producer-1', 'U001');
+
+      // Drain queue for request 1
+      let safety = 20;
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        engine.step();
+      }
+
+      const dbNode = engine.nodes.get('db-1');
+      expect(dbNode?.data.committedRecordCount).toBe(1);
+
+      // Re-call setTopology (simulating React node drag or UI re-render)
+      engine.setTopology(nodes, edges);
+
+      // Verify records and LEO were NOT wiped to 0!
+      const targetP = engine.kafkaCluster.routeKeyToPartition('purchases', 'U001');
+      const partition = engine.kafkaCluster.getPartition('purchases', targetP);
+      expect(partition?.logEndOffset).toBe(1);
+      expect(partition?.records.length).toBe(1);
+
+      // Dispatch request 2
+      engine.dispatchProducerMessage('producer-1', 'U001');
+
+      // Drain queue for request 2
+      safety = 20;
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        engine.step();
+      }
+
+      // Request 2 must NOT stall at broker! It must reach database as 2nd committed record!
+      expect(dbNode?.data.committedRecordCount).toBe(2);
+      expect(partition?.logEndOffset).toBe(2);
+      expect(partition?.records.length).toBe(2);
+    });
   });
 });

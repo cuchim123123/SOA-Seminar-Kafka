@@ -10,7 +10,7 @@ export const enterpriseProductionBlueprint: SystemBlueprint = {
   icon: '🏢',
   complexity: 'Enterprise',
   nodeCount: 10,
-  edgeCount: 10,
+  edgeCount: 11,
   description:
     'The complete end-to-end resilient architecture with dual-write prevention via Transactional Outbox, asynchronous Debezium CDC streaming to a 3-broker KRaft cluster, multi-group consumption (scaled 2-node Loyalty Fleet + independent Sales Analytics), dead-letter queue isolation for poison pills, and dual database sinks.',
   highlights: [
@@ -248,6 +248,13 @@ export const enterpriseProductionBlueprint: SystemBlueprint = {
     {
       id: 'edge-loyalty-1-dlq',
       source: 'node-consumer-loyalty-1',
+      target: 'node-dlq-1',
+      type: 'simFlowEdge',
+      data: { portType: 'dlq-route' },
+    },
+    {
+      id: 'edge-loyalty-2-dlq',
+      source: 'node-consumer-loyalty-2',
       target: 'node-dlq-1',
       type: 'simFlowEdge',
       data: { portType: 'dlq-route' },
