@@ -183,18 +183,19 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
             if (offset < hw) {
               scannedCount += 1;
               if (options.onRecord) {
+                if (!message.value) {
+                  throw new Error(
+                    `Empty or null record encountered during replay scan at ${topic}[${partition}] offset ${message.offset}. Replay requires complete envelope history.`,
+                  );
+                }
+
                 let parsedValue: unknown = null;
-                if (message.value) {
-                  try {
-                    parsedValue = deserializeEnvelope(message.value.toString());
-                  } catch (deserErr) {
-                    this.logger.warn('Skipping malformed or poison message during replay scan', {
-                      topic,
-                      partition,
-                      offset: message.offset,
-                      error: deserErr instanceof Error ? deserErr.message : String(deserErr),
-                    });
-                  }
+                try {
+                  parsedValue = deserializeEnvelope(message.value.toString());
+                } catch (deserErr) {
+                  const errMsg = `Malformed envelope during replay scan at ${topic}[${partition}] offset ${message.offset}: ${deserErr instanceof Error ? deserErr.message : String(deserErr)}`;
+                  this.logger.error(errMsg, deserErr);
+                  throw new Error(errMsg);
                 }
 
                 await options.onRecord({

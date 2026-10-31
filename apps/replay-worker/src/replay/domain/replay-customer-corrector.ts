@@ -79,6 +79,19 @@ export class ReplayCustomerCorrector {
         (a, b) => a.customerSequence - b.customerSequence,
       );
 
+      // Validate sequence continuity without gaps
+      let expectedSequence: number | null = null;
+      for (const event of sortedEvents) {
+        if (expectedSequence === null) {
+          expectedSequence = event.customerSequence;
+        } else if (event.customerSequence !== expectedSequence) {
+          throw new Error(
+            `Sequence discontinuity detected for customer ${customerId}: expected sequence ${expectedSequence}, but got ${event.customerSequence}. Replay cannot guarantee complete history.`,
+          );
+        }
+        expectedSequence++;
+      }
+
       let eligibleSpendCents = 0;
       let totalPoints = 0;
       let currentTier: Tier = 'BRONZE';

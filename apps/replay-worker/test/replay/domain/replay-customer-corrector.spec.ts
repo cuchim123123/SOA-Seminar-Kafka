@@ -158,4 +158,36 @@ describe('ReplayCustomerCorrector (P5-03)', () => {
     expect(custA?.points).toBe(0n); // PA_1 was invalidated
     expect(custB?.points).toBe(10n); // PB_1 is valid (10,000 / 1,000 * 1 = 10)
   });
+
+  it('throws an error if there is a customer sequence gap', () => {
+    const events: ReplayInputEvent[] = [
+      {
+        eventType: 'PurchaseCompleted',
+        aggregateId: 'U001',
+        customerSequence: 1,
+        payload: {
+          customerId: 'U001',
+          purchaseId: 'P001',
+          amountCents: 10000,
+        },
+      },
+      {
+        eventType: 'PurchaseCompleted',
+        aggregateId: 'U001',
+        customerSequence: 3, // Missing sequence 2!
+        payload: {
+          customerId: 'U001',
+          purchaseId: 'P003',
+          amountCents: 10000,
+        },
+      },
+    ];
+
+    expect(() =>
+      ReplayCustomerCorrector.executeTwoPassCorrection({
+        runId: 'run-gap',
+        events,
+      }),
+    ).toThrow('Sequence discontinuity detected for customer U001: expected sequence 2, but got 3');
+  });
 });

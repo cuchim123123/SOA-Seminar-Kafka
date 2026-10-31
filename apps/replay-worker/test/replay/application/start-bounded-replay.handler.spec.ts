@@ -330,4 +330,68 @@ describe('StartBoundedReplayHandler', () => {
     expect(result.status).toBe('COMPLETED');
     expect(mockScanner.scanBoundedTopic).toHaveBeenCalledTimes(1);
   });
+
+  it('fails the run if a record envelope is malformed or null during bounded scan', async () => {
+    const savedRuns: ReplayRun[] = [];
+
+    const mockRepo: ReplayRunRepositoryPort = {
+      save: vi.fn().mockImplementation(async (run: ReplayRun) => {
+        savedRuns.push(run);
+      }),
+      findById: vi.fn(),
+      findLatest: vi.fn(),
+    };
+
+    const mockStagingRepo: ReplayStagingRepositoryPort = {
+      upsertRecord: vi.fn(),
+      findByRunId: vi.fn(),
+    };
+
+    const mockBoundaryInspector: TopicBoundaryInspectorPort = {
+      getTopicBoundaries: vi.fn().mockResolvedValue({
+        topic: 'purchase.events',
+        startOffsets: { 0: '0' },
+        highWatermarks: { 0: '1' },
+      }),
+    };
+
+    const mockScanner: BoundedReplayScannerPort = {
+      scanBoundedTopic: vi.fn().mockImplementation(async (options) => {
+        if (options.onRecord) {
+          // Pass a null or malformed record value
+          await options.onRecord({
+            topic: options.topic,
+            partition: 0,
+            offset: '0',
+            key: 'U001',
+            timestamp: '100',
+            value: null,
+          });
+        }
+        return {
+          scannedCount: 1,
+          finalCommittedOffsets: options.highWatermarks,
+        };
+      }),
+    };
+
+    const handler = new StartBoundedReplayHandler(
+      mockRepo,
+      mockStagingRepo,
+      mockBoundaryInspector,
+      mockScanner,
+    );
+
+    await expect(
+      handler.execute(
+        new StartBoundedReplayCommand({
+          runId: 'corrupted-run',
+        }),
+      ),
+    ).rejects.toThrow('Malformed or null record envelope');
+
+    const lastSaved = savedRuns[savedRuns.length - 1];
+    expect(lastSaved.status).toBe('FAILED');
+    expect(lastSaved.errorMessage).toContain('Malformed or null record envelope');
+  });
 });

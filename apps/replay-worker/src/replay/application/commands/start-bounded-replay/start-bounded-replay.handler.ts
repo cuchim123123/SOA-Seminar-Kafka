@@ -133,32 +133,42 @@ export class StartBoundedReplayHandler {
         onRecord: async (record) => {
           run.recordScan(1);
 
-          if (record.value && typeof record.value === 'object') {
-            const env = record.value as Record<string, unknown>;
-            const eventType = String(env.eventType || '');
-            const aggregateId = String(env.aggregateId || record.key || '');
-            const customerSequence =
-              typeof env.customerSequence === 'number'
-                ? env.customerSequence
-                : Number(env.customerSequence || 0);
-            const payload = (
-              env.payload && typeof env.payload === 'object' ? env.payload : {}
-            ) as Record<string, unknown>;
-
-            scannedEvents.push({
-              eventId: typeof env.eventId === 'string' ? env.eventId : undefined,
-              eventType,
-              aggregateId,
-              customerSequence,
-              payload: {
-                customerId: payload.customerId ? String(payload.customerId) : aggregateId,
-                purchaseId: payload.purchaseId ? String(payload.purchaseId) : undefined,
-                amountCents:
-                  typeof payload.amountCents === 'number' ? payload.amountCents : undefined,
-                reason: payload.reason ? String(payload.reason) : undefined,
-              },
-            });
+          if (!record.value || typeof record.value !== 'object') {
+            throw new Error(
+              `Malformed or null record envelope received at partition ${record.partition}, offset ${record.offset}. Replay requires complete valid event envelopes.`,
+            );
           }
+
+          const env = record.value as Record<string, unknown>;
+          const eventType = String(env.eventType || '');
+          const aggregateId = String(env.aggregateId || record.key || '');
+          const customerSequence =
+            typeof env.customerSequence === 'number'
+              ? env.customerSequence
+              : Number(env.customerSequence || 0);
+          const payload = (
+            env.payload && typeof env.payload === 'object' ? env.payload : {}
+          ) as Record<string, unknown>;
+
+          if (!eventType || !aggregateId || customerSequence <= 0) {
+            throw new Error(
+              `Invalid event envelope at partition ${record.partition}, offset ${record.offset}: missing eventType, aggregateId, or invalid customerSequence (${customerSequence}). Replay cannot proceed with corrupted history.`,
+            );
+          }
+
+          scannedEvents.push({
+            eventId: typeof env.eventId === 'string' ? env.eventId : undefined,
+            eventType,
+            aggregateId,
+            customerSequence,
+            payload: {
+              customerId: payload.customerId ? String(payload.customerId) : aggregateId,
+              purchaseId: payload.purchaseId ? String(payload.purchaseId) : undefined,
+              amountCents:
+                typeof payload.amountCents === 'number' ? payload.amountCents : undefined,
+              reason: payload.reason ? String(payload.reason) : undefined,
+            },
+          });
         },
       });
 
