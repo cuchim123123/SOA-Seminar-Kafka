@@ -54,8 +54,8 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
           <div className={`badge-mono ${health.analytics ? 'badge-emerald' : 'badge-crimson'}`}>
             <span>Analytics:3002</span> {health.analytics ? '●' : '✕'}
           </div>
-          <div className={`badge-mono ${health.publisher ? 'badge-emerald' : 'badge-crimson'}`}>
-            <span>Publisher:3003</span> {health.publisher ? '●' : '✕'}
+          <div className={`badge-mono ${health.cdc ? 'badge-emerald' : 'badge-crimson'}`}>
+            <span>CDC :8083</span> {health.cdc ? '●' : '✕'}
           </div>
           <div className={`badge-mono ${health.replay ? 'badge-emerald' : 'badge-crimson'}`}>
             <span>Replay:3004</span> {health.replay ? '●' : '✕'}

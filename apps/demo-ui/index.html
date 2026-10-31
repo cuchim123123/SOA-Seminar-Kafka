@@ -16,7 +16,39 @@
     />
   </head>
   <body>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          if (registrations.length > 0) {
+            Promise.all(registrations.map(function(r) { return r.unregister(); })).then(function() {
+              window.location.reload();
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var i = 0; i < names.length; i++) {
+            caches.delete(names[i]);
+          }
+        });
+      }
+    </script>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.createElement('div');
+        el.style.cssText = 'background:#ef4444;color:#fff;padding:20px;font-family:monospace;white-space:pre-wrap;position:fixed;top:0;left:0;right:0;z-index:999999;';
+        el.textContent = 'Early Script Error: ' + (e.message || e.error) + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '\n' + (e.error ? e.error.stack : '');
+        document.body.appendChild(el);
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.createElement('div');
+        el.style.cssText = 'background:#f59e0b;color:#000;padding:20px;font-family:monospace;white-space:pre-wrap;position:fixed;bottom:0;left:0;right:0;z-index:999999;';
+        el.textContent = 'Unhandled Rejection: ' + (e.reason ? (e.reason.stack || e.reason) : e);
+        document.body.appendChild(el);
+      });
+    </script>
+    <script type="module" src="/src/entry.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,712 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
+import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
+import { SimEngine } from '../engine/sim-engine';
+import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-registry';
+import { SimConsumerGroupModel } from '../domain/consumer-group';
+import type {
+  SimCustomNode,
+  SimCustomEdge,
+  ComponentKind,
+  SimProducerAcks,
+  SimCommitMode,
+  SimOffsetResetPolicy,
+} from '../domain/types';
+import type { SimEvent } from '../domain/events';
+import { SYSTEM_BLUEPRINTS } from '../blueprints/systemBlueprints';
+
+let nextNodeId = 1;
+
+export function useSimulationStore() {
+  const engineRef = useRef<SimEngine>(new SimEngine());
+  const engine = engineRef.current;
+
+  const [nodes, setNodes] = useState<SimCustomNode[]>([]);
+  const [edges, setEdges] = useState<SimCustomEdge[]>([]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [activeBlueprintId, setActiveBlueprintId] = useState<string>('full-enterprise-production');
+  const [eventLog, setEventLog] = useState<SimEvent[]>([]);
+  const [virtualTimeMs, setVirtualTimeMs] = useState<number>(0);
+  const [playbackStatus, setPlaybackStatus] = useState<'STOPPED' | 'RUNNING' | 'PAUSED'>('STOPPED');
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1.0);
+  const [inFlightTokens, setInFlightTokens] = useState(engine.inFlightTokens);
+  const [mechanicsConfig, setMechanicsConfig] = useState({ ...engine.mechanicsConfig });
+
+  // Sync engine state to React
+  const syncFromEngine = useCallback(() => {
+    setVirtualTimeMs(engine.clock.virtualTimeMs);
+    setPlaybackStatus(engine.clock.status);
+    setSpeedMultiplier(engine.clock.speedMultiplier);
+    setEventLog([...engine.eventLog]);
+    setInFlightTokens([...engine.inFlightTokens]);
+    setMechanicsConfig({ ...engine.mechanicsConfig });
+  }, [engine]);
+
+  // Animation frame loop when simulation is running
+  useEffect(() => {
+    let animId: number;
+    let lastRealTime = performance.now();
+
+    const loop = (currentTime: number) => {
+      const deltaMs = currentTime - lastRealTime;
+      lastRealTime = currentTime;
+
+      if (engine.clock.status === 'RUNNING') {
+        engine.tick(deltaMs);
+        syncFromEngine();
+      }
+
+      animId = requestAnimationFrame(loop);
+    };
+
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [engine, syncFromEngine]);
+
+  // Sync topology to engine whenever nodes or edges change
+  useEffect(() => {
+    engine.setTopology(nodes, edges);
+  }, [nodes, edges, engine]);
+
+  // Node & Edge changes from React Flow
+  const onNodesChange = useCallback((changes: NodeChange<SimCustomNode>[]) => {
+    setNodes((nds) => applyNodeChanges(changes, nds));
+  }, []);
+
+  const onEdgesChange = useCallback((changes: EdgeChange<SimCustomEdge>[]) => {
+    setEdges((eds) => applyEdgeChanges(changes, eds));
+  }, []);
+
+  // Wire connection validation and creation
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+
+      if (!sourceNode || !targetNode) return;
+
+      const isValid = isValidConnection(sourceNode.data.kind, targetNode.data.kind);
+      if (!isValid) {
+        alert(
+          `Invalid connection: Cannot wire ${sourceNode.data.title} (${sourceNode.data.kind}) to ${targetNode.data.title} (${targetNode.data.kind}).`,
+        );
+        return;
+      }
+
+      const newEdge: SimCustomEdge = {
+        id: `edge-${connection.source}-${connection.target}`,
+        source: connection.source,
+        target: connection.target,
+        type: 'simFlowEdge',
+        data: {
+          portType:
+            sourceNode.data.kind === 'producer'
+              ? 'publish'
+              : sourceNode.data.kind === 'kafka-cluster'
+                ? 'dispatch'
+                : 'handler-action',
+        },
+      };
+
+      setEdges((eds) => [...eds, newEdge]);
+    },
+    [nodes],
+  );
+
+  // Add node from Palette drag-and-drop
+  const addNodeFromPalette = useCallback(
+    (kind: ComponentKind, position: { x: number; y: number }) => {
+      const def = COMPONENT_REGISTRY.find((c) => c.kind === kind);
+      if (!def) return;
+
+      nextNodeId += 1;
+      const id = `node-${kind}-${nextNodeId}`;
+
+      let nodeType = `${kind}Node`;
+      if (kind === 'kafka-cluster') nodeType = 'kafkaClusterNode';
+      if (kind === 'dead-letter-queue') nodeType = 'deadLetterQueueNode';
+      if (kind === 'outbox-table') nodeType = 'outboxTableNode';
+      if (kind === 'cdc-relay') nodeType = 'cdcRelayNode';
+
+      const newNode: SimCustomNode = {
+        id,
+        type: nodeType,
+        position,
+        data: {
+          ...def.defaultData,
+          id,
+          kind,
+        } as unknown as SimCustomNode['data'],
+      };
+
+      setNodes((nds) => [...nds, newNode]);
+      setSelectedNodeId(id);
+    },
+    [],
+  );
+
+  // Duplicate a node with context-aware connection replication for consumers
+  const duplicateNode = useCallback(
+    (nodeId: string) => {
+      const sourceNode = nodes.find((n) => n.id === nodeId);
+      if (!sourceNode) return;
+
+      nextNodeId += 1;
+      const newId = `node-${sourceNode.data.kind}-${nextNodeId}`;
+      const newPos = { x: sourceNode.position.x + 40, y: sourceNode.position.y + 40 };
+
+      const newNode: SimCustomNode = {
+        id: newId,
+        type: sourceNode.type,
+        position: newPos,
+        data: {
+          ...sourceNode.data,
+          id: newId,
+          title: `${sourceNode.data.title} #${nextNodeId}`,
+        } as unknown as SimCustomNode['data'],
+      };
+
+      // Context-aware replication: if duplicating a consumer, replicate inbound wire from Kafka
+      const newEdges: SimCustomEdge[] = [];
+      if (sourceNode.data.kind === 'consumer') {
+        const inboundWire = edges.find((e) => e.target === nodeId);
+        if (inboundWire) {
+          newEdges.push({
+            id: `edge-${inboundWire.source}-${newId}`,
+            source: inboundWire.source,
+            target: newId,
+            type: 'simFlowEdge',
+            data: { portType: 'dispatch' },
+          });
+        }
+        const outboundWire = edges.find((e) => e.source === nodeId);
+        if (outboundWire) {
+          newEdges.push({
+            id: `edge-${newId}-${outboundWire.target}`,
+            source: newId,
+            target: outboundWire.target,
+            type: 'simFlowEdge',
+            data: { portType: 'handler-action' },
+          });
+        }
+      }
+
+      setNodes((nds) => [...nds, newNode]);
+      if (newEdges.length > 0) {
+        setEdges((eds) => [...eds, ...newEdges]);
+      }
+      setSelectedNodeId(newId);
+    },
+    [nodes, edges],
+  );
+
+  // Delete node and clean up connected edges
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      if (selectedNodeId === nodeId) {
+        setSelectedNodeId(null);
+      }
+    },
+    [selectedNodeId],
+  );
+
+  // Update node data from Inspector
+  const updateNodeData = useCallback(
+    (nodeId: string, partial: Record<string, unknown>) => {
+      // 1. Sync engine node representation
+      const engineNode = engine.nodes.get(nodeId);
+      if (engineNode) {
+        engineNode.data = { ...engineNode.data, ...partial };
+
+        // If groupId changed on a consumer node, migrate consumer groups in engine
+        if (engineNode.data.kind === 'consumer' && partial.groupId) {
+          const newGroupId = partial.groupId as string;
+          const topic = engine.kafkaCluster.topics.get('purchases');
+          const pCount = topic ? topic.partitions.size : 4;
+
+          // Unregister from old groups
+          for (const g of engine.consumerGroups.values()) {
+            if (g.groupId !== newGroupId) {
+              g.unregisterConsumer(nodeId);
+              g.rebalance(pCount);
+            }
+          }
+
+          // Register in new group
+          let targetGroup = engine.consumerGroups.get(newGroupId);
+          if (!targetGroup) {
+            targetGroup = new SimConsumerGroupModel(newGroupId);
+            engine.consumerGroups.set(newGroupId, targetGroup);
+          }
+          targetGroup.registerConsumer(
+            nodeId,
+            (engineNode.data.processingDelayMs as number) || 120,
+          );
+          targetGroup.rebalance(pCount);
+        }
+      }
+
+      // 2. Sync React Flow nodes
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === nodeId) {
+            return {
+              ...n,
+              data: { ...n.data, ...partial },
+            };
+          }
+          return n;
+        }),
+      );
+
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  // Simulation Playback Controls
+  const play = useCallback(() => {
+    engine.clock.start();
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const pause = useCallback(() => {
+    engine.clock.pause();
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const step = useCallback(() => {
+    engine.step();
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const reset = useCallback(() => {
+    engine.reset();
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const setSpeed = useCallback(
+    (multiplier: number) => {
+      engine.clock.setSpeed(multiplier);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  // Dispatch message from Producer
+  const dispatchMessage = useCallback(
+    (producerId?: string, customKey?: string) => {
+      const pNode = producerId
+        ? nodes.find((n) => n.id === producerId)
+        : nodes.find((n) => n.data.kind === 'producer');
+
+      if (!pNode) {
+        alert('Please add a Producer to the canvas first.');
+        return;
+      }
+
+      engine.dispatchProducerMessage(pNode.id, customKey);
+      syncFromEngine();
+    },
+    [nodes, engine, syncFromEngine],
+  );
+
+  const setTopicPartitionCount = useCallback(
+    (count: number) => {
+      engine.kafkaCluster.setPartitionCount('purchases', count);
+      // Rebalance all consumer groups
+      for (const group of engine.consumerGroups.values()) {
+        group.rebalance(count);
+      }
+      // Sync to nodes
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.data.kind === 'kafka-cluster') {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                partitionCount: count,
+              },
+            };
+          }
+          if (n.data.kind === 'consumer') {
+            const groupId = (n.data.groupId as string) || 'loyalty-v1';
+            const group = engine.consumerGroups.get(groupId);
+            const member = group?.members.get(n.id);
+            const partitions = member?.assignedPartitions || [];
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                assignedPartitions: [...partitions],
+                status: partitions.length > 0 ? 'POLLING' : 'IDLE',
+              },
+            };
+          }
+          return n;
+        }),
+      );
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const setAssignorStrategy = useCallback(
+    (strategy: 'round-robin' | 'range') => {
+      for (const group of engine.consumerGroups.values()) {
+        group.setAssignorStrategy(strategy);
+        const topic = engine.kafkaCluster.topics.get('purchases');
+        const pCount = topic ? topic.partitions.size : 4;
+        group.rebalance(pCount);
+      }
+      // Sync to nodes
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.data.kind === 'consumer') {
+            const groupId = (n.data.groupId as string) || 'loyalty-v1';
+            const group = engine.consumerGroups.get(groupId);
+            const member = group?.members.get(n.id);
+            const partitions = member?.assignedPartitions || [];
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                assignedPartitions: [...partitions],
+                status: partitions.length > 0 ? 'POLLING' : 'IDLE',
+              },
+            };
+          }
+          return n;
+        }),
+      );
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  // Load architectural blueprint onto canvas
+  const loadBlueprint = useCallback(
+    (blueprintId: string) => {
+      const blueprint = SYSTEM_BLUEPRINTS.find((b) => b.id === blueprintId);
+      if (!blueprint) return;
+
+      // Deep clone nodes and edges to ensure fresh state
+      const clonedNodes: SimCustomNode[] = JSON.parse(JSON.stringify(blueprint.nodes));
+      const clonedEdges: SimCustomEdge[] = JSON.parse(JSON.stringify(blueprint.edges));
+
+      setNodes(clonedNodes);
+      setEdges(clonedEdges);
+      setSelectedNodeId(null);
+      setActiveBlueprintId(blueprintId);
+
+      engine.reset();
+      engine.setTopology(clonedNodes, clonedEdges);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  // Load default Starter Graph (Full Enterprise Production System)
+  const loadDefaultGraph = useCallback(() => {
+    loadBlueprint('full-enterprise-production');
+  }, [loadBlueprint]);
+
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
+
+  const crashBroker = useCallback(
+    (brokerId: number) => {
+      engine.crashBroker(brokerId);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const reviveBroker = useCallback(
+    (brokerId: number) => {
+      engine.reviveBroker(brokerId);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const crashConsumer = useCallback(
+    (consumerId: string) => {
+      engine.crashConsumer(consumerId);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const reviveConsumer = useCallback(
+    (consumerId: string) => {
+      engine.reviveConsumer(consumerId);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const togglePauseConsumer = useCallback(
+    (consumerId: string) => {
+      const node = engine.nodes.get(consumerId);
+      if (node && node.data.kind === 'consumer') {
+        const cData = node.data as unknown as { isPaused?: boolean; status: string };
+        cData.isPaused = !cData.isPaused;
+        cData.status = cData.isPaused ? 'PAUSED' : 'POLLING';
+      }
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === consumerId) {
+            const current = Boolean((n.data as unknown as { isPaused?: boolean }).isPaused);
+            const next = !current;
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                isPaused: next,
+                status: next ? 'PAUSED' : 'POLLING',
+              },
+            };
+          }
+          return n;
+        }),
+      );
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const togglePauseConsumerPartition = useCallback(
+    (consumerId: string, partitionId: number) => {
+      const node = engine.nodes.get(consumerId);
+      if (node && node.data.kind === 'consumer') {
+        const cData = node.data as unknown as { pausedPartitions?: number[] };
+        const current = cData.pausedPartitions || [];
+        cData.pausedPartitions = current.includes(partitionId)
+          ? current.filter((p) => p !== partitionId)
+          : [...current, partitionId];
+      }
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === consumerId) {
+            const cData = n.data as unknown as { pausedPartitions?: number[] };
+            const current = cData.pausedPartitions || [];
+            const next = current.includes(partitionId)
+              ? current.filter((p) => p !== partitionId)
+              : [...current, partitionId];
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                pausedPartitions: next,
+              },
+            };
+          }
+          return n;
+        }),
+      );
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const createClusterTopic = useCallback(
+    (
+      clusterNodeId: string,
+      topicName: string,
+      partitionCount: number = 4,
+      replicationFactor: number = 3,
+    ) => {
+      engine.kafkaCluster.createTopic(topicName, partitionCount, replicationFactor);
+      const allTopics = Array.from(engine.kafkaCluster.topics.keys());
+      updateNodeData(clusterNodeId, {
+        topicsList: allTopics,
+        activeTopic: topicName,
+        partitionCount,
+      });
+      syncFromEngine();
+    },
+    [engine, updateNodeData, syncFromEngine],
+  );
+
+  const setActiveClusterTopic = useCallback(
+    (clusterNodeId: string, topicName: string) => {
+      const topic = engine.kafkaCluster.topics.get(topicName);
+      if (!topic) return;
+      updateNodeData(clusterNodeId, {
+        activeTopic: topicName,
+        partitionCount: topic.partitions.size,
+      });
+      syncFromEngine();
+    },
+    [engine, updateNodeData, syncFromEngine],
+  );
+
+  // Global window listener for card action triggers
+  useEffect(() => {
+    const handleToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      if (customEvent.detail?.id) {
+        togglePauseConsumer(customEvent.detail.id);
+      }
+    };
+    window.addEventListener('sim:toggle-pause-consumer', handleToggle);
+    return () => window.removeEventListener('sim:toggle-pause-consumer', handleToggle);
+  }, [togglePauseConsumer]);
+
+  const dispatchPoisonPill = useCallback(() => {
+    const pNode = nodes.find((n) => n.data.kind === 'producer');
+    if (!pNode) {
+      alert('Please add a Producer to the canvas first.');
+      return;
+    }
+    engine.dispatchProducerMessage(pNode.id, 'POISON_PILL');
+    syncFromEngine();
+  }, [nodes, engine, syncFromEngine]);
+
+  const setProducerAcks = useCallback(
+    (acks: SimProducerAcks) => {
+      engine.mechanicsConfig.producerAcks = acks;
+      setMechanicsConfig({ ...engine.mechanicsConfig });
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const setPartitioningStrategy = useCallback(
+    (strategy: 'murmur2-key' | 'round-robin') => {
+      engine.mechanicsConfig.partitioningStrategy = strategy;
+      engine.mechanicsConfig.keyOrderingMode =
+        strategy === 'round-robin' ? 'ROUND_ROBIN' : 'MURMUR2_KEYED';
+      setMechanicsConfig({ ...engine.mechanicsConfig });
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const toggleConsumerIdempotency = useCallback(() => {
+    engine.mechanicsConfig.consumerIdempotency = !engine.mechanicsConfig.consumerIdempotency;
+    setMechanicsConfig({ ...engine.mechanicsConfig });
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const toggleDlqRouting = useCallback(() => {
+    engine.mechanicsConfig.dlqRoutingEnabled = !engine.mechanicsConfig.dlqRoutingEnabled;
+    setMechanicsConfig({ ...engine.mechanicsConfig });
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+
+  const setCommitMode = useCallback(
+    (mode: SimCommitMode) => {
+      engine.setMechanicsConfig({ commitMode: mode });
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const setAutoOffsetReset = useCallback(
+    (policy: SimOffsetResetPolicy) => {
+      engine.setMechanicsConfig({ autoOffsetReset: policy });
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const seekPartitionOffset = useCallback(
+    (groupId: string, partitionId: number, nextOffset: number) => {
+      const ok = engine.seekPartitionOffset(groupId, partitionId, nextOffset);
+      syncFromEngine();
+      return ok;
+    },
+    [engine, syncFromEngine],
+  );
+
+  const resetGroupOffsets = useCallback(
+    (groupId: string, policy: SimOffsetResetPolicy) => {
+      engine.resetGroupOffsets(groupId, policy);
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const dispatchDuplicateMessage = useCallback(() => {
+    const pNode = nodes.find((n) => n.data.kind === 'producer');
+    if (!pNode) {
+      alert('Please add a Producer to the canvas first.');
+      return;
+    }
+    const customKey = (pNode.data.messageKey as string) || 'U001';
+    engine.dispatchDuplicateMessage(customKey);
+    syncFromEngine();
+  }, [nodes, engine, syncFromEngine]);
+
+  const dispatchOrderedBurst = useCallback(
+    (count = 5, customerId = 'U001') => {
+      const pNode = nodes.find((n) => n.data.kind === 'producer');
+      if (!pNode) {
+        alert('Please add a Producer to the canvas first.');
+        return;
+      }
+      engine.dispatchOrderedBurst(customerId, count);
+      syncFromEngine();
+    },
+    [nodes, engine, syncFromEngine],
+  );
+
+  return {
+    engine,
+    nodes,
+    edges,
+    selectedNode,
+    selectedNodeId,
+    eventLog,
+    virtualTimeMs,
+    playbackStatus,
+    speedMultiplier,
+    inFlightTokens,
+    mechanicsConfig,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNodeFromPalette,
+    duplicateNode,
+    deleteNode,
+    selectNode: setSelectedNodeId,
+    updateNodeData,
+    play,
+    pause,
+    step,
+    reset,
+    setSpeed,
+    dispatchMessage,
+    dispatchPoisonPill,
+    dispatchDuplicateMessage,
+    dispatchOrderedBurst,
+    setProducerAcks,
+    setPartitioningStrategy,
+    toggleConsumerIdempotency,
+    toggleDlqRouting,
+    setCommitMode,
+    setAutoOffsetReset,
+    seekPartitionOffset,
+    resetGroupOffsets,
+    loadDefaultGraph,
+    loadBlueprint,
+    blueprints: SYSTEM_BLUEPRINTS,
+    activeBlueprintId,
+    setTopicPartitionCount,
+    setAssignorStrategy,
+    crashBroker,
+    reviveBroker,
+    crashConsumer,
+    reviveConsumer,
+    togglePauseConsumer,
+    togglePauseConsumerPartition,
+    createClusterTopic,
+    setActiveClusterTopic,
+  };
+}

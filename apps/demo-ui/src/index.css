@@ -242,3 +242,34 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Ensure mouse cursor is crisp and visible across the React Flow workspace */
+.react-flow,
+.react-flow__renderer,
+.react-flow__pane {
+  cursor: default !important;
+}
+
+.react-flow__pane.dragging {
+  cursor: grabbing !important;
+}
+
+.react-flow__node {
+  cursor: grab !important;
+}
+
+.react-flow__node:active {
+  cursor: grabbing !important;
+}
+
+.react-flow__node input,
+.react-flow__node select,
+.react-flow__node button {
+  cursor: pointer !important;
+}
+
+.react-flow__node input[type="text"],
+.react-flow__node input[type="number"] {
+  cursor: text !important;
+}
+

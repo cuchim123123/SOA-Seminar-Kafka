@@ -47,12 +47,50 @@ export interface SalesSummaryDto {
   uniqueCustomerCount?: number;
 }
 
+export interface LoyaltyConsumerInstanceInfoDto {
+  instanceId: string;
+  clientId: string;
+  isPrimary: boolean;
+  status: 'RUNNING' | 'PAUSED' | 'KILLED' | 'STOPPED';
+  assignedPartitions: number[];
+}
+
 export interface ConsumerStatusDto {
   isPaused: boolean;
   groupId: string;
   topic: string;
   pausedPartitions?: number[];
   processingDelayMs?: number;
+  instanceCount?: number;
+  instances?: LoyaltyConsumerInstanceInfoDto[];
+  totalRebalanceCount?: number;
+}
+
+export interface ConsumerGroupMemberDto {
+  memberId: string;
+  clientId: string;
+  clientHost: string;
+  assignedPartitions: number[];
+}
+
+export interface ConsumerGroupDescriptionDto {
+  groupId: string;
+  state: 'Stable' | 'PreparingRebalance' | 'CompletingRebalance' | 'Dead' | 'Empty' | string;
+  protocol: string;
+  protocolType: string;
+  members: ConsumerGroupMemberDto[];
+}
+
+export interface RebalanceEventLogDto {
+  id: string;
+  timestamp: string;
+  eventType: 'REBALANCING' | 'GROUP_JOIN' | 'MEMBER_JOINED' | 'MEMBER_LEFT' | 'MEMBER_KILLED';
+  memberId: string;
+  clientId: string;
+  groupGenerationId?: number;
+  assignedPartitions?: number[];
+  durationMs?: number;
+  details: string;
 }
 
 export interface PurchaseBatchResponse {
@@ -149,8 +187,55 @@ export interface ServiceHealthStatus {
   producer: boolean;
   loyalty: boolean;
   analytics: boolean;
-  publisher: boolean;
+  cdc: boolean;
   replay: boolean;
+}
+
+export interface OutboxEventDto {
+  eventId: string;
+  aggregateId: string;
+  customerSequence: string;
+  eventType: string;
+  payload: Record<string, unknown> | string | unknown;
+  status: string;
+  attemptCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
+export interface HttpIdempotencyKeyDto {
+  customerId: string;
+  idempotencyKey: string;
+  requestFingerprint: string;
+  purchaseId: string;
+}
+
+export interface OutboxStatusDto {
+  totalCount: number;
+  events: OutboxEventDto[];
+  recentIdempotencyKeys: HttpIdempotencyKeyDto[];
+}
+
+export interface RollbackTestResultDto {
+  status: string;
+  simulatedFailureReason: string;
+  testCustomerId: string;
+  testPurchaseId: string;
+  persistedOutboxRows: number;
+  persistedPurchases: number;
+  dualWritePrevented: boolean;
+  verificationDetails: string;
+}
+
+export interface ProcessedEventDto {
+  consumerName: string;
+  eventId: string;
+  processedAt: string;
+}
+
+export interface ProcessedEventsDto {
+  count: number;
+  events: ProcessedEventDto[];
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -392,6 +477,28 @@ export const api = {
     });
   },
 
+  pauseLoyaltyPartition: async (
+    partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> => {
+    return request<{ status: string; partition: number; isPaused: boolean }>(
+      `/api/loyalty/api/v1/loyalty/consumer/partitions/${partition}/pause`,
+      {
+        method: 'POST',
+      },
+    );
+  },
+
+  resumeLoyaltyPartition: async (
+    partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> => {
+    return request<{ status: string; partition: number; isPaused: boolean }>(
+      `/api/loyalty/api/v1/loyalty/consumer/partitions/${partition}/resume`,
+      {
+        method: 'POST',
+      },
+    );
+  },
+
   setLoyaltyConsumerDelay: async (
     delayMs: number,
   ): Promise<{ status: string; processingDelayMs: number }> => {
@@ -401,6 +508,50 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ delayMs }),
       },
+    );
+  },
+
+  scaleLoyaltyConsumer: async (
+    targetInstances: number,
+  ): Promise<{
+    status: string;
+    targetCount: number;
+    instances: LoyaltyConsumerInstanceInfoDto[];
+  }> => {
+    return request<{
+      status: string;
+      targetCount: number;
+      instances: LoyaltyConsumerInstanceInfoDto[];
+    }>('/api/loyalty/api/v1/loyalty/consumer/scale', {
+      method: 'POST',
+      body: JSON.stringify({ targetInstances }),
+    });
+  },
+
+  killLoyaltyReplica: async (
+    instanceId?: string,
+  ): Promise<{ status: string; killedInstanceId: string; remainingCount: number }> => {
+    return request<{ status: string; killedInstanceId: string; remainingCount: number }>(
+      '/api/loyalty/api/v1/loyalty/consumer/kill-replica',
+      {
+        method: 'POST',
+        body: JSON.stringify({ instanceId }),
+      },
+    );
+  },
+
+  getLoyaltyRebalanceHistory: async (): Promise<RebalanceEventLogDto[]> => {
+    return request<RebalanceEventLogDto[]>(
+      '/api/loyalty/api/v1/loyalty/consumer/rebalance-history',
+    );
+  },
+
+  describeConsumerGroup: async (
+    groupId: string,
+    topic: string = 'purchase.events',
+  ): Promise<ConsumerGroupDescriptionDto> => {
+    return request<ConsumerGroupDescriptionDto>(
+      `/api/producer/api/v1/ops/kafka/groups/${groupId}/description?topic=${topic}`,
     );
   },
 
@@ -438,6 +589,28 @@ export const api = {
     });
   },
 
+  pauseAnalyticsPartition: async (
+    partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> => {
+    return request<{ status: string; partition: number; isPaused: boolean }>(
+      `/api/analytics/api/v1/analytics/consumer/partitions/${partition}/pause`,
+      {
+        method: 'POST',
+      },
+    );
+  },
+
+  resumeAnalyticsPartition: async (
+    partition: number,
+  ): Promise<{ status: string; partition: number; isPaused: boolean }> => {
+    return request<{ status: string; partition: number; isPaused: boolean }>(
+      `/api/analytics/api/v1/analytics/consumer/partitions/${partition}/resume`,
+      {
+        method: 'POST',
+      },
+    );
+  },
+
   setAnalyticsConsumerDelay: async (
     delayMs: number,
   ): Promise<{ status: string; processingDelayMs: number }> => {
@@ -455,6 +628,7 @@ export const api = {
     runId?: string;
     topic?: string;
     requiredStartOffsets?: Record<string, string>;
+    simulateRetentionFailure?: boolean;
   }): Promise<ReplayRunDto> => {
     return request<ReplayRunDto>('/api/replay/api/v1/replay/runs', {
       method: 'POST',
@@ -482,9 +656,50 @@ export const api = {
     });
   },
 
+  // CDC status is read-only; RUNNING does not assert delivery completion.
+  checkCdc: async (): Promise<void> => {
+    const status = await request<{ connector: { state: string }; tasks: { state: string }[] }>(
+      '/api/cdc/status',
+    );
+    if (
+      status.connector.state !== 'RUNNING' ||
+      status.tasks.length === 0 ||
+      status.tasks.some((task) => task.state !== 'RUNNING')
+    ) {
+      throw new Error('Debezium connector or source task is not running');
+    }
+  },
+
+  // Real delivery barrier: resolves only after the live loyalty consumer has applied
+  // every event through minLastSequence. Consumers only ever receive what Debezium
+  // published, so reaching this state proves the source rows reached Kafka. This is
+  // NOT a connector status check; it observes processed projection state instead.
+  waitForLoyaltyProcessed: async (
+    customerId: string,
+    minLastSequence: number,
+    timeoutMs: number = 30000,
+  ): Promise<LoyaltyAccountDto> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const account = await api.getLoyaltyAccount(customerId).catch(() => null);
+      if (
+        account &&
+        account.lastCustomerSequence !== undefined &&
+        account.lastCustomerSequence >= minLastSequence &&
+        account.correctionRequired === true
+      ) {
+        return account;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    throw new Error(
+      `Loyalty consumer did not apply event sequence ${minLastSequence} for ${customerId} within ${timeoutMs}ms (CDC delivery stalled?)`,
+    );
+  },
+
   // 5. Cluster Health Checks
   checkServicesHealth: async (): Promise<ServiceHealthStatus> => {
-    const check = async (path: string): Promise<boolean> => {
+    const httpCheck = async (path: string): Promise<boolean> => {
       try {
         const res = await fetch(path);
         return res.ok;
@@ -493,14 +708,66 @@ export const api = {
       }
     };
 
-    const [producer, loyalty, analytics, publisher, replay] = await Promise.all([
-      check('/health/producer'),
-      check('/health/loyalty'),
-      check('/health/analytics'),
-      check('/health/publisher'),
-      check('/health/replay'),
+    const checkCdcRunning = async (): Promise<boolean> => {
+      try {
+        const status = await request<{ connector: { state: string }; tasks: { state: string }[] }>(
+          '/api/cdc/status',
+        );
+        return (
+          status.connector.state === 'RUNNING' &&
+          status.tasks.length > 0 &&
+          status.tasks.every((task) => task.state === 'RUNNING')
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    const [producer, loyalty, analytics, replay, cdc] = await Promise.all([
+      httpCheck('/health/producer'),
+      httpCheck('/health/loyalty'),
+      httpCheck('/health/analytics'),
+      httpCheck('/health/replay'),
+      checkCdcRunning(),
     ]);
 
-    return { producer, loyalty, analytics, publisher, replay };
+    return { producer, loyalty, analytics, replay, cdc };
+  },
+
+  // 6. Outbox & CDC Inspection
+  getOutboxStatus: async (): Promise<OutboxStatusDto> => {
+    return request<OutboxStatusDto>('/api/producer/api/v1/ops/outbox');
+  },
+
+  testOutboxRollback: async (): Promise<RollbackTestResultDto> => {
+    return request<RollbackTestResultDto>('/api/producer/api/v1/ops/outbox/test-rollback', {
+      method: 'POST',
+    });
+  },
+
+  // 7. Stream Idempotency & Deduplication
+  testConsumerDuplicate: async (params: {
+    eventId?: string;
+    customerId?: string;
+    purchaseId?: string;
+    amountCents?: number;
+    customerSequence?: number;
+  }): Promise<{
+    status: string;
+    topic: string;
+    partition: number;
+    offset: string;
+    key: string;
+    eventId: string;
+    note: string;
+  }> => {
+    return request('/api/producer/api/v1/ops/kafka/test-duplicate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  getProcessedEvents: async (): Promise<ProcessedEventsDto> => {
+    return request<ProcessedEventsDto>('/api/loyalty/api/v1/loyalty/processed-events');
   },
 };

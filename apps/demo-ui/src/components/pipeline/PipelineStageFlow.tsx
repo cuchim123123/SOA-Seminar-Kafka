@@ -59,7 +59,7 @@ export const PipelineStageFlow: React.FC<PipelineStageFlowProps> = ({ activeStep
           </div>
         </div>
 
-        {/* Stage 3: Outbox Publisher Relay */}
+        {/* Stage 3: Debezium CDC Relay */}
         <div
           style={{
             padding: '12px 14px',
@@ -70,14 +70,14 @@ export const PipelineStageFlow: React.FC<PipelineStageFlowProps> = ({ activeStep
           }}
         >
           <div style={{ fontSize: '0.7rem', color: 'var(--color-emerald)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-            STAGE 3: PUBLISHER
+            STAGE 3: DEBEZIUM CDC
           </div>
-          <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '2px', color: 'var(--text-main)' }}>Outbox Relay Worker</div>
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: '2px', color: 'var(--text-main)' }}>Connect Outbox Relay</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Polls pending records, publishes with <span className="badge-mono badge-cyan">key = customerId</span>
+            Tails the WAL, publishes with <span className="badge-mono badge-cyan">key = aggregateId</span>
           </div>
           <div style={{ marginTop: '6px', fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-            Awaits acks=-1 &amp; marks PUBLISHED
+            Kafka Connect: at-least-once delivery
           </div>
         </div>
 

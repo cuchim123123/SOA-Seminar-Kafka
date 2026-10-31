@@ -72,10 +72,26 @@ export const ScalePartitionsModal: React.FC<ScalePartitionsModalProps> = ({
           </button>
         </div>
 
-        <p style={{ fontSize: '0.825rem', color: 'var(--text-body)', marginBottom: '16px', lineHeight: '1.5' }}>
+        <p style={{ fontSize: '0.825rem', color: 'var(--text-body)', marginBottom: '12px', lineHeight: '1.5' }}>
           Increase the partition count for <code style={{ fontFamily: 'var(--font-mono)' }}>{topicName}</code>.
           <strong> Note:</strong> Kafka allows partition counts to be <strong>increased only</strong>. Once scaled, you cannot decrease without recreating the topic.
         </p>
+
+        <div
+          style={{
+            padding: '10px 12px',
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fef3c7',
+            borderLeft: '4px solid #f59e0b',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.775rem',
+            lineHeight: '1.45',
+            color: '#92400e',
+            marginBottom: '16px',
+          }}
+        >
+          <strong>⚠️ Ordering Invariant Caveat:</strong> Kafka guarantees ordering <em>strictly within each partition</em>. Changing partition count alters key-to-partition mapping (<code style={{ fontFamily: 'var(--font-mono)' }}>abs(murmur2(key)) % N</code>). Existing customer keys may hash to different partitions, allowing subsequent events for the same customer to land on a new partition before earlier events on the previous partition are consumed.
+        </div>
 
         <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>

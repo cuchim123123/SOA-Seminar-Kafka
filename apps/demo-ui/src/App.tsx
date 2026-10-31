@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from './api/client';
 import type {
   ConsumerGroupLag,
   ConsumerStatusDto,
-  PurchaseCreatedResponse,
   SalesSummaryDto,
   ServiceHealthStatus,
   TopicPartitionMetadata,
@@ -11,43 +10,34 @@ import type {
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import type { TabId } from './components/Navigation';
-import { PipelineVisualizer } from './components/PipelineVisualizer';
-import { PartitionGrid } from './components/PartitionGrid';
-import { ConsumerLagPanel } from './components/ConsumerLagPanel';
-import { ProjectionsPanel } from './components/ProjectionsPanel';
-import { ReplayStudio } from './components/ReplayStudio';
-import { LiveEventLog } from './components/LiveEventLog';
-import type { LogEntry } from './components/LiveEventLog';
 import { UserGuide } from './components/UserGuide';
+import { BenchmarkStudio } from './components/BenchmarkStudio';
+import { SimulationLab } from './simulation/ui/SimulationLab';
 
 function getInitialTab(): TabId {
   const hash = window.location.hash.replace('#', '') as TabId;
-  const validTabs: TabId[] = ['pipeline', 'partitions', 'lag', 'projections', 'replay', 'guide'];
-  return validTabs.includes(hash) ? hash : 'pipeline';
+  const validTabs: TabId[] = ['simulation', 'benchmark', 'guide'];
+  return validTabs.includes(hash) ? hash : 'simulation';
 }
 
-export const App: React.FC = () => {
+export function App() {
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
 
   const [health, setHealth] = useState<ServiceHealthStatus>({
     producer: false,
     loyalty: false,
     analytics: false,
-    publisher: false,
+    cdc: false,
     replay: false,
   });
 
   const [topicMetadata, setTopicMetadata] = useState<TopicPartitionMetadata | null>(null);
   const [loyaltyLag, setLoyaltyLag] = useState<ConsumerGroupLag | null>(null);
   const [analyticsLag, setAnalyticsLag] = useState<ConsumerGroupLag | null>(null);
-  const [loyaltyStatus, setLoyaltyStatus] = useState<ConsumerStatusDto | null>(null);
   const [analyticsStatus, setAnalyticsStatus] = useState<ConsumerStatusDto | null>(null);
   const [salesSummary, setSalesSummary] = useState<SalesSummaryDto | null>(null);
-  const [recentLogs, setRecentLogs] = useState<LogEntry[]>([]);
-  const [lastPurchase, setLastPurchase] = useState<PurchaseCreatedResponse | null>(null);
-  const [highlightedPartition] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [lastEventTime, setLastEventTime] = useState<number>(Date.now());
+  const [isBenchmarking, setIsBenchmarking] = useState<boolean>(false);
 
   // Hash change synchronization for browser navigation
   useEffect(() => {
@@ -65,18 +55,17 @@ export const App: React.FC = () => {
 
   const fetchTelemetry = useCallback(async () => {
     try {
-      const [h, meta, lLag, aLag, lStat, aStat, summ] = await Promise.all([
+      const [h, meta, lLag, aLag, aStat, summ] = await Promise.all([
         api.checkServicesHealth().catch(() => ({
           producer: false,
           loyalty: false,
           analytics: false,
-          publisher: false,
+          cdc: false,
           replay: false,
         })),
         api.getPartitions().catch(() => null),
         api.getConsumerLag('loyalty-v1').catch(() => null),
         api.getConsumerLag('analytics-v1').catch(() => null),
-        api.getLoyaltyConsumerStatus().catch(() => null),
         api.getConsumerStatus().catch(() => null),
         api.getAnalyticsSummary().catch(() => null),
       ]);
@@ -85,7 +74,6 @@ export const App: React.FC = () => {
       if (meta) setTopicMetadata(meta);
       if (lLag) setLoyaltyLag(lLag);
       if (aLag) setAnalyticsLag(aLag);
-      if (lStat) setLoyaltyStatus(lStat);
       if (aStat) setAnalyticsStatus(aStat);
       if (summ) setSalesSummary(summ);
     } catch {
@@ -93,12 +81,13 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Background sync every 3000ms
+  // Background sync every 3000ms (paused during active benchmark execution to prevent freezing)
   useEffect(() => {
+    if (isBenchmarking) return;
     fetchTelemetry();
     const timer = setInterval(fetchTelemetry, 3000);
     return () => clearInterval(timer);
-  }, [fetchTelemetry]);
+  }, [fetchTelemetry, isBenchmarking]);
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -106,28 +95,8 @@ export const App: React.FC = () => {
     setRefreshing(false);
   };
 
-  const handleEventEmitted = (res: PurchaseCreatedResponse) => {
-    setLastPurchase(res);
-    setLastEventTime(Date.now());
-
-    // Record in live audit log
-    const entry: LogEntry = {
-      id: res.eventId,
-      timestamp: new Date().toLocaleTimeString(),
-      customerId: res.customerId,
-      customerSequence: res.customerSequence,
-      purchaseId: res.purchaseId,
-      status: res.status,
-    };
-    setRecentLogs((prev) => [entry, ...prev.slice(0, 19)]);
-
-    setTimeout(() => {
-      fetchTelemetry();
-    }, 600);
-  };
-
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px 20px 48px' }}>
+    <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '16px 20px 48px' }}>
       {/* 1. Header with Cluster Health & Telemetry */}
       <Header
         health={health}
@@ -135,7 +104,7 @@ export const App: React.FC = () => {
         onRefresh={handleManualRefresh}
       />
 
-      {/* 2. Sleek Tab Navigation Bar */}
+      {/* 2. Sleek Uncluttered Tab Navigation Bar */}
       <Navigation
         activeTab={activeTab}
         onTabChange={handleTabChange}
@@ -143,54 +112,22 @@ export const App: React.FC = () => {
         totalPartitions={topicMetadata?.partitionCount ?? 6}
       />
 
-      {/* 3. Tab Contents: Cleanly Separated Views */}
+      {/* 3. Primary Views (Simulation Lab, Benchmark, Guide) */}
       <main>
-        {activeTab === 'pipeline' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <PipelineVisualizer
-              onEventEmitted={handleEventEmitted}
-              lastPurchase={lastPurchase}
-            />
-            <LiveEventLog
-              entries={recentLogs}
-              onClear={() => setRecentLogs([])}
-            />
-          </div>
+
+        {activeTab === 'simulation' && (
+          <SimulationLab />
         )}
 
-        {activeTab === 'partitions' && (
-          <PartitionGrid
-            metadata={topicMetadata}
-            loading={!topicMetadata}
-            highlightedPartition={highlightedPartition}
-            onMetadataChanged={fetchTelemetry}
-          />
-        )}
-
-        {activeTab === 'lag' && (
-          <ConsumerLagPanel
+        {activeTab === 'benchmark' && (
+          <BenchmarkStudio
+            topicMetadata={topicMetadata}
             loyaltyLag={loyaltyLag}
             analyticsLag={analyticsLag}
-            loyaltyStatus={loyaltyStatus}
-            analyticsStatus={analyticsStatus}
-            onStatusChanged={fetchTelemetry}
-          />
-        )}
-
-        {activeTab === 'projections' && (
-          <ProjectionsPanel
-            summary={salesSummary}
-            lastUpdatedEventTime={lastEventTime}
-            onRefreshSummary={fetchTelemetry}
-          />
-        )}
-
-        {activeTab === 'replay' && (
-          <ReplayStudio
-            onCutoverCompleted={() => {
-              setLastEventTime(Date.now());
-              fetchTelemetry();
-            }}
+            salesSummary={salesSummary}
+            loyaltyAccount={null}
+            onRefreshTelemetry={fetchTelemetry}
+            onBenchmarkStateChange={setIsBenchmarking}
           />
         )}
 
@@ -228,6 +165,6 @@ export const App: React.FC = () => {
       </footer>
     </div>
   );
-};
+}
 
 export default App;
