@@ -93,20 +93,12 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
     });
 
     await this.admin.createPartitions({
-      topicPartitions: [
-        {
-          topic,
-          count: newPartitionCount,
-        },
-      ],
+      topicPartitions: [{ topic, count: newPartitionCount }],
     });
 
     this.logger.info(
       'Successfully requested partition creation on broker, waiting for KRaft leader assignment...',
-      {
-        topic,
-        newCount: newPartitionCount,
-      },
+      { topic, newCount: newPartitionCount },
     );
 
     // Allow KRaft leader election and partition log initialization to settle
@@ -202,7 +194,51 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
     });
 
     await consumer.disconnect().catch(() => {});
-    return messages.reverse(); // Return newest records first
+    return messages.reverse();
+  }
+
+  private calculatePartitionLag(
+    topic: string,
+    topicOffset: { partition: number; low: string; high: string },
+    committedRaw?: string,
+  ): { lagRecord: PartitionLag; lagBigInt: bigint; isUncommitted: boolean } {
+    const low = BigInt(topicOffset.low);
+    const high = BigInt(topicOffset.high);
+    const hasNoCommittedOffset = committedRaw === undefined || committedRaw === '-1';
+
+    if (hasNoCommittedOffset) {
+      const isUncommitted = high > low;
+      return {
+        lagRecord: {
+          topic,
+          partition: topicOffset.partition,
+          logStartOffset: low.toString(),
+          logEndOffset: high.toString(),
+          committedOffset: null,
+          lag: isUncommitted ? 'UNCOMMITTED' : '0',
+          isUncommitted,
+        },
+        lagBigInt: 0n,
+        isUncommitted,
+      };
+    }
+
+    const committedBigInt = BigInt(committedRaw);
+    const lagBigInt = high > committedBigInt ? high - committedBigInt : 0n;
+
+    return {
+      lagRecord: {
+        topic,
+        partition: topicOffset.partition,
+        logStartOffset: low.toString(),
+        logEndOffset: high.toString(),
+        committedOffset: committedRaw,
+        lag: lagBigInt.toString(),
+        isUncommitted: false,
+      },
+      lagBigInt,
+      isUncommitted: false,
+    };
   }
 
   async inspectConsumerGroupLag(
@@ -211,11 +247,7 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
   ): Promise<ConsumerGroupLagResult> {
     const topicOffsets = await this.admin.fetchTopicOffsets(topic);
 
-    let groupPartitions: Array<{
-      partition: number;
-      offset: string;
-      metadata: string | null;
-    }> = [];
+    let groupPartitions: Array<{ partition: number; offset: string; metadata: string | null }> = [];
 
     try {
       const fetched = await this.admin.fetchOffsets({ groupId, topics: [topic] });
@@ -228,61 +260,30 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
       this.logger.warn(`Could not fetch committed offsets for consumer group '${groupId}': ${msg}`);
     }
 
-    const groupOffsetMap = new Map<number, string>();
-    for (const gp of groupPartitions) {
-      groupOffsetMap.set(gp.partition, gp.offset);
-    }
+    const groupOffsetMap = new Map<number, string>(
+      groupPartitions.map((gp) => [gp.partition, gp.offset]),
+    );
 
     let hasUncommitted = false;
     let totalLagBigInt = 0n;
 
     const partitions: PartitionLag[] = topicOffsets.map((to) => {
-      const low = BigInt(to.low);
-      const high = BigInt(to.high);
-      const committedRaw = groupOffsetMap.get(to.partition);
-
-      const hasNoCommittedOffset = committedRaw === undefined || committedRaw === '-1';
-      let committedOffset: string | null = null;
-      let lag: string | 'UNCOMMITTED';
-      let isUncommitted = false;
-
-      if (hasNoCommittedOffset) {
-        committedOffset = null;
-        if (high > low) {
-          // Messages exist on the broker (high > low), but consumer group has never committed an offset
-          lag = 'UNCOMMITTED';
-          isUncommitted = true;
-          hasUncommitted = true;
-        } else {
-          // Partition is completely empty (high === low, e.g. newly scaled partitions 8 & 9)
-          lag = '0';
-          isUncommitted = false;
-        }
-      } else {
-        const committedBigInt = BigInt(committedRaw);
-        committedOffset = committedRaw;
-        const lagBigInt = high > committedBigInt ? high - committedBigInt : 0n;
-        lag = lagBigInt.toString();
-        totalLagBigInt += lagBigInt;
-      }
-
-      return {
+      const { lagRecord, lagBigInt, isUncommitted } = this.calculatePartitionLag(
         topic,
-        partition: to.partition,
-        logStartOffset: low.toString(),
-        logEndOffset: high.toString(),
-        committedOffset,
-        lag,
-        isUncommitted,
-      };
-    });
+        to,
+        groupOffsetMap.get(to.partition),
+      );
 
-    const totalLag = hasUncommitted ? 'UNCOMMITTED' : totalLagBigInt.toString();
+      if (isUncommitted) hasUncommitted = true;
+      totalLagBigInt += lagBigInt;
+
+      return lagRecord;
+    });
 
     return {
       groupId,
       topic,
-      totalLag,
+      totalLag: hasUncommitted ? 'UNCOMMITTED' : totalLagBigInt.toString(),
       partitions,
     };
   }

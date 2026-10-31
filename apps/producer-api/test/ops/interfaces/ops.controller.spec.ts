@@ -12,6 +12,7 @@ import { GetConsumerGroupLagHandler } from '../../../src/ops/application/queries
 import { InspectTopicHandler } from '../../../src/ops/application/queries/inspect-topic/inspect-topic.handler';
 import { PeekPartitionMessagesHandler } from '../../../src/ops/application/queries/peek-partition-messages/peek-partition-messages.handler';
 import { OpsController } from '../../../src/ops/interfaces/http/ops.controller';
+import { OpsDatabaseService } from '../../../src/ops/application/services/ops-database.service';
 
 describe('OpsController', () => {
   const createMockInspector = (overrides?: Partial<StreamInspectorPort>): StreamInspectorPort => ({
@@ -38,6 +39,7 @@ describe('OpsController', () => {
     const describeHandler = new DescribeConsumerGroupHandler(inspector);
     const peekHandler = new PeekPartitionMessagesHandler(inspector);
     const scaleHandler = new ScaleTopicPartitionsHandler(inspector);
+    const mockOpsDbService = new OpsDatabaseService();
     return new OpsController(
       topicHandler,
       lagHandler,
@@ -45,6 +47,7 @@ describe('OpsController', () => {
       peekHandler,
       scaleHandler,
       inspector,
+      mockOpsDbService,
     );
   };
 

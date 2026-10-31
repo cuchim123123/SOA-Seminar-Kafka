@@ -8,6 +8,8 @@ import { PeekPartitionMessagesHandler } from './application/queries/peek-partiti
 import { KafkaJsInspectorAdapter } from './infrastructure/adapters/kafkajs-inspector.adapter';
 import { OpsController } from './interfaces/http/ops.controller';
 
+import { OpsDatabaseService } from './application/services/ops-database.service';
+
 @Module({
   controllers: [OpsController],
   providers: [
@@ -16,6 +18,7 @@ import { OpsController } from './interfaces/http/ops.controller';
     DescribeConsumerGroupHandler,
     PeekPartitionMessagesHandler,
     ScaleTopicPartitionsHandler,
+    OpsDatabaseService,
     {
       provide: STREAM_INSPECTOR_PORT,
       useClass: KafkaJsInspectorAdapter,
@@ -27,6 +30,7 @@ import { OpsController } from './interfaces/http/ops.controller';
     DescribeConsumerGroupHandler,
     PeekPartitionMessagesHandler,
     ScaleTopicPartitionsHandler,
+    OpsDatabaseService,
     STREAM_INSPECTOR_PORT,
   ],
 })

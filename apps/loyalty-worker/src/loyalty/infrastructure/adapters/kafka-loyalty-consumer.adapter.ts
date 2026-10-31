@@ -13,14 +13,7 @@ import {
   LoyaltyConsumerInstanceInfo,
   RebalanceEventLog,
 } from '../../application/ports/consumer-control.port';
-
-interface ReplicaInstance {
-  readonly id: string;
-  readonly clientId: string;
-  readonly consumer: Consumer;
-  status: 'RUNNING' | 'PAUSED' | 'KILLED' | 'STOPPED';
-  assignedPartitions: number[];
-}
+import { LoyaltyConsumerReplicaFleet } from './loyalty-consumer-replica-fleet';
 
 @Injectable()
 export class KafkaLoyaltyConsumerAdapter
@@ -30,14 +23,10 @@ export class KafkaLoyaltyConsumerAdapter
   private readonly kafka: Kafka;
   private readonly consumer: Consumer;
   private readonly topic: string;
+  private readonly replicaFleet: LoyaltyConsumerReplicaFleet;
   private isPaused = false;
   private processingDelayMs = 0;
-
-  // Rebalance tracking and scaling state
-  private readonly replicas = new Map<string, ReplicaInstance>();
-  private readonly rebalanceHistory: RebalanceEventLog[] = [];
   private primaryAssignedPartitions: number[] = [];
-  private totalRebalanceCount = 0;
 
   constructor(
     @Inject(AppConfigService)
@@ -59,77 +48,12 @@ export class KafkaLoyaltyConsumerAdapter
     this.consumer = this.kafka.consumer({
       groupId: this.config.kafkaGroupId,
     });
-  }
-
-  private setupConsumerListeners(
-    consumer: Consumer,
-    instanceId: string,
-    clientId: string,
-    isPrimary: boolean,
-  ): void {
-    consumer.on(consumer.events.REBALANCING, (e) => {
-      this.totalRebalanceCount++;
-      const event: RebalanceEventLog = {
-        id: `reb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'REBALANCING',
-        memberId: (e.payload as { memberId?: string })?.memberId ?? instanceId,
-        clientId,
-        details: `Rebalance initiated for consumer group ${this.config.kafkaGroupId} on member ${clientId}`,
-      };
-      this.rebalanceHistory.unshift(event);
-      if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-      this.logger.warn('[KafkaRebalance] Rebalancing triggered', { instanceId, clientId, event });
-    });
-
-    consumer.on(consumer.events.GROUP_JOIN, (e) => {
-      const payload = e.payload as {
-        memberAssignment?: Record<string, number[]>;
-        memberId: string;
-        isLeader: boolean;
-        duration: number;
-        groupGenerationId?: number;
-      };
-      const assignment = payload.memberAssignment?.[this.topic] ?? [];
-      const sortedPartitions = assignment.slice().sort((a: number, b: number) => a - b);
-      if (isPrimary) {
-        this.primaryAssignedPartitions = sortedPartitions;
-      } else {
-        const replica = this.replicas.get(instanceId);
-        if (replica) {
-          replica.assignedPartitions = sortedPartitions;
-        }
-      }
-
-      const event: RebalanceEventLog = {
-        id: `join_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'GROUP_JOIN',
-        memberId: payload.memberId,
-        clientId,
-        groupGenerationId: payload.groupGenerationId,
-        assignedPartitions: sortedPartitions,
-        durationMs: payload.duration,
-        details: `Rebalance completed in ${payload.duration}ms. Leader: ${payload.isLeader}. Assigned ${sortedPartitions.length} partitions: [${sortedPartitions.join(', ')}]`,
-      };
-      this.rebalanceHistory.unshift(event);
-      if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-      this.logger.info('[KafkaRebalance] Group join complete', { instanceId, clientId, event });
-    });
-
-    consumer.on(consumer.events.CRASH, (e) => {
-      const payload = e.payload as { error: Error };
-      const event: RebalanceEventLog = {
-        id: `crash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'MEMBER_KILLED',
-        memberId: instanceId,
-        clientId,
-        details: `Consumer crash detected on ${clientId}: ${payload.error?.message ?? 'Unknown error'}`,
-      };
-      this.rebalanceHistory.unshift(event);
-      if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-    });
+    this.replicaFleet = new LoyaltyConsumerReplicaFleet(
+      this.config,
+      this.kafka,
+      this.topic,
+      this.logger,
+    );
   }
 
   private async handleMessage(
@@ -235,11 +159,13 @@ export class KafkaLoyaltyConsumerAdapter
       topic: this.topic,
     });
 
-    this.setupConsumerListeners(
+    this.replicaFleet.setupConsumerListeners(
       this.consumer,
       'loyalty-worker-primary',
       this.config.kafkaClientId,
-      true,
+      (partitions) => {
+        this.primaryAssignedPartitions = partitions;
+      },
     );
 
     await this.consumer.connect();
@@ -263,10 +189,7 @@ export class KafkaLoyaltyConsumerAdapter
 
   async pause(): Promise<void> {
     this.consumer.pause([{ topic: this.topic }]);
-    for (const replica of this.replicas.values()) {
-      replica.consumer.pause([{ topic: this.topic }]);
-      replica.status = 'PAUSED';
-    }
+    this.replicaFleet.pauseReplicas();
     this.isPaused = true;
     this.logger.warn('Loyalty Kafka consumer PAUSED by administrative request', {
       topic: this.topic,
@@ -276,10 +199,7 @@ export class KafkaLoyaltyConsumerAdapter
 
   async resume(): Promise<void> {
     this.consumer.resume([{ topic: this.topic }]);
-    for (const replica of this.replicas.values()) {
-      replica.consumer.resume([{ topic: this.topic }]);
-      replica.status = 'RUNNING';
-    }
+    this.replicaFleet.resumeReplicas();
     this.isPaused = false;
     this.logger.info('Loyalty Kafka consumer RESUMED by administrative request', {
       topic: this.topic,
@@ -289,31 +209,19 @@ export class KafkaLoyaltyConsumerAdapter
 
   async pausePartition(partition: number): Promise<void> {
     this.consumer.pause([{ topic: this.topic, partitions: [partition] }]);
-    for (const replica of this.replicas.values()) {
-      replica.consumer.pause([{ topic: this.topic, partitions: [partition] }]);
-    }
+    this.replicaFleet.pauseReplicas([partition]);
     this.logger.warn(
       `Loyalty Kafka consumer PAUSED partition ${partition} by administrative request`,
-      {
-        topic: this.topic,
-        partition,
-        groupId: this.config.kafkaGroupId,
-      },
+      { topic: this.topic, partition, groupId: this.config.kafkaGroupId },
     );
   }
 
   async resumePartition(partition: number): Promise<void> {
     this.consumer.resume([{ topic: this.topic, partitions: [partition] }]);
-    for (const replica of this.replicas.values()) {
-      replica.consumer.resume([{ topic: this.topic, partitions: [partition] }]);
-    }
+    this.replicaFleet.resumeReplicas([partition]);
     this.logger.info(
       `Loyalty Kafka consumer RESUMED partition ${partition} by administrative request`,
-      {
-        topic: this.topic,
-        partition,
-        groupId: this.config.kafkaGroupId,
-      },
+      { topic: this.topic, partition, groupId: this.config.kafkaGroupId },
     );
   }
 
@@ -331,126 +239,25 @@ export class KafkaLoyaltyConsumerAdapter
   async scaleInstances(
     targetCount: number,
   ): Promise<{ targetCount: number; instances: LoyaltyConsumerInstanceInfo[] }> {
-    const clamped = Math.max(1, Math.min(4, targetCount));
-    const currentReplicaCount = this.replicas.size;
-    const neededReplicas = clamped - 1;
-
-    if (neededReplicas > currentReplicaCount) {
-      // Scale UP: spawn new replica consumers
-      for (let i = currentReplicaCount + 1; i <= neededReplicas; i++) {
-        const replicaId = `loyalty-worker-replica-${i}`;
-        const clientId = `${this.config.kafkaClientId}-replica-${i}`;
-        const replicaConsumer = this.kafka.consumer({
-          groupId: this.config.kafkaGroupId,
-        });
-
-        this.setupConsumerListeners(replicaConsumer, replicaId, clientId, false);
-
-        await replicaConsumer.connect();
-        await replicaConsumer.subscribe({
-          topic: this.topic,
-          fromBeginning: false,
-        });
-
-        const replicaInfo: ReplicaInstance = {
-          id: replicaId,
-          clientId,
-          consumer: replicaConsumer,
-          status: this.isPaused ? 'PAUSED' : 'RUNNING',
-          assignedPartitions: [],
-        };
-        this.replicas.set(replicaId, replicaInfo);
-
-        await replicaConsumer.run({
-          autoCommit: false,
-          eachMessage: async ({ topic, partition, message }) => {
-            await this.handleMessage(replicaConsumer, topic, partition, message);
-          },
-        });
-
-        const event: RebalanceEventLog = {
-          id: `scale_up_${Date.now()}_${i}`,
-          timestamp: new Date().toISOString(),
-          eventType: 'MEMBER_JOINED',
-          memberId: replicaId,
-          clientId,
-          details: `Replica instance ${clientId} created and connected to consumer group ${this.config.kafkaGroupId}. Kafka initiating rebalance.`,
-        };
-        this.rebalanceHistory.unshift(event);
-        if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-        this.logger.info(`Scaled up: ${clientId} joined group ${this.config.kafkaGroupId}`);
-      }
-    } else if (neededReplicas < currentReplicaCount) {
-      // Scale DOWN: gracefully disconnect excess replicas
-      const keys = Array.from(this.replicas.keys());
-      const toRemove = keys.slice(neededReplicas);
-
-      for (const replicaId of toRemove) {
-        const replica = this.replicas.get(replicaId);
-        if (replica) {
-          replica.status = 'STOPPED';
-          await replica.consumer.disconnect().catch(() => {});
-          this.replicas.delete(replicaId);
-
-          const event: RebalanceEventLog = {
-            id: `scale_down_${Date.now()}_${replicaId}`,
-            timestamp: new Date().toISOString(),
-            eventType: 'MEMBER_LEFT',
-            memberId: replicaId,
-            clientId: replica.clientId,
-            details: `Replica instance ${replica.clientId} gracefully disconnected. Kafka rebalancing partitions back to remaining members.`,
-          };
-          this.rebalanceHistory.unshift(event);
-          if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-          this.logger.info(`Scaled down: ${replica.clientId} disconnected from group`);
-        }
-      }
-    }
-
+    await this.replicaFleet.scaleInstances(
+      targetCount,
+      this.isPaused,
+      async (consumer, topic, partition, message) => {
+        await this.handleMessage(consumer, topic, partition, message);
+      },
+    );
     const status = await this.getStatus();
-    return { targetCount: clamped, instances: status.instances };
+    return { targetCount: Math.max(1, Math.min(4, targetCount)), instances: status.instances };
   }
 
   async killReplicaInstance(
     instanceId?: string,
   ): Promise<{ killedInstanceId: string; remainingCount: number }> {
-    const keys = Array.from(this.replicas.keys());
-    if (keys.length === 0) {
-      throw new Error(
-        'No replica consumer instances are currently running to kill. Primary instance cannot be killed via this endpoint.',
-      );
-    }
-
-    const targetId = instanceId ?? keys[keys.length - 1];
-    const replica = this.replicas.get(targetId);
-    if (!replica) {
-      throw new Error(`Replica consumer instance '${targetId}' not found.`);
-    }
-
-    replica.status = 'KILLED';
-    await replica.consumer.stop().catch(() => {});
-    await replica.consumer.disconnect().catch(() => {});
-    this.replicas.delete(targetId);
-
-    const event: RebalanceEventLog = {
-      id: `kill_${Date.now()}_${targetId}`,
-      timestamp: new Date().toISOString(),
-      eventType: 'MEMBER_KILLED',
-      memberId: targetId,
-      clientId: replica.clientId,
-      details: `[Fault Injection / Chaos] Replica instance ${replica.clientId} abruptly killed! Kafka broker detecting leave/heartbeat timeout and reassigning partitions.`,
-    };
-    this.rebalanceHistory.unshift(event);
-    if (this.rebalanceHistory.length > 50) this.rebalanceHistory.pop();
-
-    return {
-      killedInstanceId: targetId,
-      remainingCount: 1 + this.replicas.size,
-    };
+    return this.replicaFleet.killReplicaInstance(instanceId);
   }
 
   getRebalanceHistory(): RebalanceEventLog[] {
-    return [...this.rebalanceHistory];
+    return this.replicaFleet.getRebalanceHistory();
   }
 
   async getStatus(): Promise<LoyaltyConsumerControlStatus> {
@@ -467,17 +274,8 @@ export class KafkaLoyaltyConsumerAdapter
         status: this.isPaused ? 'PAUSED' : 'RUNNING',
         assignedPartitions: this.primaryAssignedPartitions,
       },
+      ...this.replicaFleet.getReplicaInstances(),
     ];
-
-    for (const replica of this.replicas.values()) {
-      instances.push({
-        instanceId: replica.id,
-        clientId: replica.clientId,
-        isPrimary: false,
-        status: replica.status,
-        assignedPartitions: replica.assignedPartitions,
-      });
-    }
 
     return {
       groupId: this.config.kafkaGroupId,
@@ -487,7 +285,7 @@ export class KafkaLoyaltyConsumerAdapter
       processingDelayMs: this.processingDelayMs,
       instanceCount: instances.length,
       instances,
-      totalRebalanceCount: this.totalRebalanceCount,
+      totalRebalanceCount: this.replicaFleet.getTotalRebalanceCount(),
     };
   }
 
@@ -495,9 +293,7 @@ export class KafkaLoyaltyConsumerAdapter
     this.logger.info('Disconnecting Loyalty Kafka consumers...', {
       groupId: this.config.kafkaGroupId,
     });
-    for (const replica of this.replicas.values()) {
-      await replica.consumer.disconnect().catch(() => {});
-    }
+    await this.replicaFleet.disconnectAll();
     await this.consumer.disconnect().catch(() => {});
     this.logger.info('All Loyalty Kafka consumers disconnected');
   }
