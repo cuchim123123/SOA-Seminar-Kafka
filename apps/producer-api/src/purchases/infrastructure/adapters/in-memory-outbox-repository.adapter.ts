@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { OutboxRecord, OutboxRepositoryPort } from '../../application/ports/outbox-repository.port';
 
+/**
+ * Append-only in-memory outbox used by unit/integration test harnesses.
+ * Publication state is owned by Debezium CDC (ADR-017) and never modeled here.
+ */
 @Injectable()
 export class InMemoryOutboxRepositoryAdapter implements OutboxRepositoryPort {
   private readonly outbox = new Map<string, OutboxRecord>();
@@ -9,38 +13,16 @@ export class InMemoryOutboxRepositoryAdapter implements OutboxRepositoryPort {
     this.outbox.set(record.eventId, { ...record });
   }
 
-  async findPending(limit = 100): Promise<OutboxRecord[]> {
-    const pending: OutboxRecord[] = [];
+  async findByAggregateAndSequence(
+    aggregateId: string,
+    customerSequence: number,
+  ): Promise<OutboxRecord | null> {
     for (const record of this.outbox.values()) {
-      if (record.status === 'PENDING') {
-        pending.push({ ...record });
-        if (pending.length >= limit) break;
+      if (record.aggregateId === aggregateId && record.customerSequence === customerSequence) {
+        return { ...record };
       }
     }
-    return pending.sort((a, b) => a.customerSequence - b.customerSequence);
-  }
-
-  async markPublished(eventId: string, publishedAt: string): Promise<void> {
-    const record = this.outbox.get(eventId);
-    if (record) {
-      this.outbox.set(eventId, {
-        ...record,
-        status: 'PUBLISHED',
-        publishedAt,
-      });
-    }
-  }
-
-  async markFailed(eventId: string, error: string): Promise<void> {
-    const record = this.outbox.get(eventId);
-    if (record) {
-      this.outbox.set(eventId, {
-        ...record,
-        status: 'FAILED',
-        attemptCount: record.attemptCount + 1,
-        lastError: error,
-      });
-    }
+    return null;
   }
 
   clear(): void {

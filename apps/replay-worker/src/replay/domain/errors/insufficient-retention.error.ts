@@ -15,7 +15,7 @@ export interface InsufficientRetentionDetails {
 }
 
 /**
- * Domain error thrown when Kafka topic log retention has purged history
+ * Domain error thrown when topic log retention has purged history
  * earlier than the required replay horizon.
  */
 export class InsufficientRetentionError extends DomainError {

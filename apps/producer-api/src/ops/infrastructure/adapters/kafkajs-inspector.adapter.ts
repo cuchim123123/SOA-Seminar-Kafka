@@ -1,18 +1,20 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
-import { Admin, Consumer, Kafka, Producer } from 'kafkajs';
+import { Admin, AssignerProtocol, Consumer, Kafka, Producer } from 'kafkajs';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
   BrokerMessageRecord,
+  ConsumerGroupDescriptionResult,
   ConsumerGroupLagResult,
-  KafkaInspectorPort,
+  ConsumerGroupMemberDescription,
+  StreamInspectorPort,
   PartitionLag,
   PartitionPosition,
   TopicInspectionResult,
-} from '../../application/ports/kafka-inspector.port';
+} from '../../application/ports/stream-inspector.port';
 
 @Injectable()
-export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit, OnModuleDestroy {
+export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleInit, OnModuleDestroy {
   private readonly logger: StructuredLogger;
   private readonly kafka: Kafka;
   private readonly admin: Admin;
@@ -282,6 +284,46 @@ export class KafkaJsInspectorAdapter implements KafkaInspectorPort, OnModuleInit
       topic,
       totalLag,
       partitions,
+    };
+  }
+
+  async describeConsumerGroup(
+    groupId: string,
+    topic: string = this.config.purchaseTopic,
+  ): Promise<ConsumerGroupDescriptionResult> {
+    const res = await this.admin.describeGroups([groupId]);
+    const group = res.groups.find((g) => g.groupId === groupId);
+    if (!group) {
+      throw new Error(`Consumer group '${groupId}' not found on Kafka broker`);
+    }
+
+    const members: ConsumerGroupMemberDescription[] = group.members.map((m) => {
+      let assignedPartitions: number[] = [];
+      try {
+        if (m.memberAssignment && m.memberAssignment.length > 0) {
+          const decoded = AssignerProtocol.MemberAssignment.decode(m.memberAssignment);
+          if (decoded && decoded.assignment) {
+            assignedPartitions = (decoded.assignment[topic] ?? []).slice().sort((a, b) => a - b);
+          }
+        }
+      } catch (err: unknown) {
+        this.logger.warn(`Failed to decode member assignment for ${m.memberId}: ${String(err)}`);
+      }
+
+      return {
+        memberId: m.memberId,
+        clientId: m.clientId,
+        clientHost: m.clientHost,
+        assignedPartitions,
+      };
+    });
+
+    return {
+      groupId: group.groupId,
+      state: group.state,
+      protocol: group.protocol,
+      protocolType: group.protocolType,
+      members,
     };
   }
 

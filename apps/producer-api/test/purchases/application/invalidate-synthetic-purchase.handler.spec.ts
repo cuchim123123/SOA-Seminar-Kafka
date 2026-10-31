@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
-import { InvalidateSyntheticPurchaseCommand } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase.command';
-import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase.handler';
+import { InvalidateSyntheticPurchaseCommand } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase/invalidate-synthetic-purchase.command';
+import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase/invalidate-synthetic-purchase.handler';
 import {
   OutboxRecord,
   OutboxRepositoryPort,
@@ -41,9 +41,7 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
       save: vi.fn(async (record: OutboxRecord): Promise<void> => {
         savedOutboxRecord = record;
       }),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {
@@ -109,7 +107,6 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
     expect(savedOutboxRecord?.eventId).toBe(result.eventId);
     expect(savedOutboxRecord?.aggregateId).toBe('CUST_U001');
     expect(savedOutboxRecord?.customerSequence).toBe(4);
-    expect(savedOutboxRecord?.status).toBe('PENDING');
     expect(savedOutboxRecord?.envelope.eventType).toBe('PurchaseInvalidated');
     expect(savedOutboxRecord?.envelope.aggregateId).toBe('CUST_U001');
     expect(savedOutboxRecord?.envelope.correlationId).toBe('0192d478-f7ef-7b33-912a-3652d3a95d77');
@@ -139,9 +136,7 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
 
     const mockOutboxRepo: OutboxRepositoryPort = {
       save: vi.fn(),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {
@@ -193,9 +188,7 @@ describe('InvalidateSyntheticPurchaseHandler with Unit of Work and Outbox', () =
 
     const mockOutboxRepo: OutboxRepositoryPort = {
       save: vi.fn(),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {

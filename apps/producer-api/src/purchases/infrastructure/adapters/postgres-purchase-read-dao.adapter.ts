@@ -35,8 +35,9 @@ export class PostgresPurchaseReadDaoAdapter implements PurchaseReadDaoPort {
       status: purchase.status as 'COMPLETED' | 'INVALIDATED',
       customerSequence: Number(purchase.completionSequence),
       createdAt: purchase.createdAt.toISOString(),
-      outboxStatus: (outboxEvent?.status as 'PENDING' | 'PUBLISHED' | 'FAILED') ?? 'UNKNOWN',
-      publishedAt: outboxEvent?.publishedAt ? outboxEvent.publishedAt.toISOString() : null,
+      // CDC does not write broker acknowledgments back into the source row.
+      outboxStatus: outboxEvent ? 'ENQUEUED' : 'UNKNOWN',
+      publishedAt: null,
       eventId: outboxEvent?.eventId ?? null,
     };
   }

@@ -2,18 +2,18 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../database/prisma.service';
 import {
-  HttpIdempotencyRecord,
-  HttpIdempotencyRepositoryPort,
-} from '../../application/ports/http-idempotency-repository.port';
+  ClientIdempotencyRecord,
+  ClientIdempotencyRepositoryPort,
+} from '../../application/ports/client-idempotency-repository.port';
 
 @Injectable()
-export class PostgresHttpIdempotencyRepositoryAdapter implements HttpIdempotencyRepositoryPort {
+export class PostgresHttpIdempotencyRepositoryAdapter implements ClientIdempotencyRepositoryPort {
   constructor(
     @Inject(PrismaService)
     private readonly client: Prisma.TransactionClient | PrismaClient,
   ) {}
 
-  async find(customerId: string, idempotencyKey: string): Promise<HttpIdempotencyRecord | null> {
+  async find(customerId: string, idempotencyKey: string): Promise<ClientIdempotencyRecord | null> {
     const row = await this.client.httpIdempotencyKey.findUnique({
       where: {
         customerId_idempotencyKey: {
@@ -35,7 +35,7 @@ export class PostgresHttpIdempotencyRepositoryAdapter implements HttpIdempotency
     };
   }
 
-  async save(record: HttpIdempotencyRecord): Promise<void> {
+  async save(record: ClientIdempotencyRecord): Promise<void> {
     await this.client.httpIdempotencyKey.create({
       data: {
         customerId: record.customerId,

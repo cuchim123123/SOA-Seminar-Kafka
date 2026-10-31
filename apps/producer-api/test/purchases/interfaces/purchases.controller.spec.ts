@@ -1,11 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { ZodValidationPipe } from '../../../src/common/pipes/zod-validation.pipe';
-import { CreatePurchaseBatchHandler } from '../../../src/purchases/application/commands/create-purchase-batch.handler';
-import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase.command';
-import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase.handler';
-import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase.handler';
-import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase.handler';
+import { CreatePurchaseBatchHandler } from '../../../src/purchases/application/commands/create-purchase-batch/create-purchase-batch.handler';
+import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase/create-purchase.command';
+import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase/create-purchase.handler';
+import { InvalidateSyntheticPurchaseHandler } from '../../../src/purchases/application/commands/invalidate-synthetic-purchase/invalidate-synthetic-purchase.handler';
+import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase/get-purchase.handler';
 import { createPurchaseSchema } from '../../../src/purchases/interfaces/http/dto/create-purchase.dto';
 import { PurchasesController } from '../../../src/purchases/interfaces/http/purchases.controller';
 
@@ -144,8 +144,8 @@ describe('PurchasesController & ZodValidationPipe', () => {
           status: 'COMPLETED' as const,
           customerSequence: 1,
           createdAt: '2026-10-29T12:00:00.000Z',
-          outboxStatus: 'PUBLISHED' as const,
-          publishedAt: '2026-10-29T12:00:01.000Z',
+          outboxStatus: 'ENQUEUED' as const,
+          publishedAt: null,
           eventId: 'evt_123',
         })),
       } as unknown as GetPurchaseHandler;
@@ -160,7 +160,7 @@ describe('PurchasesController & ZodValidationPipe', () => {
 
       expect(mockGetHandler.execute).toHaveBeenCalled();
       expect(result.purchaseId).toBe('pur_xyz');
-      expect(result.outboxStatus).toBe('PUBLISHED');
+      expect(result.outboxStatus).toBe('ENQUEUED');
     });
 
     it('throws NotFoundException when purchase does not exist', async () => {

@@ -4,6 +4,13 @@ import { IntegrationEventEnvelopeV1 } from '@lab/contracts';
 import { PrismaService } from '../../../database/prisma.service';
 import { OutboxRecord, OutboxRepositoryPort } from '../../application/ports/outbox-repository.port';
 
+/**
+ * Append-only outbox persistence for Debezium CDC (ADR-017).
+ *
+ * Rows are inserted once with stable event IDs; legacy `status`,
+ * `attempt_count` and `published_at` columns keep their database defaults and
+ * are never transitioned by the application. Debezium owns publication state.
+ */
 @Injectable()
 export class PostgresOutboxRepositoryAdapter implements OutboxRepositoryPort {
   constructor(
@@ -14,62 +21,66 @@ export class PostgresOutboxRepositoryAdapter implements OutboxRepositoryPort {
   async save(record: OutboxRecord): Promise<void> {
     await this.client.outboxEvent.upsert({
       where: { eventId: record.eventId },
-      update: {
-        status: record.status,
-        attemptCount: record.attemptCount,
-        publishedAt: record.publishedAt ? new Date(record.publishedAt) : null,
-      },
+      // Stable event ID already appended: keep the original row untouched.
+      update: {},
       create: {
         eventId: record.eventId,
         aggregateId: record.aggregateId,
         customerSequence: BigInt(record.customerSequence),
         eventType: record.eventType,
         payloadJson: record.envelope as unknown as Prisma.InputJsonValue,
-        status: record.status,
-        attemptCount: record.attemptCount,
         createdAt: new Date(record.createdAt),
-        publishedAt: record.publishedAt ? new Date(record.publishedAt) : null,
       },
     });
   }
 
-  async findPending(limit = 100): Promise<OutboxRecord[]> {
-    const records = await this.client.outboxEvent.findMany({
-      where: { status: 'PENDING' },
-      orderBy: [{ customerSequence: 'asc' }, { createdAt: 'asc' }],
-      take: limit,
+  async saveMany(records: OutboxRecord[]): Promise<void> {
+    if (records.length === 0) return;
+    // Stable event IDs: a repeated save inside one batch must not mutate or fail.
+    await this.client.outboxEvent.createMany({
+      data: records.map((record) => ({
+        eventId: record.eventId,
+        aggregateId: record.aggregateId,
+        customerSequence: BigInt(record.customerSequence),
+        eventType: record.eventType,
+        payloadJson: record.envelope as unknown as Prisma.InputJsonValue,
+        createdAt: new Date(record.createdAt),
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  async findByAggregateAndSequence(
+    aggregateId: string,
+    customerSequence: number,
+  ): Promise<OutboxRecord | null> {
+    const r = await this.client.outboxEvent.findUnique({
+      where: {
+        aggregateId_customerSequence: {
+          aggregateId,
+          customerSequence: BigInt(customerSequence),
+        },
+      },
     });
 
-    return records.map((r) => ({
+    return r ? this.toRecord(r) : null;
+  }
+
+  private toRecord(r: {
+    eventId: string;
+    aggregateId: string;
+    customerSequence: bigint;
+    eventType: string;
+    payloadJson: Prisma.JsonValue;
+    createdAt: Date;
+  }): OutboxRecord {
+    return {
       eventId: r.eventId,
       aggregateId: r.aggregateId,
       customerSequence: Number(r.customerSequence),
-      eventType: r.eventType as 'PurchaseCompleted' | 'PurchaseInvalidated',
+      eventType: r.eventType,
       envelope: r.payloadJson as unknown as IntegrationEventEnvelopeV1,
-      status: r.status as 'PENDING' | 'PUBLISHED' | 'FAILED',
-      attemptCount: r.attemptCount,
       createdAt: r.createdAt.toISOString(),
-      publishedAt: r.publishedAt?.toISOString(),
-    }));
-  }
-
-  async markPublished(eventId: string, publishedAt: string): Promise<void> {
-    await this.client.outboxEvent.update({
-      where: { eventId },
-      data: {
-        status: 'PUBLISHED',
-        publishedAt: new Date(publishedAt),
-      },
-    });
-  }
-
-  async markFailed(eventId: string, _error: string): Promise<void> {
-    await this.client.outboxEvent.update({
-      where: { eventId },
-      data: {
-        status: 'PENDING',
-        attemptCount: { increment: 1 },
-      },
-    });
+    };
   }
 }

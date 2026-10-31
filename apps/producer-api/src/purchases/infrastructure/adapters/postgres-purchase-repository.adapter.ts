@@ -42,6 +42,24 @@ export class PostgresPurchaseRepositoryAdapter implements PurchaseRepositoryPort
     });
   }
 
+  async saveMany(purchases: Purchase[]): Promise<void> {
+    if (purchases.length === 0) return;
+    await this.client.purchase.createMany({
+      data: purchases.map((purchase) => ({
+        purchaseId: purchase.purchaseId,
+        customerId: purchase.customerId,
+        amountCents: BigInt(purchase.amountCents),
+        status: purchase.status,
+        completionSequence: BigInt(purchase.customerSequence),
+        invalidationSequence: purchase.invalidationSequence
+          ? BigInt(purchase.invalidationSequence)
+          : null,
+        invalidationEventId: purchase.invalidationEventId ?? null,
+        invalidationReason: purchase.invalidationReason ?? null,
+      })),
+    });
+  }
+
   async findById(purchaseId: string, options?: FindPurchaseOptions): Promise<Purchase | null> {
     if (options?.forUpdate) {
       const records = await this.client.$queryRawUnsafe<

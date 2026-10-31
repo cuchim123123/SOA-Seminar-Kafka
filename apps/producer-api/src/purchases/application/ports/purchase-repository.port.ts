@@ -8,5 +8,6 @@ export interface FindPurchaseOptions {
 
 export interface PurchaseRepositoryPort {
   save(purchase: Purchase): Promise<void>;
+  saveMany?(purchases: Purchase[]): Promise<void>;
   findById(purchaseId: string, options?: FindPurchaseOptions): Promise<Purchase | null>;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CreatePurchaseBatchCommand } from '../../../src/purchases/application/commands/create-purchase-batch.command';
-import { CreatePurchaseBatchHandler } from '../../../src/purchases/application/commands/create-purchase-batch.handler';
+import { CreatePurchaseBatchCommand } from '../../../src/purchases/application/commands/create-purchase-batch/create-purchase-batch.command';
+import { CreatePurchaseBatchHandler } from '../../../src/purchases/application/commands/create-purchase-batch/create-purchase-batch.handler';
 import { OutboxRecord } from '../../../src/purchases/application/ports/outbox-repository.port';
 import {
   UnitOfWorkContext,
@@ -27,9 +27,7 @@ describe('CreatePurchaseBatchHandler', () => {
             save: vi.fn(async (r: OutboxRecord) => {
               savedOutboxRecords.push(r);
             }),
-            findPending: vi.fn(),
-            markPublished: vi.fn(),
-            markFailed: vi.fn(),
+            findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
           },
           sequenceGenerator: {
             nextSequence: vi.fn(async () => seq++),
@@ -71,9 +69,7 @@ describe('CreatePurchaseBatchHandler', () => {
           },
           outboxRepository: {
             save: vi.fn(),
-            findPending: vi.fn(),
-            markPublished: vi.fn(),
-            markFailed: vi.fn(),
+            findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
           },
           sequenceGenerator: {
             nextSequence: vi.fn(async () => seq++),
@@ -97,5 +93,48 @@ describe('CreatePurchaseBatchHandler', () => {
     expect(result.totalCreated).toBe(5);
     expect(result.customerDistribution['cust_hot_spot']).toBe(5);
     expect(savedPurchases.every((p) => p.customerId === 'cust_hot_spot')).toBe(true);
+  });
+
+  it('uses saveMany for bulk persistence when supported by repositories', async () => {
+    const saveManyPurchases = vi.fn();
+    const saveManyOutbox = vi.fn();
+
+    const mockUnitOfWork: UnitOfWorkPort = {
+      execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
+        let seq = 1;
+        return work({
+          purchaseRepository: {
+            save: vi.fn(),
+            saveMany: saveManyPurchases,
+            findById: vi.fn(),
+          },
+          outboxRepository: {
+            save: vi.fn(),
+            saveMany: saveManyOutbox,
+            findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
+          },
+          sequenceGenerator: {
+            nextSequence: vi.fn(async () => seq++),
+          },
+          idempotencyRepository: {
+            find: vi.fn(),
+            save: vi.fn(),
+          },
+        });
+      },
+    };
+
+    const handler = new CreatePurchaseBatchHandler(mockUnitOfWork);
+    const result = await handler.execute(
+      new CreatePurchaseBatchCommand({
+        count: 15,
+      }),
+    );
+
+    expect(result.totalCreated).toBe(15);
+    expect(saveManyPurchases).toHaveBeenCalledTimes(1);
+    expect(saveManyPurchases.mock.calls[0][0]).toHaveLength(15);
+    expect(saveManyOutbox).toHaveBeenCalledTimes(1);
+    expect(saveManyOutbox.mock.calls[0][0]).toHaveLength(15);
   });
 });

@@ -1,9 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { StructuredLogger } from '@lab/observability';
 import {
-  HTTP_IDEMPOTENCY_REPOSITORY_PORT,
-  HttpIdempotencyRepositoryPort,
-} from '../../application/ports/http-idempotency-repository.port';
+  CLIENT_IDEMPOTENCY_REPOSITORY_PORT,
+  ClientIdempotencyRepositoryPort,
+} from '../../application/ports/client-idempotency-repository.port';
 import {
   OUTBOX_REPOSITORY_PORT,
   OutboxRepositoryPort,
@@ -17,14 +16,9 @@ import {
   SequenceGeneratorPort,
 } from '../../application/ports/sequence-generator.port';
 import { UnitOfWorkContext, UnitOfWorkPort } from '../../application/ports/unit-of-work.port';
-import { OutboxRelayService } from '../services/outbox-relay.service';
 
 @Injectable()
 export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
-  private readonly logger = new StructuredLogger(InMemoryUnitOfWorkAdapter.name, {
-    serviceName: 'producer-api',
-  });
-
   constructor(
     @Inject(PURCHASE_REPOSITORY_PORT)
     private readonly purchaseRepository: PurchaseRepositoryPort,
@@ -32,10 +26,8 @@ export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
     private readonly outboxRepository: OutboxRepositoryPort,
     @Inject(SEQUENCE_GENERATOR_PORT)
     private readonly sequenceGenerator: SequenceGeneratorPort,
-    @Inject(HTTP_IDEMPOTENCY_REPOSITORY_PORT)
-    private readonly idempotencyRepository: HttpIdempotencyRepositoryPort,
-    @Inject(OutboxRelayService)
-    private readonly outboxRelay: OutboxRelayService,
+    @Inject(CLIENT_IDEMPOTENCY_REPOSITORY_PORT)
+    private readonly idempotencyRepository: ClientIdempotencyRepositoryPort,
   ) {}
 
   async execute<T>(work: (context: UnitOfWorkContext) => Promise<T>): Promise<T> {
@@ -48,14 +40,6 @@ export class InMemoryUnitOfWorkAdapter implements UnitOfWorkPort {
 
     // 1. Execute transactional boundary across aggregate state and outbox
     const result = await work(context);
-
-    // 2. Transaction committed successfully: trigger asynchronous outbox relay to Kafka
-    // Notice: The command returns immediately without waiting for Kafka broker acknowledgment!
-    setImmediate(() => {
-      this.outboxRelay.processPending().catch((err: unknown) => {
-        this.logger.error(`Error in outbox relay post-commit hook: ${err}`);
-      });
-    });
 
     return result;
   }

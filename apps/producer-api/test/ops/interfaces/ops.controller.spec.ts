@@ -1,17 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import {
   BrokerMessageRecord,
+  ConsumerGroupDescriptionResult,
   ConsumerGroupLagResult,
-  KafkaInspectorPort,
+  StreamInspectorPort,
   TopicInspectionResult,
-} from '../../../src/ops/application/ports/kafka-inspector.port';
-import { ScaleTopicPartitionsHandler } from '../../../src/ops/application/commands/scale-topic-partitions.handler';
-import { GetConsumerGroupLagHandler } from '../../../src/ops/application/queries/get-consumer-group-lag.handler';
-import { InspectTopicHandler } from '../../../src/ops/application/queries/inspect-topic.handler';
-import { PeekPartitionMessagesHandler } from '../../../src/ops/application/queries/peek-partition-messages.handler';
+} from '../../../src/ops/application/ports/stream-inspector.port';
+import { ScaleTopicPartitionsHandler } from '../../../src/ops/application/commands/scale-topic-partitions/scale-topic-partitions.handler';
+import { DescribeConsumerGroupHandler } from '../../../src/ops/application/queries/describe-consumer-group/describe-consumer-group.handler';
+import { GetConsumerGroupLagHandler } from '../../../src/ops/application/queries/get-consumer-group-lag/get-consumer-group-lag.handler';
+import { InspectTopicHandler } from '../../../src/ops/application/queries/inspect-topic/inspect-topic.handler';
+import { PeekPartitionMessagesHandler } from '../../../src/ops/application/queries/peek-partition-messages/peek-partition-messages.handler';
 import { OpsController } from '../../../src/ops/interfaces/http/ops.controller';
 
 describe('OpsController', () => {
+  const createMockInspector = (overrides?: Partial<StreamInspectorPort>): StreamInspectorPort => ({
+    inspectTopic: async () => {
+      throw new Error('Not implemented');
+    },
+    inspectConsumerGroupLag: async () => {
+      throw new Error('Not implemented');
+    },
+    describeConsumerGroup: async () => {
+      throw new Error('Not implemented');
+    },
+    scaleTopicPartitions: async () => {
+      throw new Error('Not implemented');
+    },
+    peekPartitionMessages: async () => [],
+    publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
+    ...overrides,
+  });
+
+  const createController = (inspector: StreamInspectorPort) => {
+    const topicHandler = new InspectTopicHandler(inspector);
+    const lagHandler = new GetConsumerGroupLagHandler(inspector);
+    const describeHandler = new DescribeConsumerGroupHandler(inspector);
+    const peekHandler = new PeekPartitionMessagesHandler(inspector);
+    const scaleHandler = new ScaleTopicPartitionsHandler(inspector);
+    return new OpsController(
+      topicHandler,
+      lagHandler,
+      describeHandler,
+      peekHandler,
+      scaleHandler,
+      inspector,
+    );
+  };
+
   it('returns topic inspection result from handler', async () => {
     const mockResult: TopicInspectionResult = {
       topic: 'purchase.events',
@@ -19,27 +55,10 @@ describe('OpsController', () => {
       partitions: [],
     };
 
-    const mockInspector: KafkaInspectorPort = {
+    const inspector = createMockInspector({
       inspectTopic: async () => mockResult,
-      inspectConsumerGroupLag: async () => {
-        throw new Error('Not implemented');
-      },
-      scaleTopicPartitions: async () => mockResult,
-      peekPartitionMessages: async () => [],
-      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
-    };
-
-    const topicHandler = new InspectTopicHandler(mockInspector);
-    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
-    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
-    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(
-      topicHandler,
-      lagHandler,
-      peekHandler,
-      scaleHandler,
-      mockInspector,
-    );
+    });
+    const controller = createController(inspector);
 
     const result = await controller.inspectTopic('purchase.events');
     expect(result).toEqual(mockResult);
@@ -63,33 +82,40 @@ describe('OpsController', () => {
       ],
     };
 
-    const mockInspector: KafkaInspectorPort = {
-      inspectTopic: async () => {
-        throw new Error('Not implemented');
-      },
+    const inspector = createMockInspector({
       inspectConsumerGroupLag: async () => mockLagResult,
-      scaleTopicPartitions: async () => {
-        throw new Error('Not implemented');
-      },
-      peekPartitionMessages: async () => [],
-      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
-    };
-
-    const topicHandler = new InspectTopicHandler(mockInspector);
-    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
-    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
-    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(
-      topicHandler,
-      lagHandler,
-      peekHandler,
-      scaleHandler,
-      mockInspector,
-    );
+    });
+    const controller = createController(inspector);
 
     const result = await controller.getConsumerGroupLag('analytics-v1', 'purchase.events');
     expect(result).toEqual(mockLagResult);
     expect(result.totalLag).toBe('3');
+  });
+
+  it('returns consumer group description result from handler', async () => {
+    const mockDescription: ConsumerGroupDescriptionResult = {
+      groupId: 'loyalty-v1',
+      state: 'Stable',
+      protocol: 'RoundRobinAssigner',
+      protocolType: 'consumer',
+      members: [
+        {
+          memberId: 'loyalty-worker-primary',
+          clientId: 'loyalty-worker',
+          clientHost: '/127.0.0.1',
+          assignedPartitions: [0, 2, 4],
+        },
+      ],
+    };
+
+    const inspector = createMockInspector({
+      describeConsumerGroup: async () => mockDescription,
+    });
+    const controller = createController(inspector);
+
+    const result = await controller.describeConsumerGroup('loyalty-v1', 'purchase.events');
+    expect(result).toEqual(mockDescription);
+    expect(result.members[0].assignedPartitions).toEqual([0, 2, 4]);
   });
 
   it('scales topic partitions through handler', async () => {
@@ -99,31 +125,14 @@ describe('OpsController', () => {
       partitions: [],
     };
 
-    const mockInspector: KafkaInspectorPort = {
-      inspectTopic: async () => mockScaledResult,
-      inspectConsumerGroupLag: async () => {
-        throw new Error('Not implemented');
-      },
+    const inspector = createMockInspector({
       scaleTopicPartitions: async (topic, count) => {
         expect(topic).toBe('purchase.events');
         expect(count).toBe(8);
         return mockScaledResult;
       },
-      peekPartitionMessages: async () => [],
-      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
-    };
-
-    const topicHandler = new InspectTopicHandler(mockInspector);
-    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
-    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
-    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(
-      topicHandler,
-      lagHandler,
-      peekHandler,
-      scaleHandler,
-      mockInspector,
-    );
+    });
+    const controller = createController(inspector);
 
     const result = await controller.scaleTopicPartitions('purchase.events', 8);
     expect(result.partitionCount).toBe(8);
@@ -141,36 +150,15 @@ describe('OpsController', () => {
       },
     ];
 
-    const mockInspector: KafkaInspectorPort = {
-      inspectTopic: async () => {
-        throw new Error('Not implemented');
-      },
-      inspectConsumerGroupLag: async () => {
-        throw new Error('Not implemented');
-      },
-      scaleTopicPartitions: async () => {
-        throw new Error('Not implemented');
-      },
+    const inspector = createMockInspector({
       peekPartitionMessages: async (topic, partition, limit) => {
         expect(topic).toBe('purchase.events');
         expect(partition).toBe(0);
         expect(limit).toBe(5);
         return mockMessages;
       },
-      publishRawMessage: async () => ({ topic: 'purchase.events', partition: 0, offset: '1' }),
-    };
-
-    const topicHandler = new InspectTopicHandler(mockInspector);
-    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
-    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
-    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(
-      topicHandler,
-      lagHandler,
-      peekHandler,
-      scaleHandler,
-      mockInspector,
-    );
+    });
+    const controller = createController(inspector);
 
     const result = await controller.peekPartitionMessages('purchase.events', 0, '5');
     expect(result).toEqual(mockMessages);
@@ -178,35 +166,14 @@ describe('OpsController', () => {
   });
 
   it('injects poison pill and publishes raw messages', async () => {
-    const mockInspector: KafkaInspectorPort = {
-      inspectTopic: async () => {
-        throw new Error('Not implemented');
-      },
-      inspectConsumerGroupLag: async () => {
-        throw new Error('Not implemented');
-      },
-      scaleTopicPartitions: async () => {
-        throw new Error('Not implemented');
-      },
-      peekPartitionMessages: async () => [],
+    const inspector = createMockInspector({
       publishRawMessage: async (t, _k) => ({
         topic: t,
         partition: 2,
         offset: '99',
       }),
-    };
-
-    const topicHandler = new InspectTopicHandler(mockInspector);
-    const lagHandler = new GetConsumerGroupLagHandler(mockInspector);
-    const peekHandler = new PeekPartitionMessagesHandler(mockInspector);
-    const scaleHandler = new ScaleTopicPartitionsHandler(mockInspector);
-    const controller = new OpsController(
-      topicHandler,
-      lagHandler,
-      peekHandler,
-      scaleHandler,
-      mockInspector,
-    );
+    });
+    const controller = createController(inspector);
 
     const poisonRes = await controller.injectPoisonPill({ key: 'poison_custom' });
     expect(poisonRes.status).toBe('POISON_PILL_INJECTED');

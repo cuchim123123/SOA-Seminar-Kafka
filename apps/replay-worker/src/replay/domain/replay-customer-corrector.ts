@@ -3,6 +3,7 @@ import { pointsForPurchase, Tier, tierForEligibleSpend } from './loyalty-policy'
 import { ReplayStagingRecord } from './replay-staging-record.entity';
 
 export interface ReplayInputEvent {
+  readonly eventId?: string;
   readonly eventType: string;
   readonly aggregateId: string;
   readonly customerSequence: number;
@@ -16,7 +17,7 @@ export interface ReplayInputEvent {
 
 export class ReplayCustomerCorrector {
   /**
-   * Executes two-pass stream correction over a bounded set of historical Kafka events:
+   * Executes two-pass stream correction over a bounded set of historical events:
    *
    * Pass A:
    * - Scans all events to collect invalidated purchase IDs per customer.
@@ -38,7 +39,17 @@ export class ReplayCustomerCorrector {
     const invalidatedPurchaseIds = new Set<string>();
     const customerEventsMap = new Map<string, ReplayInputEvent[]>();
 
+    const seen = new Map<string, string>();
     for (const event of events) {
+      const identity = event.eventId ?? `${event.aggregateId}:${event.customerSequence}`;
+      const fingerprint = JSON.stringify(event);
+      const previous = seen.get(identity);
+      if (previous !== undefined) {
+        if (previous !== fingerprint)
+          throw new Error(`Conflicting replay event identity: ${identity}`);
+        continue;
+      }
+      seen.set(identity, fingerprint);
       const customerId = event.payload.customerId || event.aggregateId;
       if (!customerId) continue;
 

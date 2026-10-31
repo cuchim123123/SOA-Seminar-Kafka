@@ -11,8 +11,13 @@ import {
   PURCHASE_REPOSITORY_PORT,
   PurchaseRepositoryPort,
 } from '../../application/ports/purchase-repository.port';
-import { InMemoryOutboxRepositoryAdapter } from './in-memory-outbox-repository.adapter';
 
+/**
+ * In-memory read DAO mirroring the PostgreSQL adapter semantics: the outbox
+ * row's existence means the event is enqueued for Debezium CDC. CDC does not
+ * write broker acknowledgments back into source rows, so `publishedAt` stays
+ * null and `outboxStatus` is only ever ENQUEUED or UNKNOWN.
+ */
 @Injectable()
 export class InMemoryPurchaseReadDaoAdapter implements PurchaseReadDaoPort {
   constructor(
@@ -28,19 +33,10 @@ export class InMemoryPurchaseReadDaoAdapter implements PurchaseReadDaoPort {
       return null;
     }
 
-    let outboxStatus: 'PENDING' | 'PUBLISHED' | 'FAILED' | 'UNKNOWN' = 'UNKNOWN';
-    let publishedAt: string | null = null;
-    let eventId: string | null = null;
-
-    if (this.outboxRepository instanceof InMemoryOutboxRepositoryAdapter) {
-      const pendingEvents = await this.outboxRepository.findPending(100);
-      const matched = pendingEvents.find((e) => e.envelope.payload.purchaseId === purchaseId);
-      if (matched) {
-        outboxStatus = matched.status;
-        publishedAt = matched.publishedAt ?? null;
-        eventId = matched.eventId;
-      }
-    }
+    const outboxRecord = await this.outboxRepository.findByAggregateAndSequence(
+      purchase.customerId,
+      purchase.customerSequence,
+    );
 
     return {
       purchaseId: purchase.purchaseId,
@@ -49,9 +45,9 @@ export class InMemoryPurchaseReadDaoAdapter implements PurchaseReadDaoPort {
       status: purchase.status,
       customerSequence: purchase.customerSequence,
       createdAt: purchase.createdAt,
-      outboxStatus,
-      publishedAt,
-      eventId,
+      outboxStatus: outboxRecord ? 'ENQUEUED' : 'UNKNOWN',
+      publishedAt: null,
+      eventId: outboxRecord?.eventId ?? null,
     };
   }
 }

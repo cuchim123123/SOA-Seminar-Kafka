@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase.command';
-import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase.handler';
+import { CreatePurchaseCommand } from '../../../src/purchases/application/commands/create-purchase/create-purchase.command';
+import { CreatePurchaseHandler } from '../../../src/purchases/application/commands/create-purchase/create-purchase.handler';
 import {
   OutboxRecord,
   OutboxRepositoryPort,
@@ -11,6 +11,7 @@ import {
   UnitOfWorkContext,
   UnitOfWorkPort,
 } from '../../../src/purchases/application/ports/unit-of-work.port';
+import { IntegrationEventEnvelopeV1 } from '@lab/contracts';
 import { Purchase } from '../../../src/purchases/domain/purchase.entity';
 
 describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
@@ -29,9 +30,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
       save: vi.fn(async (record: OutboxRecord): Promise<void> => {
         savedOutboxRecord = record;
       }),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {
@@ -94,7 +93,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
     expect(savedOutboxRecord?.eventId).toBe(result.eventId);
     expect(savedOutboxRecord?.aggregateId).toBe('CUST_U001');
     expect(savedOutboxRecord?.customerSequence).toBe(1);
-    expect(savedOutboxRecord?.status).toBe('PENDING');
+    expect(savedOutboxRecord?.createdAt).toBeDefined();
     expect(savedOutboxRecord?.envelope.schemaVersion).toBe(1);
     expect(savedOutboxRecord?.envelope.eventType).toBe('PurchaseCompleted');
     expect(savedOutboxRecord?.envelope.aggregateId).toBe('CUST_U001');
@@ -120,9 +119,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
       save: vi.fn(async (record: OutboxRecord): Promise<void> => {
         savedOutboxRecord = record;
       }),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {
@@ -182,9 +179,14 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
 
     const mockOutboxRepo: OutboxRepositoryPort = {
       save: vi.fn(),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => ({
+        eventId: 'evt_original_999',
+        aggregateId: 'CUST_U001',
+        customerSequence: 5,
+        eventType: 'PurchaseCompleted',
+        envelope: {} as unknown as IntegrationEventEnvelopeV1,
+        createdAt: new Date().toISOString(),
+      })),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {
@@ -222,6 +224,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
     );
 
     expect(result.purchaseId).toBe('pur_existing_123');
+    expect(result.eventId).toBe('evt_original_999');
     expect(result.amountCents).toBe(5000);
     expect(mockSequenceGenerator.nextSequence).not.toHaveBeenCalled();
     expect(mockPurchaseRepo.save).not.toHaveBeenCalled();
@@ -236,9 +239,7 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
 
     const mockOutboxRepo: OutboxRepositoryPort = {
       save: vi.fn(),
-      findPending: vi.fn(),
-      markPublished: vi.fn(),
-      markFailed: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => null),
     };
 
     const mockSequenceGenerator: SequenceGeneratorPort = {

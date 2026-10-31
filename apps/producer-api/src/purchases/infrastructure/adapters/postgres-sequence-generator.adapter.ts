@@ -15,28 +15,16 @@ export class PostgresSequenceGeneratorAdapter implements SequenceGeneratorPort {
    * Uses raw SQL with row-level locking to guarantee atomic serialization across concurrent requests.
    */
   async nextSequence(customerId: string): Promise<number> {
-    // 1. Attempt initial insertion for new customer (sequence 1 assigned, next is 2)
-    const insertResult = await this.client.$executeRawUnsafe(
+    const rows = await this.client.$queryRawUnsafe<Array<{ assigned_sequence: bigint }>>(
       `INSERT INTO purchase_customers (customer_id, next_event_sequence)
        VALUES ($1, 2)
-       ON CONFLICT (customer_id) DO NOTHING`,
+       ON CONFLICT (customer_id)
+       DO UPDATE SET next_event_sequence = purchase_customers.next_event_sequence + 1
+       RETURNING (purchase_customers.next_event_sequence - 1)::bigint AS assigned_sequence`,
       customerId,
     );
 
-    if (insertResult === 1) {
-      return 1;
-    }
-
-    // 2. Existing customer: atomically lock row, increment sequence, and return previously assigned sequence
-    const rows = await this.client.$queryRawUnsafe<Array<{ assigned_sequence: bigint }>>(
-      `UPDATE purchase_customers
-       SET next_event_sequence = next_event_sequence + 1
-       WHERE customer_id = $1
-       RETURNING (next_event_sequence - 1)::bigint AS assigned_sequence`,
-      customerId,
-    );
-
-    if (!rows || rows.length === 0) {
+    if (!rows || rows.length === 0 || rows[0]?.assigned_sequence === undefined) {
       throw new Error(`Failed to allocate customer sequence for customer '${customerId}'`);
     }
 

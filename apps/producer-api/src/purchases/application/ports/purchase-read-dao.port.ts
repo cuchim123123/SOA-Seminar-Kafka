@@ -5,7 +5,7 @@ export interface PurchaseReadModel {
   readonly status: 'COMPLETED' | 'INVALIDATED';
   readonly customerSequence: number;
   readonly createdAt: string;
-  readonly outboxStatus: 'PENDING' | 'PUBLISHED' | 'FAILED' | 'UNKNOWN';
+  readonly outboxStatus: 'ENQUEUED' | 'UNKNOWN';
   readonly publishedAt: string | null;
   readonly eventId: string | null;
 }

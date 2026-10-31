@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   ConsumerGroupLagResult,
-  KafkaInspectorPort,
-} from '../../../src/ops/application/ports/kafka-inspector.port';
-import { GetConsumerGroupLagHandler } from '../../../src/ops/application/queries/get-consumer-group-lag.handler';
-import { GetConsumerGroupLagQuery } from '../../../src/ops/application/queries/get-consumer-group-lag.query';
+  StreamInspectorPort,
+} from '../../../src/ops/application/ports/stream-inspector.port';
+import { GetConsumerGroupLagHandler } from '../../../src/ops/application/queries/get-consumer-group-lag/get-consumer-group-lag.handler';
+import { GetConsumerGroupLagQuery } from '../../../src/ops/application/queries/get-consumer-group-lag/get-consumer-group-lag.query';
 
 describe('GetConsumerGroupLagHandler', () => {
-  it('delegates consumer group lag inspection to KafkaInspectorPort with UNCOMMITTED handling', async () => {
+  it('delegates consumer group lag inspection to StreamInspectorPort with UNCOMMITTED handling', async () => {
     const mockLagResult: ConsumerGroupLagResult = {
       groupId: 'loyalty-v1',
       topic: 'purchase.events',
@@ -34,7 +34,7 @@ describe('GetConsumerGroupLagHandler', () => {
       ],
     };
 
-    const mockInspector: KafkaInspectorPort = {
+    const mockInspector: StreamInspectorPort = {
       inspectTopic: async () => {
         throw new Error('Not implemented');
       },
@@ -44,6 +44,9 @@ describe('GetConsumerGroupLagHandler', () => {
         return mockLagResult;
       },
       scaleTopicPartitions: async () => {
+        throw new Error('Not implemented');
+      },
+      describeConsumerGroup: async () => {
         throw new Error('Not implemented');
       },
       peekPartitionMessages: async () => [],

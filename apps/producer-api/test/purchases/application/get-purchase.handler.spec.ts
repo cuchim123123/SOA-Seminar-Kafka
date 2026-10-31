@@ -3,8 +3,8 @@ import {
   PurchaseReadDaoPort,
   PurchaseReadModel,
 } from '../../../src/purchases/application/ports/purchase-read-dao.port';
-import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase.handler';
-import { GetPurchaseQuery } from '../../../src/purchases/application/queries/get-purchase.query';
+import { GetPurchaseHandler } from '../../../src/purchases/application/queries/get-purchase/get-purchase.handler';
+import { GetPurchaseQuery } from '../../../src/purchases/application/queries/get-purchase/get-purchase.query';
 
 describe('GetPurchaseHandler', () => {
   it('returns purchase read model when found via read DAO', async () => {
@@ -15,8 +15,8 @@ describe('GetPurchaseHandler', () => {
       status: 'COMPLETED',
       customerSequence: 1,
       createdAt: '2026-10-29T12:00:00.000Z',
-      outboxStatus: 'PUBLISHED',
-      publishedAt: '2026-10-29T12:00:01.000Z',
+      outboxStatus: 'ENQUEUED',
+      publishedAt: null,
       eventId: 'evt_001',
     };
 

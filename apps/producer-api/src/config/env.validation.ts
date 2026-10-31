@@ -13,12 +13,8 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .min(1)
-    .default('postgresql://postgres:postgres@localhost:5432/purchases_db?schema=public'),
+    .default('postgresql://postgres:postgres@localhost:5433/purchases_db?schema=public'),
   PURCHASES_DATABASE_URL: z.string().optional(),
-  OUTBOX_RELAY_IN_PROCESS: z
-    .string()
-    .default('false')
-    .transform((val) => val === 'true'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  KafkaInspectorPort,
+  StreamInspectorPort,
   TopicInspectionResult,
-} from '../../../src/ops/application/ports/kafka-inspector.port';
-import { InspectTopicHandler } from '../../../src/ops/application/queries/inspect-topic.handler';
-import { InspectTopicQuery } from '../../../src/ops/application/queries/inspect-topic.query';
+} from '../../../src/ops/application/ports/stream-inspector.port';
+import { InspectTopicHandler } from '../../../src/ops/application/queries/inspect-topic/inspect-topic.handler';
+import { InspectTopicQuery } from '../../../src/ops/application/queries/inspect-topic/inspect-topic.query';
 
 describe('InspectTopicHandler', () => {
-  it('delegates topic inspection to KafkaInspectorPort', async () => {
+  it('delegates topic inspection to StreamInspectorPort', async () => {
     const mockResult: TopicInspectionResult = {
       topic: 'purchase.events',
       partitionCount: 6,
@@ -24,7 +24,7 @@ describe('InspectTopicHandler', () => {
       ],
     };
 
-    const mockInspector: KafkaInspectorPort = {
+    const mockInspector: StreamInspectorPort = {
       inspectTopic: async (topic: string) => {
         expect(topic).toBe('purchase.events');
         return mockResult;
@@ -33,6 +33,9 @@ describe('InspectTopicHandler', () => {
         throw new Error('Not implemented');
       },
       scaleTopicPartitions: async () => {
+        throw new Error('Not implemented');
+      },
+      describeConsumerGroup: async () => {
         throw new Error('Not implemented');
       },
       peekPartitionMessages: async () => [],
