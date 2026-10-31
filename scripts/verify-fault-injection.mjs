@@ -12,18 +12,17 @@ if (typeof process.loadEnvFile === 'function') {
 }
 
 const LOYALTY_PORT = process.env.LOYALTY_WORKER_PORT || process.env.LOYALTY_PORT || '3001';
-const PUBLISHER_PORT = process.env.PUBLISHER_PORT || '3003';
 const PURCHASES_DATABASE_URL =
   process.env.PURCHASES_DATABASE_URL ||
   process.env.DATABASE_URL ||
   (process.env.POSTGRES_PASSWORD
-    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
+    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5433'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
     : undefined);
 const LOYALTY_DATABASE_URL =
   process.env.LOYALTY_DATABASE_URL ||
   process.env.DATABASE_URL ||
   (process.env.POSTGRES_PASSWORD
-    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5432'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
+    ? `postgresql://${process.env.POSTGRES_USER || 'postgres'}:${process.env.POSTGRES_PASSWORD}@localhost:${process.env.POSTGRES_PORT || '5433'}/${process.env.POSTGRES_DB || 'kafka_streaming_lab'}?schema=public`
     : undefined);
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092')
   .split(',')
@@ -275,228 +274,7 @@ async function main() {
     await sleep(1000);
 
     // =========================================================================
-    // SCENARIO 2: PUBLISHER POST-ACK CRASH (D5 RUNBOOK)
-    // =========================================================================
-    console.log('\n' + '-'.repeat(75));
-    console.log('  SCENARIO 2: PUBLISHER POST-ACK CRASH BEFORE OUTBOX MARK (D5)');
-    console.log('-'.repeat(75));
-
-    const custD5 = `FAULT_D5_CUST_${Date.now()}`;
-    const evtD5 = `evt_fault_d5_${Date.now()}`;
-    const purD5 = `pur_${custD5}_1`;
-
-    const envelopeD5 = createPurchaseCompletedEnvelope({
-      customerId: custD5,
-      customerSequence: 1,
-      purchaseId: purD5,
-      amountCents: 20_000,
-      occurredAt: new Date().toISOString(),
-    });
-    envelopeD5.eventId = evtD5;
-
-    // Step 2.1: Insert directly into PostgreSQL purchases and outbox_events table as PENDING
-    console.log(
-      `[P4-06 Proof] Step 2.1: Inserting pending outbox record into PostgreSQL for ${custD5}...`,
-    );
-    await purchasesClient.query(
-      `INSERT INTO purchase_customers (customer_id, next_event_sequence)
-       VALUES ($1, 2)
-       ON CONFLICT (customer_id) DO NOTHING`,
-      [custD5],
-    );
-
-    await purchasesClient.query(
-      `INSERT INTO purchases (purchase_id, customer_id, completion_sequence, amount_cents, status, created_at)
-       VALUES ($1, $2, $3, $4, 'COMPLETED', NOW())`,
-      [purD5, custD5, 1, 20_000],
-    );
-
-    await purchasesClient.query(
-      `INSERT INTO outbox_events (event_id, aggregate_id, customer_sequence, event_type, payload_json, status, attempt_count, created_at)
-       VALUES ($1, $2, 1, 'PurchaseCompleted', $3, 'PENDING', 0, NOW())`,
-      [evtD5, custD5, JSON.stringify(envelopeD5)],
-    );
-    console.log(`[P4-06 Proof] Outbox record inserted with status PENDING for event ${evtD5}`);
-
-    // Step 2.2: Start outbox-publisher with crash fault injection after broker ACK
-    console.log(
-      `[P4-06 Proof] Step 2.2: Starting outbox-publisher with fault injection AFTER broker ACK...`,
-    );
-    const faultPublisher = spawn(
-      'node',
-      ['--env-file=.env', 'apps/outbox-publisher/dist/main.js'],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,
-        env: {
-          ...process.env,
-          PORT: PUBLISHER_PORT,
-          DATABASE_URL: PURCHASES_DATABASE_URL,
-          FAULT_INJECTION_POINT: 'AFTER_KAFKA_ACK_BEFORE_OUTBOX_MARK',
-          FAULT_TRIGGER_EVENT_ID: evtD5,
-        },
-      },
-    );
-
-    let faultPubLogs = '';
-    faultPublisher.stdout?.on('data', (d) => {
-      faultPubLogs += d.toString();
-    });
-    faultPublisher.stderr?.on('data', (d) => {
-      faultPubLogs += d.toString();
-    });
-
-    // Wait for publisher to crash with code 43
-    console.log('[P4-06 Proof] Waiting for publisher to publish to Kafka broker and CRASH...');
-    const exitCodeD5 = await new Promise((resolve) => {
-      faultPublisher.on('exit', (code) => resolve(code));
-      setTimeout(() => resolve(null), 25000);
-    });
-
-    console.log(`[P4-06 Proof] Publisher process exited with code: ${exitCodeD5}`);
-    if (exitCodeD5 !== 43) {
-      console.error(`Fault publisher logs:\n${faultPubLogs}`);
-      throw new Error(
-        `Expected publisher process to crash with exit code 43, received: ${exitCodeD5}`,
-      );
-    }
-    console.log(
-      '  >>> EXPECTED CRASH OBSERVED: Publisher crashed after broker ACK before marking outbox! <<<',
-    );
-
-    // Verify outbox status is STILL PENDING in DB
-    const outboxAfterCrash = (
-      await purchasesClient.query('SELECT * FROM outbox_events WHERE event_id = $1', [evtD5])
-    ).rows[0];
-
-    console.log(
-      `[P4-06 Proof] Outbox record status in DB after crash: '${outboxAfterCrash.status}'`,
-    );
-    if (outboxAfterCrash.status !== 'PENDING') {
-      throw new Error(
-        `Expected outbox record status to remain PENDING, found: ${outboxAfterCrash.status}`,
-      );
-    }
-
-    // Step 2.3: Restart outbox-publisher normally
-    console.log(
-      '\n[P4-06 Proof] Step 2.3: Restarting outbox-publisher normally (WITHOUT fault injection)...',
-    );
-    const pubChild = await ensureServiceRunning(
-      'outbox-publisher',
-      `http://localhost:${PUBLISHER_PORT}/health`,
-      'node',
-      ['--env-file=.env', 'apps/outbox-publisher/dist/main.js'],
-      {
-        PORT: PUBLISHER_PORT,
-        DATABASE_URL: PURCHASES_DATABASE_URL,
-        FAULT_INJECTION_POINT: 'NONE',
-      },
-    );
-
-    // Wait for publisher to re-drain and mark PUBLISHED
-    let outboxPublished = false;
-    const startPollPub = Date.now();
-    while (Date.now() - startPollPub < 20000) {
-      const res = await purchasesClient.query(
-        'SELECT status FROM outbox_events WHERE event_id = $1',
-        [evtD5],
-      );
-      if (res.rows.length > 0 && res.rows[0].status === 'PUBLISHED') {
-        outboxPublished = true;
-        break;
-      }
-      await sleep(300);
-    }
-
-    if (!outboxPublished) {
-      throw new Error(`Timeout waiting for outbox record ${evtD5} to be marked PUBLISHED`);
-    }
-    console.log(`[P4-06 Proof] Outbox record status successfully transitioned to 'PUBLISHED'`);
-    killProcess(pubChild);
-
-    // Step 2.4: Start loyalty-worker to consume both published copies from Kafka
-    console.log(
-      '\n[P4-06 Proof] Step 2.4: Starting loyalty-worker to process downstream duplicate events...',
-    );
-    const loyaltyChild = await ensureServiceRunning(
-      'loyalty-worker',
-      `http://localhost:${LOYALTY_PORT}/health`,
-      'node',
-      ['--env-file=.env', 'apps/loyalty-worker/dist/main.js'],
-      {
-        PORT: LOYALTY_PORT,
-        DATABASE_URL: LOYALTY_DATABASE_URL,
-        FAULT_INJECTION_POINT: 'NONE',
-      },
-    );
-
-    // Wait for processing
-    let loyaltyDone = false;
-    const startPollLoyalty = Date.now();
-    while (Date.now() - startPollLoyalty < 25000) {
-      const res = await loyaltyClient.query(
-        'SELECT * FROM loyalty_accounts WHERE customer_id = $1',
-        [custD5],
-      );
-      if (res.rows.length > 0) {
-        loyaltyDone = true;
-        break;
-      }
-      await sleep(300);
-    }
-
-    if (!loyaltyDone) {
-      throw new Error(`Timeout waiting for loyalty worker to process event for ${custD5}`);
-    }
-
-    // Wait a moment to ensure any duplicate copy in Kafka is also consumed
-    await sleep(3000);
-
-    const accountD5 = (
-      await loyaltyClient.query('SELECT * FROM loyalty_accounts WHERE customer_id = $1', [custD5])
-    ).rows[0];
-
-    console.log(
-      `[P4-06 Proof] Final Loyalty Account State for ${custD5}: Points=${accountD5.points}, Tier=${accountD5.tier}`,
-    );
-
-    // Amount $200.00 at Bronze (1x) should earn exactly 20 points, NOT 40!
-    if (Number(accountD5.points) !== 20) {
-      throw new Error(
-        `IDEMPOTENCY FAILURE! Expected points to be 20, but found ${accountD5.points} (double crediting occurred!)`,
-      );
-    }
-    console.log(
-      '  >>> IDEMPOTENCY CONFIRMED: Repartitioned Kafka duplicate skipped without double crediting! <<<',
-    );
-    killProcess(loyaltyChild);
-
-    // =========================================================================
-    // FINAL EVIDENCE SUMMARY
-    // =========================================================================
-    console.log('\n' + '='.repeat(75));
-    console.log('  EVIDENCE SUMMARY: PHASE 4 TICKET P4-06 PASSED');
-    console.log('='.repeat(75));
-    console.log(
-      `D4 Consumer Crash Injected     : Process crashed (code 42) AFTER DB commit, BEFORE offset commit`,
-    );
-    console.log(
-      `D4 At-Least-Once Redelivery    : Kafka redelivered uncommitted offset upon restart`,
-    );
-    console.log(
-      `D4 Consumer Idempotency        : Duplicate skipped (points preserved at 12, attempts >= 2, mutations == 1)`,
-    );
-    console.log(
-      `D5 Publisher Crash Injected    : Process crashed (code 43) AFTER broker ACK, BEFORE outbox marked`,
-    );
-    console.log(
-      `D5 Outbox Re-Drain & Republish : Publisher restarted, republished with same stable eventId`,
-    );
-    console.log(
-      `D5 End-to-End Safety           : Downstream Loyalty consumer deduplicated event (points preserved at 20)`,
-    );
-    console.log(`\n  >>> PROOF CONFIRMED: P4-06 Fault Injection Integration Suite verified! <<<\n`);
+    console.log('Consumer post-commit crash proof passed. CDC recovery is verified separately.');
   } finally {
     if (activeChild) killProcess(activeChild);
     await producer.disconnect();

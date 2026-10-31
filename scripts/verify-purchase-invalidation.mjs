@@ -11,11 +11,11 @@ if (typeof process.loadEnvFile === 'function') {
 }
 
 const PRODUCER_PORT = process.env.PORT || '3000';
-const PUBLISHER_PORT = process.env.PUBLISHER_PORT || '3003';
+const POSTGRES_HOST_PORT = process.env.POSTGRES_PORT || '5433';
 const PURCHASES_DATABASE_URL =
   process.env.PURCHASES_DATABASE_URL ||
   process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@localhost:5432/purchases_db?schema=public';
+  `postgresql://postgres:postgres@localhost:${POSTGRES_HOST_PORT}/purchases_db?schema=public`;
 
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092')
   .split(',')
@@ -91,7 +91,6 @@ async function main() {
   console.log('='.repeat(80));
 
   let producerChild = null;
-  let publisherChild = null;
   let kafkaConsumer = null;
 
   const pool = new pg.Pool({ connectionString: PURCHASES_DATABASE_URL });
@@ -109,21 +108,6 @@ async function main() {
         PORT: PRODUCER_PORT,
         PURCHASES_DATABASE_URL,
         DATABASE_URL: PURCHASES_DATABASE_URL,
-        OUTBOX_RELAY_IN_PROCESS: 'false',
-      },
-    );
-
-    publisherChild = await ensureServiceRunning(
-      'outbox-publisher',
-      `http://localhost:${PUBLISHER_PORT}/health`,
-      'node',
-      ['apps/outbox-publisher/dist/main.js'],
-      {
-        PORT: PUBLISHER_PORT,
-        PURCHASES_DATABASE_URL,
-        DATABASE_URL: PURCHASES_DATABASE_URL,
-        POLL_INTERVAL_MS: '250',
-        BATCH_SIZE: '50',
       },
     );
 
@@ -293,34 +277,7 @@ async function main() {
       );
     }
 
-    // 7. Wait for Outbox Publisher to drain and publish all 4 records
-    console.log(
-      `\n[P5-01 Proof] Step 5: Waiting for Outbox Publisher to publish all 4 records to Kafka...`,
-    );
-    const maxWaitMs = 15000;
-    const startWait = Date.now();
-    let publishedCount = 0;
-
-    while (Date.now() - startWait < maxWaitMs) {
-      const outboxRes = await client.query(
-        `SELECT event_id, customer_sequence, event_type, status, published_at FROM outbox_events WHERE aggregate_id = $1 ORDER BY customer_sequence ASC`,
-        [testCustomerId],
-      );
-
-      publishedCount = outboxRes.rows.filter((r) => r.status === 'PUBLISHED').length;
-      if (publishedCount === 4) {
-        console.log(`  -> All 4 outbox records marked PUBLISHED in database.`);
-        break;
-      }
-      await sleep(500);
-    }
-
-    if (publishedCount < 4) {
-      throw new Error(
-        `Timed out waiting for outbox events to be published. Only ${publishedCount}/4 published.`,
-      );
-    }
-
+    // CDC does not update publication status in PostgreSQL; verify Kafka receipts below.
     // 8. Wait for Kafka Consumer to receive messages for this customer
     console.log(`\n[P5-01 Proof] Step 6: Verifying Kafka messages on topic '${PURCHASE_TOPIC}'...`);
     const consumerWaitStart = Date.now();
@@ -413,7 +370,7 @@ async function main() {
     console.log('   ✓ Next monotonic sequence 4 allocated under row lock');
     console.log('   ✓ PurchaseInvalidated envelope atomically saved to Outbox');
     console.log('   ✓ Duplicate invalidation proved idempotent (no double sequence advance)');
-    console.log('   ✓ Outbox Publisher successfully relayed event to Kafka');
+    console.log('   ✓ Debezium CDC successfully relayed event to Kafka');
     console.log('   ✓ Single-partition strictly-ordered delivery verified (seq 1, 2, 3, 4)');
     console.log('='.repeat(80));
   } finally {
@@ -430,10 +387,6 @@ async function main() {
     if (producerChild) {
       console.log('[P5-01 Proof] Stopping background producer-api...');
       killProcess(producerChild);
-    }
-    if (publisherChild) {
-      console.log('[P5-01 Proof] Stopping background outbox-publisher...');
-      killProcess(publisherChild);
     }
   }
 }

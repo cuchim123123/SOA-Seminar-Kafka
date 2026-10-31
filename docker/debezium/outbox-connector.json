@@ -1,0 +1,22 @@
+{
+  "name": "purchases-outbox-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+    "topic.prefix": "purchases_cdc",
+    "schema.include.list": "public",
+    "table.include.list": "public.outbox_events",
+    "plugin.name": "pgoutput",
+    "publication.autocreate.mode": "all_tables",
+    "tombstones.on.delete": "false",
+    "transforms": "outbox",
+    "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+    "transforms.outbox.table.field.event.id": "event_id",
+    "transforms.outbox.table.field.event.key": "aggregate_id",
+    "transforms.outbox.table.field.event.type": "event_type",
+    "transforms.outbox.table.field.event.payload": "payload_json",
+    "transforms.outbox.route.by.field": "event_type",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+  }
+}

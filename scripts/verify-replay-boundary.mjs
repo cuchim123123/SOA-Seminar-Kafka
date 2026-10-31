@@ -11,19 +11,20 @@ if (typeof process.loadEnvFile === 'function') {
 }
 
 const PRODUCER_PORT = process.env.PORT || '3000';
-const PUBLISHER_PORT = process.env.PUBLISHER_PORT || '3003';
 const LOYALTY_PORT = process.env.LOYALTY_WORKER_PORT || '3001';
 const ANALYTICS_PORT = process.env.ANALYTICS_WORKER_PORT || '3002';
 const REPLAY_PORT = process.env.REPLAY_WORKER_PORT || '3004';
 
+const POSTGRES_HOST_PORT = process.env.POSTGRES_PORT || '5433';
 const PURCHASES_DATABASE_URL =
   process.env.PURCHASES_DATABASE_URL ||
   process.env.DATABASE_URL ||
-  'postgresql://postgres:postgres@localhost:5432/purchases_db?schema=public';
+  `postgresql://postgres:postgres@localhost:${POSTGRES_HOST_PORT}/purchases_db?schema=public`;
 
 const LOYALTY_DATABASE_URL =
   process.env.LOYALTY_DATABASE_URL ||
-  'postgresql://postgres:postgres@localhost:5432/loyalty_db?schema=public';
+  process.env.DATABASE_URL ||
+  `postgresql://postgres:postgres@localhost:${POSTGRES_HOST_PORT}/loyalty_db?schema=public`;
 
 const KAFKA_BROKERS = (process.env.KAFKA_BROKERS || 'localhost:9092')
   .split(',')
@@ -136,15 +137,6 @@ async function main() {
     );
     if (producerChild) spawned.push(producerChild);
 
-    const publisherChild = await ensureServiceRunning(
-      'Outbox Publisher',
-      `http://localhost:${PUBLISHER_PORT}/health`,
-      'node',
-      ['apps/outbox-publisher/dist/main.js'],
-      { PORT: String(PUBLISHER_PORT), PUBLISHER_PORT: String(PUBLISHER_PORT) },
-    );
-    if (publisherChild) spawned.push(publisherChild);
-
     const loyaltyChild = await ensureServiceRunning(
       'Loyalty Worker',
       `http://localhost:${LOYALTY_PORT}/health/live`,
@@ -216,22 +208,29 @@ async function main() {
       `  -> Invalidation response: status=${invData.status}, assigned customerSequence=${invData.customerSequence}`,
     );
 
-    // Wait for publisher to drain all pending events
-    console.log('[P5-02 Proof] Step 3: Waiting for outbox to drain to Kafka...');
-    for (let i = 0; i < 20; i++) {
-      const pendingRes = await purchasesPool.query(
-        "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1 AND status = 'PENDING'",
+    // CDC publication is asynchronous; observe consumer state, not outbox status.
+    // Wait for live loyalty worker to process all 4 events through CDC
+    console.log('[P5-02 Proof] Step 3: Waiting for live loyalty worker to process all events...');
+    let liveLoyaltySynced = false;
+    for (let i = 0; i < 30; i++) {
+      const dbLoyaltyRes = await loyaltyPool.query(
+        'SELECT last_customer_sequence FROM loyalty_accounts WHERE customer_id = $1',
         [testCustomerId],
       );
-      if (parseInt(pendingRes.rows[0].count, 10) === 0) {
-        console.log('  -> All events published to Kafka broker!');
+      if (
+        dbLoyaltyRes.rows.length > 0 &&
+        parseInt(dbLoyaltyRes.rows[0].last_customer_sequence, 10) >= 4
+      ) {
+        liveLoyaltySynced = true;
         break;
       }
       await sleep(300);
     }
-
-    // Wait for live consumer groups to process and commit
-    await sleep(2000);
+    if (!liveLoyaltySynced) {
+      throw new Error(
+        `Live loyalty worker did not complete processing sequence 4 for customer ${testCustomerId}`,
+      );
+    }
 
     // 3. Record baseline committed offsets for live consumer groups
     console.log('\n[P5-02 Proof] Step 4: Capturing baseline offsets for live consumer groups...');
