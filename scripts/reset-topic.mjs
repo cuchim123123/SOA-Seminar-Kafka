@@ -15,9 +15,14 @@ async function verifyKafkaHealthy() {
   const { stdout } = await execAsync(
     'docker inspect --format="{{json .State.Health.Status}}" kafka-broker-1',
   );
-  if (!stdout.includes('healthy')) {
+  try {
+    const status = JSON.parse(stdout.trim());
+    if (status !== 'healthy') {
+      throw new Error(`Kafka broker container health is '${status}', not 'healthy'`);
+    }
+  } catch (err) {
     throw new Error(
-      'Kafka container is not healthy. Start infrastructure with `pnpm kafka:up` first.',
+      `Kafka container is not healthy (${err.message}). Start infrastructure with \`pnpm kafka:up\` first.`,
     );
   }
 }
@@ -72,16 +77,23 @@ async function main() {
   const args = process.argv.slice(2);
   const isConfirmed = args.includes('--confirm') || process.env.CONFIRM_RESET === 'true';
 
-  console.log('=== Kafka Topic Reset & Migration Tool (P2-01) ===');
+  console.log('=== Kafka Topic Reset Tool (P2-01: Broker Topic Only) ===');
+  console.log(`
+[LIMITATION & SCOPE NOTICE]:
+This script ONLY deletes and recreates the Kafka topic '${TOPIC}'.
+It DOES NOT reset application databases (purchase_db, loyalty_db, analytics_db),
+nor does it reset Debezium CDC replication slots or checkpoints.
+Do NOT treat this as a clean full application reset.
+`);
 
   if (!isConfirmed) {
     console.error(`
 [SAFETY GUARD]: DESTRUCTIVE OPERATION REFUSED!
 ---------------------------------------------------------------------------------
 Resetting topic '${TOPIC}' will permanently erase all retained events and committed
-offsets on your local Kafka broker.
+offsets on your local Kafka broker for this topic only.
 
-To proceed with this destructive reset, explicitly supply the '--confirm' flag:
+To proceed with this broker-only reset, explicitly supply the '--confirm' flag:
   pnpm demo:reset -- --confirm
 or set environment variable:
   CONFIRM_RESET=true pnpm demo:reset

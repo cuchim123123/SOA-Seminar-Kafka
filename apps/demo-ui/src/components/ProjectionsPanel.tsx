@@ -206,7 +206,7 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge-mono badge-cyan">analytics_db</span>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Sales Analytics Summary</span>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main)' }}>Sales Analytics Summary (Gross Revenue)</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
@@ -233,7 +233,7 @@ export const ProjectionsPanel: React.FC<ProjectionsPanelProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)' }}>
               <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Platform Revenue</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Gross Platform Revenue</div>
                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-emerald)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                   ${((summary?.totalRevenueCents || 0) / 100).toFixed(2)}
                 </div>
