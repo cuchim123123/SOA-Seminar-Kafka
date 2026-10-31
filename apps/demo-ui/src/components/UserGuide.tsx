@@ -199,7 +199,7 @@ export const UserGuide: React.FC<UserGuideProps> = ({ onNavigateToTab }) => {
               KRaft Multi-Partition Log
             </div>
             <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Running Apache Kafka 4.x in KRaft consensus mode with 6 partitions on topic <code>purchase.events</code>, managed through Provectus Kafka UI on port 8080.
+              Running Apache Kafka 4.x in KRaft consensus mode with 6 partitions on topic <code>purchase.events</code>, managed through Kafbat UI on port 8080.
             </p>
           </div>
         </div>

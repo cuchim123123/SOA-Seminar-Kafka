@@ -29,9 +29,9 @@ services:
       retries: 10
       start_period: 10s
 
-  kafka-ui:
-    image: ${KAFKA_UI_IMAGE:-provectuslabs/kafka-ui:latest}
-    container_name: kafka-ui
+  kafbat-ui:
+    image: ${KAFKA_UI_IMAGE:-ghcr.io/kafbat/kafka-ui:v1.5.0}
+    container_name: kafbat-ui
     ports:
       - "${KAFKA_UI_PORT:-8080}:8080"
     environment:
@@ -42,7 +42,7 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

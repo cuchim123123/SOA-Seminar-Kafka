@@ -35,7 +35,7 @@ pnpm test:unit
 ### Local Kafka Environment (KRaft RF=1)
 
 ```bash
-# Start Apache Kafka 4.3.1 and Kafka UI in background
+# Start Apache Kafka 4.3.1 and Kafbat UI in background
 pnpm kafka:up
 
 # Check container status and health
@@ -159,7 +159,7 @@ pnpm demo:correction
 
 - **Kafka Broker (Host listener)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
-- **Kafka UI**: `http://localhost:8080`
+- **Kafbat UI**: `http://localhost:8080`
 - **PostgreSQL Multi-DB Cluster**: `localhost:5432` (`postgres:16-alpine`)
   - `purchases_db`: `purchases`, `purchase_customers`, `outbox_events`, `http_idempotency_keys`
   - `loyalty_db`: `loyalty_accounts`, `processed_events`, `replay_runs`, `replay_staging`
@@ -201,7 +201,7 @@ pnpm demo:correction
 │   ├── verify-purchase-invalidation.mjs # Purchase invalidation event flow verification
 │   ├── verify-replay-boundary.mjs    # Bounded replay & fixed boundary verification
 │   └── verify-two-pass-correction.mjs # Two-pass correction calculation (82 -> 40 points) verification
-├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafka UI + PostgreSQL 16
+├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafbat UI + PostgreSQL 16
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
 ├── pnpm-workspace.yaml        # pnpm workspace package patterns
@@ -226,7 +226,7 @@ pnpm demo:correction
 
 ### Phase 0 — Foundation
 - [x] **P0-01: Workspace Setup** — Monorepo foundation, strict TypeScript, ESLint 9 flat config, Vitest multi-project, NestJS shell with injectable configuration, smoke unit tests.
-- [x] **P0-02: Local Kafka Environment** — Single-node KRaft broker RF1, Kafka UI, persistent named volume, health checks, topic lifecycle verification script.
+- [x] **P0-02: Local Kafka Environment** — Single-node KRaft broker RF1, Kafbat UI, persistent named volume, health checks, topic lifecycle verification script.
 - [x] **P0-03: Contracts Foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer.
 
 ### Phase 1 — Pipeline MVP
@@ -243,3 +243,7 @@ pnpm demo:correction
 - [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
 - [x] **P3-02: Manual Commit + Lag Reader** — Explicit manual offset commit discipline (`autoCommit: false`, `N + 1`) and live Kafka Admin lag calculation `(logEndOffset - committedOffset)` per partition with `UNCOMMITTED` handling (`pnpm demo:lag`).
 - [x] **P3-03: Pause/Resume Scenario** — CLI and HTTP allowlisted control to pause Analytics, observe lag accumulation while Loyalty proceeds, and catch up back to 0 lag upon resume (`pnpm demo:pause-resume`).
+
+### Kafbat UI migration (2026-11-01)
+
+The Compose profile uses Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui`. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.

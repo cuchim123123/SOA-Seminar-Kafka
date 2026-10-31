@@ -93,3 +93,7 @@ If a design choice changes, update this ADR file, the relevant architecture/cont
 **Consequence:** Eliminates dual-source-of-truth drift, partition-key routing mismatches, and brittle manual object construction. **Status:** accepted.
 
 
+
+## Kafbat UI — 2026-11-01
+
+User-approved replacement of the Kafka administration UI with Kafbat UI. Use `ghcr.io/kafbat/kafka-ui:v1.5.0`, configurable through `KAFKA_UI_IMAGE`; retain `KAFKA_UI_PORT`. Broker configuration and event contracts are unchanged. Official release: https://github.com/kafbat/kafka-ui/releases/tag/v1.5.0

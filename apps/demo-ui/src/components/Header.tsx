@@ -68,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
             className="btn-cyber btn-outline"
             style={{ textDecoration: 'none' }}
           >
-            Kafka UI ↗
+            Kafbat UI ↗
           </a>
 
           <button

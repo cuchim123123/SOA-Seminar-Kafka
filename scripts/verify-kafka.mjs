@@ -59,22 +59,22 @@ async function verifyTopicLifecycle() {
 }
 
 async function verifyKafkaUI() {
-  console.log(`[Verify] Checking Kafka UI health on port ${KAFKA_UI_PORT}...`);
+  console.log(`[Verify] Checking Kafbat UI health on port ${KAFKA_UI_PORT}...`);
   const url = `http://localhost:${KAFKA_UI_PORT}/actuator/health`;
   for (let attempt = 1; attempt <= 15; attempt++) {
     try {
       const res = await fetch(url);
       if (res.ok) {
         const body = await res.json();
-        console.log(`[Verify] Kafka UI is responsive (status: ${body.status}).`);
+        console.log(`[Verify] Kafbat UI is responsive (status: ${body.status}).`);
         return;
       }
     } catch {
-      // Kafka UI still starting up
+      // Kafbat UI still starting up
     }
     await sleep(RETRY_DELAY_MS);
   }
-  console.warn('[Verify] Note: Kafka UI is starting or actuator endpoint is not yet ready.');
+  console.warn('[Verify] Note: Kafbat UI is starting or actuator endpoint is not yet ready.');
 }
 
 async function main() {

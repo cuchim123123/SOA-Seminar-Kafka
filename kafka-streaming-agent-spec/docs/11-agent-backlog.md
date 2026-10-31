@@ -9,14 +9,14 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 ## Phase 0 — Foundation
 
 - [x] **P0-01 Workspace setup** — Initialize TypeScript monorepo, strict tsconfig, pnpm/npm workspace, lint/format/test scripts, minimal NestJS app, env validation. **Proof:** install, lint, typecheck and a smoke unit test pass. **No:** Postgres, replay, dashboard.
-- [x] **P0-02 Local Kafka environment** — One KRaft broker RF1, Kafka UI, persistent Docker volume, health/readiness, reproducible start/stop docs. **Proof:** CLI can create/describe topic and connect on host/container network. **No:** 3-broker cluster.
+- [x] **P0-02 Local Kafka environment** — One KRaft broker RF1, Kafbat UI, persistent Docker volume, health/readiness, reproducible start/stop docs. **Proof:** CLI can create/describe topic and connect on host/container network. **No:** 3-broker cluster.
 - [x] **P0-03 Contracts foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer. **Proof:** accept valid envelope, reject mismatch/invalid cents/unsupported version.
 
 ## Phase 1 — Pipeline
 
 - [x] **P1-01 HTTP producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS, awaits ack, returns stable response. **Proof:** a real Kafka record exists with `key=customerId` and reported metadata.
 - [x] **P1-02 Loyalty consumer** — NestJS/Node independent worker subscribes to one topic/group and logs broker-supplied `{eventId,key,topic,partition,offset}`; pure loyalty function calculates fixture points. **Proof:** API request yields correlated received event.
-- [x] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafka UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
+- [x] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafbat UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
 
 ## Phase 2 — Partitioning and ordering
 
@@ -61,7 +61,7 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 ## Phase 8 — Kafka instrumentation and benchmark baseline
 
-- [ ] **P8-01 Kafka topology/dashboard** — Real partition/group/broker metadata and event traces. **Proof:** data reconciles with Kafka UI/CLI.
+- [ ] **P8-01 Kafka topology/dashboard** — Real partition/group/broker metadata and event traces. **Proof:** data reconciles with Kafbat UI/CLI.
 - [ ] **P8-02 Reliability and replay panels** — Show duplicate attempts, committed changes, replay progress and before/after state. **Proof:** no fake telemetry.
 - [ ] **P8-03 Operator control safeguards** — Local-only allows-list, explicit approvals for destructive operations, no Docker socket browser access. **Proof:** unauthorized/disabled control attempts fail.
 - [ ] **P8-04 Kafka instrumentation + histogram correctness** — Instrument attempted/confirmed publish, deliveries/unique processing, p50/p95/p99, lag and CPU/memory/disk. **Proof:** measured time series and known-distribution percentile tests.
@@ -100,3 +100,7 @@ with formatter/linter, test runner, validated environment setup, and smoke test.
 Do not add PostgreSQL, React, Docker/Kafka, microservices, or repository abstractions
 until their tickets are selected. Report commands actually run.
 ```
+
+## Kafbat UI migration — 2026-11-01
+
+- [x] Replace the administration UI with pinned Kafbat UI v1.5.0; update environment example, frontend labels, verification output, and operator documentation. Runtime cluster validation requires an active Kafka profile.
