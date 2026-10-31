@@ -128,7 +128,6 @@ export interface SimKafkaMechanicsConfig {
   consumerIdempotency: boolean; // default: true (safe deduplication)
   keyOrderingMode: 'MURMUR2_KEYED' | 'ROUND_ROBIN'; // default: 'MURMUR2_KEYED'
   partitioningStrategy?: 'murmur2-key' | 'round-robin';
-  dlqRoutingEnabled: boolean; // default: true
   producerAcks: SimProducerAcks; // default: 'all'
 }
 

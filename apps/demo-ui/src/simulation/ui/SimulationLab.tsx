@@ -66,7 +66,6 @@ export const SimulationLab: React.FC = () => {
     setProducerAcks,
     setPartitioningStrategy,
     toggleConsumerIdempotency,
-    toggleDlqRouting,
     setCommitMode,
     setAutoOffsetReset,
     seekPartitionOffset,
@@ -244,7 +243,6 @@ export const SimulationLab: React.FC = () => {
         onSetAcks={setProducerAcks}
         onSetPartitioning={setPartitioningStrategy}
         onToggleIdempotency={toggleConsumerIdempotency}
-        onToggleDlq={toggleDlqRouting}
         onDispatchDuplicate={dispatchDuplicateMessage}
         onDispatchOrderedBurst={dispatchOrderedBurst}
         onDispatchPoisonPill={dispatchPoisonPill}

@@ -6,7 +6,6 @@ interface KafkaMechanicsToolbarProps {
   onSetAcks: (acks: SimProducerAcks) => void;
   onSetPartitioning: (strategy: 'murmur2-key' | 'round-robin') => void;
   onToggleIdempotency: () => void;
-  onToggleDlq: () => void;
   onDispatchDuplicate: () => void;
   onDispatchOrderedBurst: (count: number) => void;
   onDispatchPoisonPill: () => void;
@@ -18,7 +17,6 @@ export const KafkaMechanicsToolbar: React.FC<KafkaMechanicsToolbarProps> = ({
   onSetAcks,
   onSetPartitioning,
   onToggleIdempotency,
-  onToggleDlq,
   onDispatchDuplicate,
   onDispatchOrderedBurst,
   onDispatchPoisonPill,
@@ -165,31 +163,7 @@ export const KafkaMechanicsToolbar: React.FC<KafkaMechanicsToolbarProps> = ({
           <span>Idempotency: {config.consumerIdempotency ? 'ENABLED' : 'DISABLED'}</span>
         </button>
 
-        {/* DLQ Routing Toggle */}
-        <button
-          onClick={onToggleDlq}
-          title={
-            config.dlqRoutingEnabled
-              ? 'DLQ ON: Poison pill messages are redirected to Dead-Letter Queue to avoid stalling consumer partitions.'
-              : 'DLQ OFF: Poison pills crash the consumer and cause Head-of-Line blocking (partition stalls indefinitely).'
-          }
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 10px',
-            borderRadius: '6px',
-            border: config.dlqRoutingEnabled ? '1px solid #3b82f6' : '1px solid #eab308',
-            background: config.dlqRoutingEnabled ? '#eff6ff' : '#fefce8',
-            color: config.dlqRoutingEnabled ? '#1e40af' : '#854d0e',
-            fontWeight: 700,
-            fontSize: '0.7rem',
-            cursor: 'pointer',
-          }}
-        >
-          <span>{config.dlqRoutingEnabled ? '📬' : '⛔'}</span>
-          <span>DLQ Routing: {config.dlqRoutingEnabled ? 'ENABLED' : 'HEAD-OF-LINE'}</span>
-        </button>
+
 
         {offsetMenu}
       </div>

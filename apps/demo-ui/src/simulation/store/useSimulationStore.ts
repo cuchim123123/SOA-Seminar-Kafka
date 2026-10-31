@@ -620,12 +620,6 @@ export function useSimulationStore() {
     syncFromEngine();
   }, [engine, syncFromEngine]);
 
-  const toggleDlqRouting = useCallback(() => {
-    engine.mechanicsConfig.dlqRoutingEnabled = !engine.mechanicsConfig.dlqRoutingEnabled;
-    setMechanicsConfig({ ...engine.mechanicsConfig });
-    syncFromEngine();
-  }, [engine, syncFromEngine]);
-
   const setCommitMode = useCallback(
     (mode: SimCommitMode) => {
       engine.setMechanicsConfig({ commitMode: mode });
@@ -721,7 +715,6 @@ export function useSimulationStore() {
     setProducerAcks,
     setPartitioningStrategy,
     toggleConsumerIdempotency,
-    toggleDlqRouting,
     setCommitMode,
     setAutoOffsetReset,
     seekPartitionOffset,

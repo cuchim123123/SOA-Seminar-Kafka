@@ -512,5 +512,212 @@ describe('Milestone 1 — Simulation Engine & Mechanics', () => {
       expect(ev3?.type).toBe('APPEND_PARTITION');
       expect(ev3?.sourceNodeId).toBe('kafka-1');
     });
+
+    it('flows duplicate request through outbox -> CDC -> Kafka -> consumer -> database when idempotency is disabled', () => {
+      const fullNodes: SimCustomNode[] = [
+        {
+          id: 'prod-1',
+          type: 'producerNode',
+          position: { x: 0, y: 0 },
+          data: { id: 'prod-1', kind: 'producer', title: 'Producer' } as SimCustomNode['data'],
+        },
+        {
+          id: 'outbox-1',
+          type: 'outboxTableNode',
+          position: { x: 150, y: 0 },
+          data: {
+            id: 'outbox-1',
+            kind: 'outbox-table',
+            title: 'Outbox Table',
+            pendingRecordsCount: 0,
+            publishedRecordsCount: 0,
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'cdc-1',
+          type: 'cdcRelayNode',
+          position: { x: 300, y: 0 },
+          data: {
+            id: 'cdc-1',
+            kind: 'cdc-relay',
+            title: 'CDC Relay',
+            targetTopic: 'purchases',
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'kafka-1',
+          type: 'kafkaClusterNode',
+          position: { x: 450, y: 0 },
+          data: {
+            id: 'kafka-1',
+            kind: 'kafka-cluster',
+            title: 'Kafka',
+            activeTopic: 'purchases',
+            partitionCount: 2,
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'cons-1',
+          type: 'consumerNode',
+          position: { x: 600, y: 0 },
+          data: {
+            id: 'cons-1',
+            kind: 'consumer',
+            title: 'Consumer',
+            groupId: 'loyalty-v1',
+            status: 'POLLING',
+            assignedPartitions: [0, 1],
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'db-1',
+          type: 'databaseNode',
+          position: { x: 750, y: 0 },
+          data: {
+            id: 'db-1',
+            kind: 'database',
+            title: 'DB',
+            committedRecordCount: 0,
+          } as SimCustomNode['data'],
+        },
+      ];
+
+      const fullEdges: SimCustomEdge[] = [
+        { id: 'e1', source: 'prod-1', target: 'outbox-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e2', source: 'outbox-1', target: 'cdc-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e3', source: 'cdc-1', target: 'kafka-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e4', source: 'kafka-1', target: 'cons-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'e5', source: 'cons-1', target: 'db-1', type: 'simFlowEdge' } as SimCustomEdge,
+      ];
+
+      engine.setTopology(fullNodes, fullEdges);
+      engine.clock.start();
+
+      // 1. Dispatch first purchase through outbox
+      const msg1 = engine.dispatchProducerMessage('prod-1', 'U001');
+      expect(msg1).not.toBeNull();
+      expect(engine.lastDispatchedMessage?.id).toBe(msg1?.id);
+
+      // Drain all events for first message
+      let safety = 20;
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        engine.step();
+      }
+
+      const dbNode = engine.nodes.get('db-1');
+      expect(dbNode?.data.committedRecordCount).toBe(1);
+
+      // 2. Disable consumer idempotency (hazard mode)
+      engine.mechanicsConfig.consumerIdempotency = false;
+
+      // 3. Dispatch DUPLICATE request through outbox
+      const dup = engine.dispatchDuplicateMessage('U001');
+      expect(dup).not.toBeNull();
+      expect(dup?.id).toBe(msg1?.id);
+
+      // Verify each stage executes and does not get stuck at outbox
+      const executedTypes: string[] = [];
+      safety = 25;
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        const ev = engine.step();
+        if (ev) executedTypes.push(ev.type);
+      }
+
+      expect(executedTypes).toContain('WRITE_OUTBOX');
+      expect(executedTypes).toContain('CDC_RELAY_STREAM');
+      expect(executedTypes).toContain('APPEND_PARTITION');
+      expect(executedTypes).toContain('START_PROCESSING');
+      expect(executedTypes).toContain('COMPLETE_PROCESSING');
+      expect(executedTypes).toContain('WRITE_DATABASE');
+
+      // Verify phantom duplicate write occurred in DB
+      expect(dbNode?.data.committedRecordCount).toBe(2);
+    });
+
+    it('automatically routes poison pill to DLQ when DLQ node is wired, and stalls when unwired', () => {
+      const baseNodes: SimCustomNode[] = [
+        {
+          id: 'kafka-1',
+          type: 'kafkaClusterNode',
+          position: { x: 0, y: 0 },
+          data: {
+            id: 'kafka-1',
+            kind: 'kafka-cluster',
+            activeTopic: 'purchases',
+            partitionCount: 1,
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'cons-1',
+          type: 'consumerNode',
+          position: { x: 200, y: 0 },
+          data: {
+            id: 'cons-1',
+            kind: 'consumer',
+            groupId: 'loyalty-v1',
+            status: 'POLLING',
+            assignedPartitions: [0],
+          } as SimCustomNode['data'],
+        },
+        {
+          id: 'dlq-1',
+          type: 'deadLetterQueueNode',
+          position: { x: 400, y: 0 },
+          data: {
+            id: 'dlq-1',
+            kind: 'dead-letter-queue',
+            deadLetterCount: 0,
+          } as SimCustomNode['data'],
+        },
+      ];
+
+      // Case A: DLQ node is WIRED -> automatically routes to DLQ
+      const wiredEdges: SimCustomEdge[] = [
+        { id: 'ekc', source: 'kafka-1', target: 'cons-1', type: 'simFlowEdge' } as SimCustomEdge,
+        { id: 'ecd', source: 'cons-1', target: 'dlq-1', type: 'simFlowEdge' } as SimCustomEdge,
+      ];
+
+      engine.setTopology(baseNodes, wiredEdges);
+      engine.clock.start();
+
+      const poisonMsg = createSimMessage('POISON_PILL', 9999, 100);
+      engine.kafkaCluster.appendRecord('purchases', 0, poisonMsg, 100);
+      engine.scheduleConsumerPoll('purchases', 0, 0, poisonMsg, 100);
+
+      let safety = 10;
+      const typesA: string[] = [];
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        const ev = engine.step();
+        if (ev) typesA.push(ev.type);
+      }
+
+      expect(typesA).toContain('ROUTE_DLQ');
+      const dlqNode = engine.nodes.get('dlq-1');
+      expect(dlqNode?.data.deadLetterCount).toBe(1);
+
+      // Case B: DLQ node is UNWIRED -> stalls consumer with CONSUMER_ERROR
+      const unwiredEdges: SimCustomEdge[] = [
+        { id: 'ekc', source: 'kafka-1', target: 'cons-1', type: 'simFlowEdge' } as SimCustomEdge,
+      ];
+      engine.reset();
+      engine.setTopology(baseNodes, unwiredEdges);
+      engine.clock.start();
+
+      const poisonMsg2 = createSimMessage('POISON_PILL', 9999, 200);
+      engine.kafkaCluster.appendRecord('purchases', 0, poisonMsg2, 200);
+      engine.scheduleConsumerPoll('purchases', 0, 0, poisonMsg2, 200);
+
+      safety = 10;
+      const typesB: string[] = [];
+      while (engine.queue.size() > 0 && safety-- > 0) {
+        const ev = engine.step();
+        if (ev) typesB.push(ev.type);
+      }
+
+      expect(typesB).toContain('START_PROCESSING');
+      expect(typesB).not.toContain('ROUTE_DLQ');
+      const consNode = engine.nodes.get('cons-1');
+      expect(consNode?.data.status).toBe('ERROR');
+    });
   });
 });
