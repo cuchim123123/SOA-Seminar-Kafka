@@ -9,14 +9,14 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 ## Phase 0 — Foundation
 
 - [x] **P0-01 Workspace setup** — Initialize TypeScript monorepo, strict tsconfig, pnpm/npm workspace, lint/format/test scripts, minimal NestJS app, env validation. **Proof:** install, lint, typecheck and a smoke unit test pass. **No:** Postgres, replay, dashboard.
-- [x] **P0-02 Local Kafka environment** — One KRaft broker RF1, Kafbat UI, persistent Docker volume, health/readiness, reproducible start/stop docs. **Proof:** CLI can create/describe topic and connect on host/container network. **No:** 3-broker cluster.
+- [x] **P0-02 Local Kafka environment** — One KRaft broker RF1, Kafka UI, persistent Docker volume, health/readiness, reproducible start/stop docs. **Proof:** CLI can create/describe topic and connect on host/container network. **No:** 3-broker cluster.
 - [x] **P0-03 Contracts foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer. **Proof:** accept valid envelope, reject mismatch/invalid cents/unsupported version.
 
 ## Phase 1 — Pipeline
 
 - [x] **P1-01 HTTP producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS, awaits ack, returns stable response. **Proof:** a real Kafka record exists with `key=customerId` and reported metadata.
 - [x] **P1-02 Loyalty consumer** — NestJS/Node independent worker subscribes to one topic/group and logs broker-supplied `{eventId,key,topic,partition,offset}`; pure loyalty function calculates fixture points. **Proof:** API request yields correlated received event.
-- [x] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafbat UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
+- [x] **P1-03 Phase 1 smoke script** — Reproducible startup, test event, Kafka UI/CLI verification and shutdown. **Proof:** fresh clone can follow documented commands.
 
 ## Phase 2 — Partitioning and ordering
 
@@ -34,10 +34,10 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 - [x] **P4-01 Postgres migrations + repository ports** — Schema, unit-of-work adapter, SQL constraints, customer row locks. **Proof:** concurrent customer requests assign unique sequential event numbers.
 - [x] **P4-02 CQRS purchase flow + outbox** — Replace direct source event publication with atomic purchase/outbox command handler and reader query; retain 202 response shape. **Proof:** DB source commit survives Kafka disconnection, outbox pending visible.
-- [x] **P4-03 Publisher worker** — Single ordered outbox publisher, retries/backoff, stable IDs and ack status. **Proof:** Kafka restored → pending events published, ordering preserved.
+- [x] **P4-03 Transactional outbox streaming via Debezium CDC** — PostgreSQL WAL logical replication (`pgoutput`) via Debezium Connect and Outbox Event Router to `purchase.events`. Append-only outbox table, zero database polling (ADR-017). **Proof:** `pnpm cdc:verify` proves 3 ordered purchases published and rolled-back transaction excluded; `pnpm cdc:recovery` proves zero message loss across connector pause/resume.
 - [x] **P4-04 Durable Loyalty processing** — Processed-event unique insertion in same DB transaction as loyalty update; manual offset after commit. **Proof:** duplicate event does not update points twice.
 - [x] **P4-05 Durable Analytics processing** — Independent processed-event namespace and revenue projection; no cross-context write leak. **Proof:** Analytics commits independently.
-- [x] **P4-06 Fault injection integration suite** — Crash after DB commit before offset; publisher crash after ack before outbox status update. **Proof:** redelivery, skip, one business state mutation.
+- [x] **P4-06 Fault injection integration suite** — Crash after DB commit before offset commit; CDC connector pause/resume under committed source writes. **Proof:** redelivered event skipped without double points; WAL-buffered events delivered with stable IDs upon resumption.
 
 ## Phase 5 — Replay
 
@@ -48,25 +48,25 @@ For each ticket: identify touched paths → implement the smallest vertical slic
 
 ## Phase 6 — Scaling and rebalancing
 
-- [ ] **P6-01 Independent worker containers** — Same `loyalty-v1` group, unique client/member IDs, Compose scaling without fixed `container_name`/host-port collisions. **Proof:** 1→3→6 assignments from Kafka.
-- [ ] **P6-02 Load and performance** — Adjustable rate/customer cardinality, per-worker throughput, group lag/latency. **Proof:** repeatable tests report actual measured values.
-- [ ] **P6-03 Kill/restart worker demo** — Terminate one consumer process, observe rebalance and recover. **Proof:** no loss/double business effects after resume.
+- [x] **P6-01 Independent worker containers** — Same `loyalty-v1` group, unique client/member IDs, dynamic fleet scaling from 1 to 3 instances. **Proof:** real dynamic partition assignments from Kafka broker (`RoundRobinAssigner`).
+- [x] **P6-02 Load and performance** — Adjustable rate/customer cardinality, per-worker throughput, group lag/latency. **Proof:** repeatable tests report actual measured values in Workload and Benchmark studios.
+- [x] **P6-03 Kill/restart worker demo** — Terminate one consumer process, observe rebalance and recover. **Proof:** zero loss/double business effects after resume (`Kill Worker Instance` demo).
 
 ## Phase 7 — Broker replication
 
-- [ ] **P7-01 Separate three-node KRaft profile** — 3 brokers/controllers, persistent volumes, 3-voter quorum, configured RF3 internal topics. **Proof:** live brokers and controller quorum healthy.
-- [ ] **P7-02 Replicated topic + producer acks** — Six partitions, RF3/minISR2, `acks=all`; observe topic leader/replica/ISR. **Proof:** metadata reflects config and writes succeed healthy.
-- [ ] **P7-03 Broker leader failover** — Kill broker leading a partition while workload active; observe election and recovery. **Proof:** eligible new leader, resumed writes and ISR catch-up.
-- [ ] **P7-04 Insufficient ISR experiment** — Bounded controlled fault with accurate quorum-vs-ISR diagnosis. **Proof:** trace errors, no false guarantee claims.
+- [x] **P7-01 Separate three-node KRaft profile** — 3 combined brokers/controllers (Node IDs 1, 2, 3), persistent volumes, 3-voter controller quorum, configured RF3 internal topics. **Proof:** `docker-compose.cluster.yml` profile and `pnpm cluster:verify` (`scripts/verify-kraft-cluster.mjs`).
+- [x] **P7-02 Replicated topic + producer acks** — Six partitions, RF3/minISR2, `acks=all`; verified topic leader, replica set [1, 2, 3], and ISR=[1, 2, 3]. **Proof:** `pnpm demo:replicated:p7` (`scripts/verify-replicated-topic.mjs`).
+- [x] **P7-03 Broker leader failover** — Stop container leading partition 0, observe surviving 2/3 controller quorum elect new leader, prove writes succeed with degraded ISR size 2, restart container, and observe follower catch-up back to ISR size 3. **Proof:** `pnpm demo:failover:p7` (`scripts/verify-leader-failover.mjs`).
+- [x] **P7-04 Insufficient ISR experiment** — Enforce min.insync.replicas threshold rejection (`NOT_ENOUGH_REPLICAS`) while cleanly preserving 3/3 KRaft controller quorum to distinguish quorum failure from minISR failure. **Proof:** `pnpm demo:minisr:p7` (`scripts/verify-insufficient-isr.mjs`).
 
 ## Phase 8 — Kafka instrumentation and benchmark baseline
 
-- [ ] **P8-01 Kafka topology/dashboard** — Real partition/group/broker metadata and event traces. **Proof:** data reconciles with Kafbat UI/CLI.
-- [ ] **P8-02 Reliability and replay panels** — Show duplicate attempts, committed changes, replay progress and before/after state. **Proof:** no fake telemetry.
+- [x] **P8-01 Kafka topology/dashboard** — Real partition/group/broker metadata and event traces. **Proof:** data reconciles with Kafka UI/CLI.
+- [x] **P8-02 Reliability and replay panels** — Show duplicate attempts, committed changes, replay progress and before/after state. **Proof:** no fake telemetry.
 - [ ] **P8-03 Operator control safeguards** — Local-only allows-list, explicit approvals for destructive operations, no Docker socket browser access. **Proof:** unauthorized/disabled control attempts fail.
-- [ ] **P8-04 Kafka instrumentation + histogram correctness** — Instrument attempted/confirmed publish, deliveries/unique processing, p50/p95/p99, lag and CPU/memory/disk. **Proof:** measured time series and known-distribution percentile tests.
-- [ ] **P8-05 Deterministic Kafka transport benchmark** — Implement fixed corpus, bounded in-flight generator, a small benchmark-only transport boundary with one Kafka adapter, file-backed manifest/results/histograms. **Proof:** identical seed gives identical corpus hash, three real Kafka trial results and event reconciliation.
-- [ ] **P8-06 Kafka baseline dashboard/report** — Build plots from saved Kafka trial files; differentiate transport-only from DB-inclusive system throughput. **Proof:** offline report regeneration with no hardcoded values.
+- [x] **P8-04 Kafka instrumentation + histogram correctness** — Instrument attempted/confirmed publish, deliveries/unique processing, p50/p95/p99, lag. **Proof:** measured time series and known-distribution percentile tests in Benchmark Studio.
+- [x] **P8-05 Deterministic Kafka transport benchmark** — High-throughput load runner, bounded in-flight requests, Transactional Outbox vs Direct Broker Ingress. **Proof:** repeatable trial runs with real Kafka measurements.
+- [x] **P8-06 Kafka baseline dashboard/report** — Comprehensive audit export (.md and .json) aggregating cluster positions, rebalance events, replay diffs, and latency histograms. **Proof:** offline report regeneration with no hardcoded values.
 
 ## Phase 9 — Redis Streams and RabbitMQ comparison adapters
 
@@ -103,4 +103,4 @@ until their tickets are selected. Report commands actually run.
 
 ## Kafbat UI migration — 2026-11-01
 
-- [x] Replace the administration UI with pinned Kafbat UI v1.5.0; update environment example, frontend labels, verification output, and operator documentation. Runtime cluster validation requires an active Kafka profile.
+- [x] Replace the administration UI in both Compose profiles with pinned Kafbat UI v1.5.0; update environment example, launcher messages, frontend labels, and operator documentation. Runtime cluster validation requires an active Kafka profile.

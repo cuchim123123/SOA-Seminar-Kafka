@@ -32,6 +32,18 @@ pnpm typecheck
 pnpm test:unit
 ```
 
+### One-Command Interactive Lab Launch
+
+```bash
+# Start Docker (Kafka, Postgres, Kafbat UI), all 5 microservices, and Interactive UI in ONE command:
+pnpm start
+# (or: pnpm lab:start / pnpm lab:up)
+
+# Stop all microservices, clear port listeners, and stop Docker containers cleanly:
+pnpm stop
+# (or: pnpm lab:stop / pnpm lab:down)
+```
+
 ### Local Kafka Environment (KRaft RF=1)
 
 ```bash
@@ -131,8 +143,14 @@ pnpm demo:concurrency
 # Run automated CQRS purchase command, Read DAO query, and transactional outbox verification (P4-02)
 pnpm demo:outbox
 
-# Run automated standalone ordered outbox publisher worker verification (P4-03)
-pnpm demo:publisher
+# Provision CDC Outbox Connector & Apply Migrations (P4-03 / ADR-017)
+pnpm cdc:setup
+
+# Run automated Debezium CDC transactional outbox & rollback exclusion verification (P4-03 / ADR-017)
+pnpm cdc:verify
+
+# Run automated Debezium CDC pause/resume & WAL buffering recovery verification (P4-03 / ADR-017)
+pnpm cdc:recovery
 
 # Run automated durable loyalty processing & consumer idempotency verification (P4-04)
 pnpm demo:loyalty-dedup
@@ -140,7 +158,7 @@ pnpm demo:loyalty-dedup
 # Run automated durable analytics processing & consumer idempotency verification (P4-05)
 pnpm demo:analytics-dedup
 
-# Run automated fault injection integration suite: consumer crash & publisher crash (P4-06)
+# Run automated fault injection integration suite: consumer crash & recovery (P4-06)
 pnpm demo:faults
 ```
 
@@ -157,10 +175,38 @@ pnpm demo:replay
 pnpm demo:correction
 ```
 
-- **Kafka Broker (Host listener)**: `localhost:9092`
+### Phase 7: Multi-Broker KRaft Cluster & Replication Demo
+
+```bash
+# Start 3-node KRaft cluster profile (Node IDs 1, 2, 3 with combined broker/controller quorum)
+pnpm cluster:up
+
+# Verify cluster topology and 3-node KRaft controller quorum (P7-01)
+pnpm cluster:verify
+
+# Verify replicated topic (RF=3, minISR=2, acks=all) across 6 partitions (P7-02)
+pnpm demo:replicated:p7
+
+# Run automated broker leader failover & ISR catch-up experiment (P7-03)
+pnpm demo:failover:p7
+
+# Run automated insufficient ISR rejection (NOT_ENOUGH_REPLICAS) experiment (P7-04)
+pnpm demo:minisr:p7
+
+# Stop 3-node KRaft cluster
+pnpm cluster:down
+```
+
+- **Kafka Cluster Brokers (Host listeners)**:
+  - Broker 1: `localhost:9092` (Controller `9093`)
+  - Broker 2: `localhost:9094` (Controller `9095`)
+  - Broker 3: `localhost:9096` (Controller `9097`)
+- **KRaft Controller Quorum**: `1@kafka-1:9093,2@kafka-2:9095,3@kafka-3:9097` (3 voters)
+- **Kafka Broker (Single-node profile)**: `localhost:9092`
 - **Kafka Broker (Internal network)**: `kafka:29092`
 - **Kafbat UI**: `http://localhost:8080`
-- **PostgreSQL Multi-DB Cluster**: `localhost:5432` (`postgres:16-alpine`)
+- **Debezium Connect REST API**: `http://localhost:8083`
+- **PostgreSQL Multi-DB Cluster**: `localhost:5433` (`postgres:16-alpine`, mapped internally to 5432)
   - `purchases_db`: `purchases`, `purchase_customers`, `outbox_events`, `http_idempotency_keys`
   - `loyalty_db`: `loyalty_accounts`, `processed_events`, `replay_runs`, `replay_staging`
   - `analytics_db`: `analytics_summary`, `processed_events`
@@ -174,17 +220,24 @@ pnpm demo:correction
 ├── apps/
 │   ├── producer-api/          # NestJS API: POST /api/v1/demo/purchases -> Outbox
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
-│   ├── outbox-publisher/      # NestJS Outbox Publisher: single ordered daemon -> Kafka
-│   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator
+│   ├── loyalty-worker/        # NestJS Worker: Consumer group 'loyalty-v1' -> Points Calculator & scaling
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
 │   ├── analytics-worker/      # NestJS Worker: Consumer group 'analytics-v1' -> Sales Aggregation
 │   │   └── prisma/            # Prisma schema and PostgreSQL migrations
-│   └── replay-worker/         # NestJS Worker: On-demand unique consumer group replay & isolated staging
-│       └── prisma/            # Prisma schema and client for replay staging
+│   ├── replay-worker/         # NestJS Worker: On-demand unique consumer group replay & isolated staging
+│   │   └── prisma/            # Prisma schema and client for replay staging
+│   └── demo-ui/               # React 19 + Vite Interactive Topology & Benchmark Studio
+├── docker/
+│   └── debezium/              # Outbox connector configuration & PostgreSQL replication setup
 ├── packages/
 │   ├── contracts/             # Integration event schemas, Zod validation, factories, serializer
 │   └── observability/         # Structured logger, unified Kafka execution coordinator, error hierarchy
 ├── scripts/
+│   ├── start-lab.mjs          # One-command lab orchestrator (Docker + CDC + Build + 5 services)
+│   ├── stop-lab.mjs           # One-command lab teardown (terminates ports and stops containers)
+│   ├── setup-cdc.mjs          # Provisions Debezium connector and applies PostgreSQL migrations
+│   ├── verify-cdc.mjs         # End-to-end CDC delivery, ordering, and rollback exclusion proof
+│   ├── verify-cdc-recovery.mjs # CDC connector pause/resume and WAL buffer delivery recovery proof
 │   ├── verify-kafka.mjs       # Automated Kafka readiness and topic lifecycle verification
 │   ├── smoke-phase1.mjs       # Phase 1 end-to-end smoke runner with broker inspection
 │   ├── reset-topic.mjs        # Controlled destructive topic reset and 6-partition migration
@@ -195,13 +248,12 @@ pnpm demo:correction
 │   ├── demo-pause-resume.mjs         # Consumer pause, lag accumulation, and catch-up verification
 │   ├── verify-postgres-concurrency.mjs # Concurrent customer sequence row locking and PostgreSQL verification
 │   ├── verify-outbox-offline.mjs     # Transactional outbox persistence and offline Kafka survival verification
-│   ├── verify-outbox-publisher.mjs   # Standalone ordered outbox publisher worker verification
 │   ├── verify-durable-loyalty.mjs    # Durable loyalty processing and consumer deduplication verification
 │   ├── verify-durable-analytics.mjs  # Durable analytics processing and consumer deduplication verification
 │   ├── verify-purchase-invalidation.mjs # Purchase invalidation event flow verification
 │   ├── verify-replay-boundary.mjs    # Bounded replay & fixed boundary verification
 │   └── verify-two-pass-correction.mjs # Two-pass correction calculation (82 -> 40 points) verification
-├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafbat UI + PostgreSQL 16
+├── docker-compose.yml         # Apache Kafka 4.3.1 (KRaft) + Kafbat UI + PostgreSQL 16 + Debezium Connect
 ├── .env.example               # Centralized configuration schema documentation
 ├── package.json               # Monorepo scripts and shared dev tooling
 ├── pnpm-workspace.yaml        # pnpm workspace package patterns
@@ -239,11 +291,35 @@ pnpm demo:correction
 - [x] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
 - [x] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.
 
-### Phase 3 — Consumer Groups and Offsets (100% COMPLETE)
+### Phase 3 — Consumer Groups and Offsets
 - [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
 - [x] **P3-02: Manual Commit + Lag Reader** — Explicit manual offset commit discipline (`autoCommit: false`, `N + 1`) and live Kafka Admin lag calculation `(logEndOffset - committedOffset)` per partition with `UNCOMMITTED` handling (`pnpm demo:lag`).
 - [x] **P3-03: Pause/Resume Scenario** — CLI and HTTP allowlisted control to pause Analytics, observe lag accumulation while Loyalty proceeds, and catch up back to 0 lag upon resume (`pnpm demo:pause-resume`).
 
+### Phase 4 — Reliable DB/Kafka Integration & Outbox
+- [x] **P4-01: Postgres Migrations & Concurrency** — Customer sequence allocation with row locks and atomic transactions (`pnpm demo:concurrency`).
+- [x] **P4-02: CQRS Purchase Flow & Outbox Persistence** — Command handler persisting purchase + outbox atomically, query handler for read model (`pnpm demo:outbox`).
+- [x] **P4-03: Debezium CDC Outbox Streaming** — Zero-polling PostgreSQL WAL logical replication via Debezium Connect and Outbox Event Router (`pnpm cdc:verify`, `pnpm cdc:recovery`, ADR-017).
+- [x] **P4-04: Durable Loyalty Processing** — At-least-once consumer with unique `processed_events` deduplication in loyalty database (`pnpm demo:loyalty-dedup`).
+- [x] **P4-05: Durable Analytics Processing** — Independent analytics projection with consumer idempotency and isolation (`pnpm demo:analytics-dedup`).
+- [x] **P4-06: Fault Injection Integration Suite** — Post-DB-commit pre-offset crash injection and consumer recovery (`pnpm demo:faults`).
+
+### Phase 5 — Replay & Stream Correction
+- [x] **P5-01: Purchase Invalidation Event** — Monotonic sequence allocation for invalidation events with single-partition ordering (`pnpm demo:invalidation`).
+- [x] **P5-02: Replay Group & Boundary Isolation** — On-demand unique consumer group scanning from offset 0 to fixed high-watermark boundaries without affecting live groups (`pnpm demo:replay`).
+- [x] **P5-03: Two-Pass Stream Correction** — Two-pass state reconstruction (discovering invalidations then recomputing historical points 82 -> 40) in isolated staging tables (`pnpm demo:correction`).
+- [x] **P5-04: Retention Failure Guardrails** — Explicit failure detection when earliest retained offsets exceed required historical sequence.
+
+### Phase 6 — Scaling & Dynamic Consumer Rebalancing
+- [x] **P6-01: Dynamic Fleet Scaling** — Live scale up / scale down of consumer group instances with partition rebalancing (`RoundRobinAssigner`).
+- [x] **P6-02: Worker Kill & Failover** — Graceful disconnect and failover reassigning partitions with zero duplicate points.
+
+### Phase 8 — Observability Platform & Interactive Topology Studio
+- [x] **P8-01: Interactive Topology Studio** — Real-time interactive canvas with live broker, partition, producer, consumer group, and database nodes (`apps/demo-ui`).
+- [x] **P8-02: Benchmark Studio & Audit Evidence** — End-to-end telemetry measurement, percentile latency tracking, and Markdown/JSON audit export.
+- [x] **P8-04: Live Workload Simulator** — Single, burst, and continuous traffic generator with partition routing and latency controls.
+
+
 ### Kafbat UI migration (2026-11-01)
 
-The Compose profile uses Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui`. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.
+Both single-broker and replicated Compose profiles use Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui` for the single-broker profile, or use `-f docker-compose.cluster.yml` for the replicated profile. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.

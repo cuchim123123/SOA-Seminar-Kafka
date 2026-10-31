@@ -92,8 +92,19 @@ If a design choice changes, update this ADR file, the relevant architecture/cont
 4. Runtime deserialization must reject any envelope where `aggregateId !== payload.customerId`.
 **Consequence:** Eliminates dual-source-of-truth drift, partition-key routing mismatches, and brittle manual object construction. **Status:** accepted.
 
+## ADR-017 — Debezium CDC as sole transactional outbox publisher
+
+**Decision:** Replace the polling outbox daemon (`apps/outbox-publisher`) entirely with Debezium Connect using PostgreSQL WAL logical replication (`pgoutput`) and the Outbox Event Router SMT.
+1. **Zero Polling & Append-Only Outbox:** Outbox events are written atomically with purchase transactions in PostgreSQL. Debezium streams committed WAL changes directly without database polling or status-update write-amplification on outbox rows.
+2. **Dedicated Docker Database Topology:** The entire lab operates against Docker PostgreSQL on host port 5433 (mapping to 5432 internally), completely isolating the lab from native Windows PostgreSQL installations and ensuring reproducible schema and WAL replication slot configuration.
+3. **Stream Key Authority:** The Debezium Outbox Event Router extracts `aggregate_id` (`customerId`) as the Kafka partition key, preserving partition-local per-customer ordering.
+4. **Timestamp Semantics:** PostgreSQL `created_at` timestamp is `timestamptz`. Because the SMT expects `INT64` for timestamp mapping, Kafka record metadata timestamp defaults to Debezium capture time, while the domain event's authoritative `occurredAt` is preserved immutably inside the envelope payload.
+5. **Recovery & Verifiability:** Verified via `pnpm cdc:verify` (transactional commit, rollback exclusion, single-partition ordering) and `pnpm cdc:recovery` (connector pause/resume with WAL buffering and zero event loss).
+**Consequence:** Polling loops and manual drain utilities are removed. Outbox publishing is decoupled from application runtime processes. **Status:** accepted.
+
+
 
 
 ## Kafbat UI — 2026-11-01
 
-User-approved replacement of the Kafka administration UI with Kafbat UI. Use `ghcr.io/kafbat/kafka-ui:v1.5.0`, configurable through `KAFKA_UI_IMAGE`; retain `KAFKA_UI_PORT`. Broker configuration and event contracts are unchanged. Official release: https://github.com/kafbat/kafka-ui/releases/tag/v1.5.0
+User-approved replacement of the previous Kafka administration UI with Kafbat UI. Both Compose profiles use `ghcr.io/kafbat/kafka-ui:v1.5.0`, configurable through `KAFKA_UI_IMAGE`. The host port remains configurable through `KAFKA_UI_PORT`. Broker configuration and application event contracts are unchanged. Official release: https://github.com/kafbat/kafka-ui/releases/tag/v1.5.0

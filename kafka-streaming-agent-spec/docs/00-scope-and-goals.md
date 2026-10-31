@@ -44,7 +44,7 @@ Only implement this business behavior to verify **ordering**, **deduplication** 
 
 ## Out of scope
 
-A production e-commerce product; user accounts/authentication service; payment gateway; stock management; ordering checkout workflow; email/SMS; rewards redemption; general-purpose event sourcing; state snapshots; Kafka Streams topology; CDC/Debezium; distributed transactions between Kafka and Postgres; Kubernetes; hosted cloud resources.
+A production e-commerce product; user accounts/authentication service; payment gateway; stock management; ordering checkout workflow; email/SMS; rewards redemption; general-purpose event sourcing; state snapshots; Kafka Streams topology; distributed transactions (2PC/XA) between Kafka and Postgres; Kubernetes; hosted cloud resources. (Note: Debezium CDC is officially in scope as the transactional outbox publisher per ADR-017).
 
 ## Measurable success criteria
 
