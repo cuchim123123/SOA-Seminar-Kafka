@@ -159,9 +159,9 @@ export const BenchmarkStudio: React.FC<BenchmarkStudioProps> = ({
               else buckets.over100ms++;
             }
             completed += batchSize;
-          } else {
-            // Direct broker raw message
+            // Direct broker raw message into isolated benchmark topic
             await api.publishRawMessage({
+              topic: 'benchmark.events',
               key: customerId,
               payload: JSON.stringify({
                 eventId: `bench_${Date.now()}_${currentIndex}`,

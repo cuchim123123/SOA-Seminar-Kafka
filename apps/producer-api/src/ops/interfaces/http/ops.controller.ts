@@ -65,7 +65,7 @@ export class OpsController {
   async publishRaw(
     @Body() body: { topic?: string; key: string; payload: string },
   ): Promise<{ status: string; topic: string; partition: number; offset: string; key: string }> {
-    const topic = body?.topic?.trim() || 'purchase.events';
+    const topic = body?.topic?.trim() || 'benchmark.events';
     const key = body?.key?.trim() || `arbitrary_key_${Date.now()}`;
     const payload =
       typeof body?.payload === 'string' ? body.payload : JSON.stringify(body?.payload ?? {});

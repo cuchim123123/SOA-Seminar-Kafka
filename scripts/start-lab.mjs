@@ -95,9 +95,15 @@ async function waitForHealthyContainers() {
         const { stdout } = await execAsync(
           `docker inspect --format="{{json .State.Health.Status}}" ${container}`,
         );
-        if (stdout.includes('healthy')) healthyCount += 1;
+        let status = '';
+        try {
+          status = JSON.parse(stdout.trim());
+        } catch {
+          status = stdout.trim().replace(/^"|"$/g, '');
+        }
+        if (status === 'healthy') healthyCount += 1;
       } catch {
-        // Container may not exist yet
+        // Container may not exist yet or health status not available yet
       }
     }
     if (healthyCount === REQUIRED_CONTAINERS.length) return;
