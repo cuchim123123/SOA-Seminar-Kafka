@@ -278,4 +278,83 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
       ),
     ).rejects.toThrow();
   });
+
+  it('recovers from concurrent idempotency collision (P2002) in a fresh transaction', async () => {
+    let attempt = 0;
+    const existingPurchase = Purchase.create({
+      purchaseId: 'pur_winner_456',
+      customerId: 'CUST_U001',
+      amountCents: 7500,
+      customerSequence: 8,
+    });
+
+    const mockPurchaseRepo: PurchaseRepositoryPort = {
+      save: vi.fn(),
+      findById: vi.fn(async () => existingPurchase),
+    };
+
+    const mockOutboxRepo: OutboxRepositoryPort = {
+      save: vi.fn(),
+      findByAggregateAndSequence: vi.fn(async (): Promise<OutboxRecord | null> => ({
+        eventId: 'evt_winner_123',
+        aggregateId: 'CUST_U001',
+        customerSequence: 8,
+        eventType: 'PurchaseCompleted',
+        envelope: {} as unknown as IntegrationEventEnvelopeV1,
+        createdAt: new Date().toISOString(),
+      })),
+    };
+
+    const mockSequenceGenerator: SequenceGeneratorPort = {
+      nextSequence: vi.fn(async () => 9),
+    };
+
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => {
+        // First transaction does not see it (race condition)
+        if (attempt === 1) return null;
+        // Second transaction (recovery) sees the committed winning key
+        return {
+          customerId: 'CUST_U001',
+          idempotencyKey: 'concurrent_key_1',
+          requestFingerprint: JSON.stringify({ customerId: 'CUST_U001', amountCents: 7500 }),
+          purchaseId: 'pur_winner_456',
+        };
+      }),
+      save: vi.fn(async () => {
+        // Throws P2002 duplicate key error during transaction 1
+        const error = new Error(
+          'Unique constraint failed on the fields: (customerId, idempotencyKey)',
+        );
+        (error as unknown as { code: string }).code = 'P2002';
+        throw error;
+      }),
+    };
+
+    const mockUnitOfWork: UnitOfWorkPort = {
+      execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
+        attempt++;
+        return work({
+          purchaseRepository: mockPurchaseRepo,
+          outboxRepository: mockOutboxRepo,
+          sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
+        });
+      },
+    };
+
+    const handler = new CreatePurchaseHandler(mockUnitOfWork);
+    const result = await handler.execute(
+      new CreatePurchaseCommand({
+        customerId: 'CUST_U001',
+        amountCents: 7500,
+        idempotencyKey: 'concurrent_key_1',
+      }),
+    );
+
+    expect(attempt).toBe(2); // Two transactions executed (failed initial + recovery)
+    expect(result.purchaseId).toBe('pur_winner_456');
+    expect(result.eventId).toBe('evt_winner_123');
+    expect(result.amountCents).toBe(7500);
+  });
 });

@@ -38,77 +38,71 @@ export class CreatePurchaseBatchHandler {
     const createdPurchases: BatchPurchaseItem[] = [];
     const customerDistribution: Record<string, number> = {};
 
-    const BATCH_CHUNK_SIZE = 100;
-    for (let offset = 0; offset < count; offset += BATCH_CHUNK_SIZE) {
-      const chunkCount = Math.min(BATCH_CHUNK_SIZE, count - offset);
+    await this.unitOfWork.execute(async (ctx) => {
+      const allPurchases: Purchase[] = [];
+      const allOutbox: OutboxRecord[] = [];
 
-      await this.unitOfWork.execute(async (ctx) => {
-        const chunkPurchases: Purchase[] = [];
-        const chunkOutbox: OutboxRecord[] = [];
+      for (let i = 0; i < count; i++) {
+        const targetCustomer = customerPool[i % customerPool.length];
+        customerDistribution[targetCustomer] = (customerDistribution[targetCustomer] || 0) + 1;
 
-        for (let i = 0; i < chunkCount; i++) {
-          const globalIndex = offset + i;
-          const targetCustomer = customerPool[globalIndex % customerPool.length];
-          customerDistribution[targetCustomer] = (customerDistribution[targetCustomer] || 0) + 1;
+        const amountCents = Math.floor(Math.random() * (maxAmount - minAmount + 1)) + minAmount;
+        const customerSequence = await ctx.sequenceGenerator.nextSequence(targetCustomer);
 
-          const amountCents = Math.floor(Math.random() * (maxAmount - minAmount + 1)) + minAmount;
-          const customerSequence = await ctx.sequenceGenerator.nextSequence(targetCustomer);
+        const purchaseId = `pur_${uuidv7()}`;
+        const eventId = uuidv7();
 
-          const purchaseId = `pur_${uuidv7()}`;
-          const eventId = uuidv7();
+        const purchase = Purchase.create({
+          purchaseId,
+          customerId: targetCustomer,
+          amountCents,
+          customerSequence,
+        });
 
-          const purchase = Purchase.create({
-            purchaseId,
-            customerId: targetCustomer,
-            amountCents,
-            customerSequence,
-          });
+        const envelope = createPurchaseCompletedEnvelope({
+          eventId,
+          customerId: targetCustomer,
+          purchaseId,
+          amountCents,
+          customerSequence,
+          correlationId,
+        });
 
-          const envelope = createPurchaseCompletedEnvelope({
-            eventId,
-            customerId: targetCustomer,
-            purchaseId,
-            amountCents,
-            customerSequence,
-            correlationId,
-          });
+        allPurchases.push(purchase);
+        allOutbox.push({
+          eventId,
+          aggregateId: targetCustomer,
+          customerSequence,
+          eventType: envelope.eventType,
+          envelope,
+          createdAt: new Date().toISOString(),
+        });
 
-          chunkPurchases.push(purchase);
-          chunkOutbox.push({
-            eventId,
-            aggregateId: targetCustomer,
-            customerSequence,
-            eventType: envelope.eventType,
-            envelope,
-            createdAt: new Date().toISOString(),
-          });
+        createdPurchases.push({
+          purchaseId,
+          customerId: targetCustomer,
+          amountCents,
+          customerSequence,
+          eventId,
+        });
+      }
 
-          createdPurchases.push({
-            purchaseId,
-            customerId: targetCustomer,
-            amountCents,
-            customerSequence,
-            eventId,
-          });
+      if (ctx.purchaseRepository.saveMany) {
+        await ctx.purchaseRepository.saveMany(allPurchases);
+      } else {
+        for (const p of allPurchases) {
+          await ctx.purchaseRepository.save(p);
         }
+      }
 
-        if (ctx.purchaseRepository.saveMany) {
-          await ctx.purchaseRepository.saveMany(chunkPurchases);
-        } else {
-          for (const p of chunkPurchases) {
-            await ctx.purchaseRepository.save(p);
-          }
+      if (ctx.outboxRepository.saveMany) {
+        await ctx.outboxRepository.saveMany(allOutbox);
+      } else {
+        for (const o of allOutbox) {
+          await ctx.outboxRepository.save(o);
         }
-
-        if (ctx.outboxRepository.saveMany) {
-          await ctx.outboxRepository.saveMany(chunkOutbox);
-        } else {
-          for (const o of chunkOutbox) {
-            await ctx.outboxRepository.save(o);
-          }
-        }
-      });
-    }
+      }
+    });
 
     const durationMs = Date.now() - startTime;
 

@@ -16,94 +16,146 @@ export class CreatePurchaseHandler {
     const resolvedCorrelationId = correlationId ?? uuidv7();
     const requestFingerprint = JSON.stringify({ customerId, amountCents });
 
-    return await this.unitOfWork.execute(async (ctx) => {
-      // 1. Idempotency Key Check
-      if (idempotencyKey) {
-        const existingKey = await ctx.idempotencyRepository.find(customerId, idempotencyKey);
-        if (existingKey) {
+    try {
+      return await this.unitOfWork.execute(async (ctx) => {
+        // 1. Idempotency Key Check
+        if (idempotencyKey) {
+          const existingKey = await ctx.idempotencyRepository.find(customerId, idempotencyKey);
+          if (existingKey) {
+            if (existingKey.requestFingerprint !== requestFingerprint) {
+              throw new ConflictException(
+                `Idempotency key '${idempotencyKey}' reused with conflicting payload for customer '${customerId}'`,
+              );
+            }
+
+            // Exact duplicate: return existing purchase without mutating state
+            const existingPurchase = await ctx.purchaseRepository.findById(existingKey.purchaseId);
+            if (existingPurchase) {
+              const outboxRecord = await ctx.outboxRepository.findByAggregateAndSequence(
+                existingPurchase.customerId,
+                existingPurchase.customerSequence,
+              );
+
+              return {
+                purchaseId: existingPurchase.purchaseId,
+                customerId: existingPurchase.customerId,
+                amountCents: existingPurchase.amountCents,
+                customerSequence: existingPurchase.customerSequence,
+                eventId: outboxRecord ? outboxRecord.eventId : existingPurchase.purchaseId,
+                correlationId: resolvedCorrelationId,
+                idempotencyKey,
+              };
+            }
+          }
+        }
+
+        // 2. Monotonic customer sequence allocated under transactional lock
+        const customerSequence = await ctx.sequenceGenerator.nextSequence(customerId);
+
+        const purchaseId = `pur_${uuidv7()}`;
+        const eventId = uuidv7();
+
+        // 3. Instantiate and validate domain entity invariants
+        const purchase = Purchase.create({
+          purchaseId,
+          customerId,
+          amountCents,
+          customerSequence,
+        });
+
+        // 4. Create typed integration envelope via contracts single-source-of-truth factory
+        const envelope = createPurchaseCompletedEnvelope({
+          eventId,
+          customerId: purchase.customerId,
+          purchaseId: purchase.purchaseId,
+          amountCents: purchase.amountCents,
+          customerSequence: purchase.customerSequence,
+          correlationId: resolvedCorrelationId,
+        });
+
+        // 5. Atomically persist Purchase entity inside Unit of Work
+        await ctx.purchaseRepository.save(purchase);
+
+        // 6. Atomically append integration event to Outbox inside Unit of Work
+        await ctx.outboxRepository.save({
+          eventId,
+          aggregateId: purchase.customerId,
+          customerSequence: purchase.customerSequence,
+          eventType: envelope.eventType,
+          envelope,
+          createdAt: new Date().toISOString(),
+        });
+
+        // 7. Atomically register Idempotency Key record inside Unit of Work
+        if (idempotencyKey) {
+          await ctx.idempotencyRepository.save({
+            customerId,
+            idempotencyKey,
+            requestFingerprint,
+            purchaseId: purchase.purchaseId,
+          });
+        }
+
+        return {
+          purchaseId: purchase.purchaseId,
+          customerId: purchase.customerId,
+          amountCents: purchase.amountCents,
+          customerSequence: purchase.customerSequence,
+          eventId,
+          correlationId: resolvedCorrelationId,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        };
+      });
+    } catch (err: unknown) {
+      if (idempotencyKey && this.isIdempotencyConflict(err)) {
+        // The first transaction aborted because of a concurrent insert into httpIdempotencyKey.
+        // Start a fresh, separate transaction to inspect the winning key and return the purchase.
+        const duplicateResult = await this.unitOfWork.execute(async (ctx) => {
+          const existingKey = await ctx.idempotencyRepository.find(customerId, idempotencyKey);
+          if (!existingKey) {
+            return null;
+          }
+
           if (existingKey.requestFingerprint !== requestFingerprint) {
             throw new ConflictException(
               `Idempotency key '${idempotencyKey}' reused with conflicting payload for customer '${customerId}'`,
             );
           }
 
-          // Exact duplicate: return existing purchase without mutating state
           const existingPurchase = await ctx.purchaseRepository.findById(existingKey.purchaseId);
-          if (existingPurchase) {
-            const outboxRecord = await ctx.outboxRepository.findByAggregateAndSequence(
-              existingPurchase.customerId,
-              existingPurchase.customerSequence,
-            );
-
-            return {
-              purchaseId: existingPurchase.purchaseId,
-              customerId: existingPurchase.customerId,
-              amountCents: existingPurchase.amountCents,
-              customerSequence: existingPurchase.customerSequence,
-              eventId: outboxRecord ? outboxRecord.eventId : existingPurchase.purchaseId,
-              correlationId: resolvedCorrelationId,
-              idempotencyKey,
-            };
+          if (!existingPurchase) {
+            return null;
           }
+
+          const outboxRecord = await ctx.outboxRepository.findByAggregateAndSequence(
+            existingPurchase.customerId,
+            existingPurchase.customerSequence,
+          );
+
+          return {
+            purchaseId: existingPurchase.purchaseId,
+            customerId: existingPurchase.customerId,
+            amountCents: existingPurchase.amountCents,
+            customerSequence: existingPurchase.customerSequence,
+            eventId: outboxRecord ? outboxRecord.eventId : existingPurchase.purchaseId,
+            correlationId: resolvedCorrelationId,
+            idempotencyKey,
+          };
+        });
+
+        if (duplicateResult) {
+          return duplicateResult;
         }
       }
 
-      // 2. Monotonic customer sequence allocated under transactional lock
-      const customerSequence = await ctx.sequenceGenerator.nextSequence(customerId);
+      throw err;
+    }
+  }
 
-      const purchaseId = `pur_${uuidv7()}`;
-      const eventId = uuidv7();
-
-      // 3. Instantiate and validate domain entity invariants
-      const purchase = Purchase.create({
-        purchaseId,
-        customerId,
-        amountCents,
-        customerSequence,
-      });
-
-      // 4. Create typed integration envelope via contracts single-source-of-truth factory
-      const envelope = createPurchaseCompletedEnvelope({
-        eventId,
-        customerId: purchase.customerId,
-        purchaseId: purchase.purchaseId,
-        amountCents: purchase.amountCents,
-        customerSequence: purchase.customerSequence,
-        correlationId: resolvedCorrelationId,
-      });
-
-      // 5. Atomically persist Purchase entity inside Unit of Work
-      await ctx.purchaseRepository.save(purchase);
-
-      // 6. Atomically append integration event to Outbox inside Unit of Work
-      await ctx.outboxRepository.save({
-        eventId,
-        aggregateId: purchase.customerId,
-        customerSequence: purchase.customerSequence,
-        eventType: envelope.eventType,
-        envelope,
-        createdAt: new Date().toISOString(),
-      });
-
-      // 7. Atomically register Idempotency Key record inside Unit of Work
-      if (idempotencyKey) {
-        await ctx.idempotencyRepository.save({
-          customerId,
-          idempotencyKey,
-          requestFingerprint,
-          purchaseId: purchase.purchaseId,
-        });
-      }
-
-      return {
-        purchaseId: purchase.purchaseId,
-        customerId: purchase.customerId,
-        amountCents: purchase.amountCents,
-        customerSequence: purchase.customerSequence,
-        eventId,
-        correlationId: resolvedCorrelationId,
-        ...(idempotencyKey ? { idempotencyKey } : {}),
-      };
-    });
+  private isIdempotencyConflict(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const code = (err as { code?: string }).code;
+    const message = String((err as { message?: string }).message || '');
+    return code === 'P2002' || /unique constraint|duplicate key|P2002/i.test(message);
   }
 }
