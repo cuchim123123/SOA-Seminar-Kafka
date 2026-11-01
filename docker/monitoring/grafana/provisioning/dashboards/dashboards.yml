@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'Kafka Streaming Lab Dashboards'
+    orgId: 1
+    folder: 'Kafka Lab'
+    folderUid: 'kafka-lab-folder'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

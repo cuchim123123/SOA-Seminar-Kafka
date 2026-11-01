@@ -1,0 +1,64 @@
+global:
+  scrape_interval: ${PROMETHEUS_SCRAPE_INTERVAL}
+  evaluation_interval: ${PROMETHEUS_EVALUATION_INTERVAL}
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'producer-api'
+    metrics_path: '/metrics'
+    scrape_interval: ${PROMETHEUS_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${HOST_DOCKER_INTERNAL}:${PORT}']
+        labels:
+          service: 'producer-api'
+          environment: '${NODE_ENV}'
+
+  - job_name: 'loyalty-worker'
+    metrics_path: '/metrics'
+    scrape_interval: ${PROMETHEUS_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${HOST_DOCKER_INTERNAL}:${LOYALTY_WORKER_PORT}']
+        labels:
+          service: 'loyalty-worker'
+          environment: '${NODE_ENV}'
+
+  - job_name: 'analytics-worker'
+    metrics_path: '/metrics'
+    scrape_interval: ${PROMETHEUS_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${HOST_DOCKER_INTERNAL}:${ANALYTICS_WORKER_PORT}']
+        labels:
+          service: 'analytics-worker'
+          environment: '${NODE_ENV}'
+
+  - job_name: 'replay-worker'
+    metrics_path: '/metrics'
+    scrape_interval: ${PROMETHEUS_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${HOST_DOCKER_INTERNAL}:${REPLAY_WORKER_PORT}']
+        labels:
+          service: 'replay-worker'
+          environment: '${NODE_ENV}'
+
+
+  - job_name: 'benchmark-kafka'
+    scrape_interval: ${BENCH_SCRAPE_INTERVAL}
+    scrape_timeout: ${BENCH_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${BENCH_KAFKA_EXPORTER_TARGET}']
+
+  - job_name: 'benchmark-redis'
+    scrape_interval: ${BENCH_SCRAPE_INTERVAL}
+    scrape_timeout: ${BENCH_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${BENCH_REDIS_EXPORTER_TARGET}']
+
+  - job_name: 'benchmark-rabbitmq'
+    metrics_path: '/metrics'
+    scrape_interval: ${BENCH_SCRAPE_INTERVAL}
+    scrape_timeout: ${BENCH_SCRAPE_INTERVAL}
+    static_configs:
+      - targets: ['${BENCH_RABBITMQ_METRICS_TARGET}']

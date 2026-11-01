@@ -1,0 +1,64 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'producer-api'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: 'producer-api'
+          environment: 'development'
+
+  - job_name: 'loyalty-worker'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['host.docker.internal:3001']
+        labels:
+          service: 'loyalty-worker'
+          environment: 'development'
+
+  - job_name: 'analytics-worker'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['host.docker.internal:3002']
+        labels:
+          service: 'analytics-worker'
+          environment: 'development'
+
+  - job_name: 'replay-worker'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['host.docker.internal:3004']
+        labels:
+          service: 'replay-worker'
+          environment: 'development'
+
+
+  - job_name: 'benchmark-kafka'
+    scrape_interval: 2s
+    scrape_timeout: 2s
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  - job_name: 'benchmark-redis'
+    scrape_interval: 2s
+    scrape_timeout: 2s
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: 'benchmark-rabbitmq'
+    metrics_path: '/metrics'
+    scrape_interval: 2s
+    scrape_timeout: 2s
+    static_configs:
+      - targets: ['rabbitmq-bench:15692']

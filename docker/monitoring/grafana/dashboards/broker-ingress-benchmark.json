@@ -1,0 +1,166 @@
+{
+  "uid": "broker-ingress-benchmark",
+  "title": "Broker Ingress Benchmark",
+  "description": "Live broker activity; metric semantics differ. Use CLI output for final benchmark results.",
+  "tags": ["benchmark", "ingress"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "2s",
+  "time": { "from": "now-5m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["2s", "5s", "10s", "30s"] },
+  "templating": {
+    "list": [
+      {
+        "name": "topic",
+        "label": "Kafka topic",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": {
+          "query": "label_values(kafka_topic_partition_current_offset{job=\"benchmark-kafka\"}, topic)",
+          "refId": "t"
+        },
+        "definition": "label_values(kafka_topic_partition_current_offset{job=\"benchmark-kafka\"}, topic)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": "perf-.*",
+        "refresh": 2,
+        "current": { "selected": true, "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Broker / exporter status",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "colorMode": "background",
+        "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "DOWN", "color": "red" },
+                "1": { "text": "UP", "color": "green" }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "Kafka broker (exporter)",
+          "expr": "kafka_brokers{job=\"benchmark-kafka\"} > bool 0",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "legendFormat": "Redis broker (exporter)",
+          "expr": "redis_up{job=\"benchmark-redis\"}",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "legendFormat": "RabbitMQ metrics endpoint",
+          "expr": "up{job=\"benchmark-rabbitmq\"}",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Kafka — offset advance/s (approximate ingress)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "Kafka offset advance/s",
+          "interval": "2s",
+          "expr": "sum(clamp_min(deriv(kafka_topic_partition_current_offset{job=\"benchmark-kafka\", topic=~\"$topic\"}[10s]), 0))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "RabbitMQ Streams — messages confirmed/s",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "RabbitMQ confirmed/s",
+          "interval": "2s",
+          "expr": "sum(rate(rabbitmq_global_messages_confirmed_total{job=\"benchmark-rabbitmq\", protocol=\"stream\"}[10s]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Redis Streams — XADD calls/s",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "Redis XADD calls/s",
+          "interval": "2s",
+          "expr": "sum(rate(redis_commands_total{job=\"benchmark-redis\", cmd=\"xadd\"}[10s]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Comparison (semantics differ per series)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "mean"] }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "interval": "2s",
+          "legendFormat": "Kafka — offset advance/s (approx. ingress)",
+          "expr": "sum(clamp_min(deriv(kafka_topic_partition_current_offset{job=\"benchmark-kafka\", topic=~\"$topic\"}[10s]), 0))"
+        },
+        {
+          "refId": "B",
+          "interval": "2s",
+          "legendFormat": "RabbitMQ Streams — messages confirmed/s",
+          "expr": "sum(rate(rabbitmq_global_messages_confirmed_total{job=\"benchmark-rabbitmq\", protocol=\"stream\"}[10s]))"
+        },
+        {
+          "refId": "C",
+          "interval": "2s",
+          "legendFormat": "Redis — XADD calls/s (not durable/successful writes)",
+          "expr": "sum(rate(redis_commands_total{job=\"benchmark-redis\", cmd=\"xadd\"}[10s]))"
+        }
+      ]
+    }
+  ]
+}

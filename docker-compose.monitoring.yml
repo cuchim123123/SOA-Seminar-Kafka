@@ -1,0 +1,86 @@
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "${MONITORING_LOG_MAX_SIZE:-10m}"
+    max-file: "${MONITORING_LOG_MAX_FILES:-3}"
+
+services:
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:v2.54.1}
+    container_name: kafka-lab-prometheus
+    hostname: prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-24h}"
+      - "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-512MB}"
+      - "--web.enable-lifecycle"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./docker/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - benchmark
+    logging: *bounded-logging
+    restart: unless-stopped
+
+  kafka-exporter:
+    image: ${KAFKA_EXPORTER_IMAGE:-danielqsj/kafka-exporter:v1.9.0}
+    container_name: kafka-lab-kafka-exporter
+    command:
+      - "--kafka.server=${BENCH_KAFKA_BOOTSTRAP:-kafka-bench:29092}"
+      - "--topic.filter=${BENCH_KAFKA_TOPIC_FILTER:-^perf-.*}"
+      - "--group.filter=^$$"
+      - "--web.listen-address=:9308"
+    networks:
+      - benchmark
+    logging: *bounded-logging
+    restart: unless-stopped
+
+  redis-exporter:
+    image: ${REDIS_EXPORTER_IMAGE:-oliver006/redis_exporter:v1.67.0}
+    container_name: kafka-lab-redis-exporter
+    command:
+      - "--redis.addr=${BENCH_REDIS_ADDR:-redis://redis-bench:6379}"
+      - "--web.listen-address=:9121"
+    networks:
+      - benchmark
+    logging: *bounded-logging
+    restart: unless-stopped
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:11.2.0}
+    container_name: kafka-lab-grafana
+    hostname: grafana
+    ports:
+      - "${GRAFANA_PORT:-3005}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=2s
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    logging: *bounded-logging
+    restart: unless-stopped
+
+networks:
+  benchmark:
+    name: ${BENCH_NETWORK_NAME:-ingress-benchmark_default}
+    external: true
+
+volumes:
+  prometheus_data:
+    name: prometheus_data
+  grafana_data:
+    name: grafana_data
