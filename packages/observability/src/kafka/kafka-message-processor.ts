@@ -1,5 +1,6 @@
 import { PoisonPillError } from '../errors/poison-pill.error';
 import { StructuredLogger } from '../logging/structured-logger.service';
+import { MetricsService } from '../metrics/metrics.service';
 
 export interface ProcessKafkaRecordParams<T> {
   topic: string;
@@ -9,6 +10,9 @@ export interface ProcessKafkaRecordParams<T> {
   rawValue?: string;
   logger: StructuredLogger;
   consumerGroupId?: string;
+  metricsService?: MetricsService;
+  consumerRole?: string;
+  transport?: string;
   deserializer: (raw: string) => T;
   handler: (envelope: T) => Promise<Record<string, unknown> | void>;
 }
@@ -30,6 +34,9 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
     rawValue,
     logger,
     consumerGroupId,
+    metricsService,
+    consumerRole = 'consumer',
+    transport = 'kafka',
     deserializer,
     handler,
   } = params;
@@ -43,6 +50,7 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
       key,
       groupId: consumerGroupId,
     });
+    metricsService?.recordProcessingFailure(consumerRole, 'empty_payload');
     throw new PoisonPillError('Empty Kafka payload');
   }
 
@@ -63,6 +71,7 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
       originalError: errorMsg,
     });
 
+    metricsService?.recordProcessingFailure(consumerRole, 'poison_pill');
     logger.error('Poison pill detected — unable to deserialize message', poisonError, {
       topic,
       partition,
@@ -76,10 +85,48 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
     throw poisonError;
   }
 
+  const eventType =
+    envelope &&
+    typeof envelope === 'object' &&
+    'eventType' in envelope &&
+    typeof (envelope as Record<string, unknown>).eventType === 'string'
+      ? ((envelope as Record<string, unknown>).eventType as string)
+      : 'unknown';
+
+  metricsService?.recordDelivery(consumerRole, transport, eventType);
+
   // 3. Execute business use-case handler with timing and resilience
   try {
     const outcome = await handler(envelope);
-    const durationMs = Math.round((performance.now() - startTime) * 100) / 100;
+    const durationSeconds = (performance.now() - startTime) / 1000;
+    const durationMs = Math.round(durationSeconds * 100000) / 100;
+
+    if (
+      outcome &&
+      typeof outcome === 'object' &&
+      (outcome as Record<string, unknown>).isDuplicate === true
+    ) {
+      metricsService?.recordDuplicateDelivery(consumerRole, eventType);
+    } else {
+      metricsService?.recordHandlerCommit(consumerRole, eventType, durationSeconds);
+    }
+
+    if (
+      envelope &&
+      typeof envelope === 'object' &&
+      'occurredAt' in envelope &&
+      typeof (envelope as Record<string, unknown>).occurredAt === 'string'
+    ) {
+      const occurredAtTime = new Date(
+        (envelope as Record<string, unknown>).occurredAt as string,
+      ).getTime();
+      if (!Number.isNaN(occurredAtTime)) {
+        const ageSeconds = (Date.now() - occurredAtTime) / 1000;
+        if (ageSeconds >= 0) {
+          metricsService?.recordSourceToHandlerDuration(consumerRole, ageSeconds);
+        }
+      }
+    }
 
     // Single unified structured log on success
     logger.info('Kafka record processed successfully', {
@@ -92,7 +139,10 @@ export async function processKafkaRecord<T>(params: ProcessKafkaRecordParams<T>)
       ...(outcome ?? {}),
     });
   } catch (err: unknown) {
-    const durationMs = Math.round((performance.now() - startTime) * 100) / 100;
+    const durationSeconds = (performance.now() - startTime) / 1000;
+    const durationMs = Math.round(durationSeconds * 100000) / 100;
+
+    metricsService?.recordProcessingFailure(consumerRole, 'handler_error', durationSeconds);
 
     logger.error('Unhandled failure during Kafka message processing', err, {
       topic,

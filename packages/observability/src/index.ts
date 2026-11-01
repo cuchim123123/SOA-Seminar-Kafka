@@ -12,3 +12,5 @@ export * from './kafka/kafka-message-processor';
 
 export * from './http/global-http-exception.filter';
 export * from './http/http-logging.interceptor';
+
+export * from './metrics';
