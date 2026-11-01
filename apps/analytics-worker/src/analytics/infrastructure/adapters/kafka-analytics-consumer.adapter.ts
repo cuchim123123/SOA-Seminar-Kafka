@@ -1,7 +1,8 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { deserializeEnvelope } from '@lab/contracts';
-import { processKafkaRecord, StructuredLogger } from '@lab/observability';
-import { Consumer, Kafka } from 'kafkajs';
+import { MetricsService, processKafkaRecord, StructuredLogger } from '@lab/observability';
+import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
   ApplySalesEventCommand,
@@ -17,8 +18,8 @@ export class KafkaAnalyticsConsumerAdapter
   implements ConsumerControlPort, OnModuleInit, OnModuleDestroy
 {
   private readonly logger: StructuredLogger;
-  private readonly kafka: Kafka;
-  private readonly consumer: Consumer;
+  private readonly kafka: KafkaJS.Kafka;
+  private readonly consumer: any;
   private readonly topic: string;
   private isPaused = false;
   private processingDelayMs = 0;
@@ -28,18 +29,28 @@ export class KafkaAnalyticsConsumerAdapter
     private readonly config: AppConfigService,
     @Inject(ApplySalesEventHandler)
     private readonly handler: ApplySalesEventHandler,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {
     this.logger = new StructuredLogger(KafkaAnalyticsConsumerAdapter.name, {
       serviceName: 'analytics-worker',
       format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
     });
     this.topic = this.config.purchaseTopic;
-    this.kafka = new Kafka({
-      clientId: this.config.kafkaClientId,
-      brokers: this.config.kafkaBrokers,
+    this.kafka = new KafkaJS.Kafka({
+      'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      kafkaJS: {
+        clientId: this.config.kafkaClientId,
+        brokers: this.config.kafkaBrokers,
+      },
     });
     this.consumer = this.kafka.consumer({
-      groupId: this.config.kafkaGroupId,
+      'enable.auto.commit': false,
+      kafkaJS: {
+        groupId: this.config.kafkaGroupId,
+        fromBeginning: this.config.kafkaFromBeginning,
+        autoCommit: false,
+      },
     });
   }
 
@@ -50,9 +61,8 @@ export class KafkaAnalyticsConsumerAdapter
       topic: this.topic,
     });
     await this.consumer.connect();
-    await this.consumer.subscribe({
+    await (this.consumer as any).subscribe({
       topic: this.topic,
-      fromBeginning: this.config.kafkaFromBeginning,
     });
 
     this.logger.info('Analytics consumer subscribed and started message loop', {
@@ -60,9 +70,8 @@ export class KafkaAnalyticsConsumerAdapter
       groupId: this.config.kafkaGroupId,
     });
 
-    await this.consumer.run({
-      autoCommit: false,
-      eachMessage: async ({ topic, partition, message }) => {
+    await (this.consumer as any).run({
+      eachMessage: async ({ topic, partition, message }: any) => {
         if (this.processingDelayMs > 0) {
           await new Promise((resolve) => setTimeout(resolve, this.processingDelayMs));
         }
@@ -75,6 +84,9 @@ export class KafkaAnalyticsConsumerAdapter
           rawValue: message.value?.toString(),
           logger: this.logger,
           consumerGroupId: this.config.kafkaGroupId,
+          metricsService: this.metricsService,
+          consumerRole: 'analytics',
+          transport: 'kafka',
           deserializer: deserializeEnvelope,
           handler: async (envelope) => {
             if (envelope.eventType === 'PurchaseCompleted') {
@@ -104,20 +116,28 @@ export class KafkaAnalyticsConsumerAdapter
 
         // Explicit manual commit discipline: Consumed offset N is committed as N + 1
         const nextOffset = (BigInt(message.offset) + 1n).toString();
-        await this.consumer.commitOffsets([
-          {
-            topic,
-            partition,
-            offset: nextOffset,
-          },
-        ]);
+        try {
+          await this.consumer.commitOffsets([
+            {
+              topic,
+              partition,
+              offset: nextOffset,
+            },
+          ]);
+          this.metricsService?.recordAck('analytics', 'kafka', 'success');
+        } catch (commitErr: unknown) {
+          this.metricsService?.recordAck('analytics', 'kafka', 'failure');
+          throw commitErr;
+        }
       },
     });
+    this.metricsService?.setConsumerState('analytics', 'polling');
   }
 
   async pause(): Promise<void> {
     this.consumer.pause([{ topic: this.topic }]);
     this.isPaused = true;
+    this.metricsService?.setConsumerState('analytics', 'paused');
     this.logger.warn('Analytics Kafka consumer PAUSED by operator request', {
       topic: this.topic,
       groupId: this.config.kafkaGroupId,
@@ -127,6 +147,7 @@ export class KafkaAnalyticsConsumerAdapter
   async resume(): Promise<void> {
     this.consumer.resume([{ topic: this.topic }]);
     this.isPaused = false;
+    this.metricsService?.setConsumerState('analytics', 'polling');
     this.logger.info('Analytics Kafka consumer RESUMED by operator request', {
       topic: this.topic,
       groupId: this.config.kafkaGroupId,
@@ -169,8 +190,8 @@ export class KafkaAnalyticsConsumerAdapter
   async getStatus(): Promise<ConsumerControlStatus> {
     const pausedPartitions = this.consumer
       .paused()
-      .filter((p) => p.topic === this.topic)
-      .flatMap((p) => p.partitions);
+      .filter((p: any) => p.topic === this.topic)
+      .flatMap((p: any) => p.partitions ?? []);
 
     return {
       groupId: this.config.kafkaGroupId,
@@ -186,6 +207,7 @@ export class KafkaAnalyticsConsumerAdapter
       groupId: this.config.kafkaGroupId,
     });
     await this.consumer.disconnect();
+    this.metricsService?.setConsumerState('analytics', 'stopped');
     this.logger.info('Analytics Kafka consumer disconnected');
   }
 }

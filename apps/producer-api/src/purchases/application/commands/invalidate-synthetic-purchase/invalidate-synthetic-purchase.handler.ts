@@ -1,9 +1,10 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   createPurchaseInvalidatedEnvelope,
   PurchaseInvalidatedReasonV1,
   uuidv7,
 } from '@lab/contracts';
+import { MetricsService } from '@lab/observability';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../../ports/unit-of-work.port';
 import {
   InvalidateSyntheticPurchaseCommand,
@@ -15,6 +16,8 @@ export class InvalidateSyntheticPurchaseHandler {
   constructor(
     @Inject(UNIT_OF_WORK_PORT)
     private readonly unitOfWork: UnitOfWorkPort,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {}
 
   async execute(
@@ -23,7 +26,7 @@ export class InvalidateSyntheticPurchaseHandler {
     const { purchaseId, reason = 'DEMO_INVALIDATION', correlationId } = command.data;
     const resolvedCorrelationId = correlationId ?? uuidv7();
 
-    return await this.unitOfWork.execute(async (ctx) => {
+    const result = await this.unitOfWork.execute<InvalidateSyntheticPurchaseResult>(async (ctx) => {
       // 1. Find existing purchase under exclusive row lock (FOR UPDATE) to serialize concurrent invalidations
       const purchase = await ctx.purchaseRepository.findById(purchaseId, { forUpdate: true });
       if (!purchase) {
@@ -85,5 +88,11 @@ export class InvalidateSyntheticPurchaseHandler {
         isAlreadyInvalidated: false,
       };
     });
+
+    if (!result.isAlreadyInvalidated) {
+      this.metricsService?.recordSourceEventCommitted('PurchaseInvalidated', 'outbox_cdc');
+    }
+
+    return result;
   }
 }

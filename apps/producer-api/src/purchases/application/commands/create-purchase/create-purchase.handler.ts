@@ -1,5 +1,6 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
 import { createPurchaseCompletedEnvelope, uuidv7 } from '@lab/contracts';
+import { MetricsService } from '@lab/observability';
 import { Purchase } from '../../../domain/purchase.entity';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../../ports/unit-of-work.port';
 import { CreatePurchaseCommand, CreatePurchaseResult } from './create-purchase.command';
@@ -9,6 +10,8 @@ export class CreatePurchaseHandler {
   constructor(
     @Inject(UNIT_OF_WORK_PORT)
     private readonly unitOfWork: UnitOfWorkPort,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {}
 
   async execute(command: CreatePurchaseCommand): Promise<CreatePurchaseResult> {
@@ -16,8 +19,10 @@ export class CreatePurchaseHandler {
     const resolvedCorrelationId = correlationId ?? uuidv7();
     const requestFingerprint = JSON.stringify({ customerId, amountCents });
 
+    let isNewCommit = false;
+
     try {
-      return await this.unitOfWork.execute(async (ctx) => {
+      const result = await this.unitOfWork.execute(async (ctx) => {
         // 1. Idempotency Key Check
         if (idempotencyKey) {
           const existingKey = await ctx.idempotencyRepository.find(customerId, idempotencyKey);
@@ -95,6 +100,7 @@ export class CreatePurchaseHandler {
             purchaseId: purchase.purchaseId,
           });
         }
+        isNewCommit = true;
 
         return {
           purchaseId: purchase.purchaseId,
@@ -106,6 +112,12 @@ export class CreatePurchaseHandler {
           ...(idempotencyKey ? { idempotencyKey } : {}),
         };
       });
+
+      if (isNewCommit) {
+        this.metricsService?.recordSourceEventCommitted('PurchaseCompleted', 'outbox_cdc');
+      }
+
+      return result;
     } catch (err: unknown) {
       if (idempotencyKey && this.isIdempotencyConflict(err)) {
         // The first transaction aborted because of a concurrent insert into httpIdempotencyKey.

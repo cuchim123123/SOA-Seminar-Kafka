@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
-import { Admin, AssignerProtocol, Consumer, Kafka, Producer } from 'kafkajs';
+import { KafkaJS, RdKafka } from '@confluentinc/kafka-javascript';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
   BrokerMessageRecord,
@@ -13,41 +14,80 @@ import {
   TopicInspectionResult,
 } from '../../application/ports/stream-inspector.port';
 
+function decodeMemberAssignment(buffer?: Buffer): Record<string, number[]> {
+  try {
+    if (!buffer || buffer.length < 6) return {};
+    let offset = 2; // skip version
+    const topicCount = buffer.readInt32BE(offset);
+    offset += 4;
+    const assignment: Record<string, number[]> = {};
+    for (let i = 0; i < topicCount; i++) {
+      const topicLen = buffer.readInt16BE(offset);
+      offset += 2;
+      const topicName = buffer.toString('utf-8', offset, offset + topicLen);
+      offset += topicLen;
+      const partCount = buffer.readInt32BE(offset);
+      offset += 4;
+      const partitions: number[] = [];
+      for (let j = 0; j < partCount; j++) {
+        partitions.push(buffer.readInt32BE(offset));
+        offset += 4;
+      }
+      assignment[topicName] = partitions;
+    }
+    return assignment;
+  } catch {
+    return {};
+  }
+}
+
 @Injectable()
 export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleInit, OnModuleDestroy {
   private readonly logger: StructuredLogger;
-  private readonly kafka: Kafka;
-  private readonly admin: Admin;
-  private readonly producer: Producer;
+  private readonly kafka: KafkaJS.Kafka;
+  private readonly admin: KafkaJS.Admin;
+  private readonly producer: any;
 
   constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {
     this.logger = new StructuredLogger(KafkaJsInspectorAdapter.name, {
       serviceName: 'producer-api',
       format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
     });
-    this.kafka = new Kafka({
-      clientId: `${this.config.kafkaClientId}-inspector`,
-      brokers: this.config.kafkaBrokers,
+    this.kafka = new KafkaJS.Kafka({
+      'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      kafkaJS: {
+        clientId: `${this.config.kafkaClientId}-inspector`,
+        brokers: this.config.kafkaBrokers,
+      },
     });
     this.admin = this.kafka.admin();
-    this.producer = this.kafka.producer();
+    this.producer = this.kafka.producer({
+      'enable.idempotence': false,
+      acks: -1,
+      kafkaJS: {
+        acks: -1,
+      },
+    });
   }
 
   async onModuleInit(): Promise<void> {
-    this.logger.info('Connecting KafkaJS admin and producer client for ops inspection...');
+    this.logger.info('Connecting Confluent admin and producer client for ops inspection...');
     await Promise.all([this.admin.connect(), this.producer.connect()]);
-    this.logger.info('KafkaJS admin and producer client connected');
+    this.logger.info('Confluent admin and producer client connected');
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.info('Disconnecting KafkaJS admin and producer client...');
+    this.logger.info('Disconnecting Confluent admin and producer client...');
     await Promise.all([this.admin.disconnect(), this.producer.disconnect()]);
-    this.logger.info('KafkaJS admin and producer client disconnected');
+    this.logger.info('Confluent admin and producer client disconnected');
   }
 
   async inspectTopic(topic: string): Promise<TopicInspectionResult> {
     const metadata = await this.admin.fetchTopicMetadata({ topics: [topic] });
-    const topicInfo = metadata.topics.find((t) => t.name === topic);
+    const topicList = Array.isArray(metadata)
+      ? metadata
+      : ((metadata as unknown as { topics?: unknown[] }).topics ?? []);
+    const topicInfo = (topicList as any[]).find((t: any) => t.name === topic);
 
     if (!topicInfo) {
       throw new Error(`Topic '${topic}' not found on Kafka broker cluster`);
@@ -55,7 +95,7 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
 
     const offsets = await this.admin.fetchTopicOffsets(topic);
 
-    const partitions: PartitionPosition[] = topicInfo.partitions.map((p) => {
+    const partitions: PartitionPosition[] = topicInfo.partitions.map((p: any) => {
       const offsetInfo = offsets.find((o) => o.partition === p.partitionId);
       return {
         topic,
@@ -86,14 +126,21 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
       );
     }
 
-    this.logger.info('Scaling topic partitions on broker cluster...', {
+    this.logger.info('Scaling topic partitions on broker cluster via RdKafka AdminClient...', {
       topic,
       currentCount: current.partitionCount,
       newCount: newPartitionCount,
     });
 
-    await this.admin.createPartitions({
-      topicPartitions: [{ topic, count: newPartitionCount }],
+    await new Promise<void>((resolve, reject) => {
+      const rdAdmin = RdKafka.AdminClient.create({
+        'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      });
+      rdAdmin.createPartitions(topic, newPartitionCount, (err) => {
+        rdAdmin.disconnect();
+        if (err) return reject(err);
+        resolve();
+      });
     });
 
     this.logger.info(
@@ -141,18 +188,20 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
     const startBigInt = high - maxRecords > low ? high - maxRecords : low;
     const startOffset = startBigInt.toString();
 
-    const consumer: Consumer = this.kafka.consumer({
-      groupId: `peeker-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      allowAutoTopicCreation: false,
-      maxWaitTimeInMs: 100,
+    const consumer: any = this.kafka.consumer({
+      'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      kafkaJS: {
+        groupId: `peeker-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        allowAutoTopicCreation: false,
+        maxWaitTimeInMs: 100,
+        fromBeginning: false,
+        autoCommit: false,
+      },
     });
 
     await consumer.connect();
-    await consumer.subscribe({ topic, fromBeginning: false });
-
-    consumer.on(consumer.events.GROUP_JOIN, () => {
-      consumer.seek({ topic, partition, offset: startOffset });
-    });
+    await consumer.subscribe({ topic });
+    consumer.seek({ topic, partition, offset: startOffset });
 
     const messages: BrokerMessageRecord[] = [];
 
@@ -161,8 +210,7 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
 
       consumer
         .run({
-          autoCommit: false,
-          eachMessage: async ({ partition: msgPart, message }) => {
+          eachMessage: async ({ partition: msgPart, message }: any) => {
             if (msgPart === partition) {
               let payload: unknown = null;
               try {
@@ -174,9 +222,9 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
               messages.push({
                 topic,
                 partition: msgPart,
-                offset: message.offset,
+                offset: String(message.offset),
                 key: message.key ? message.key.toString('utf-8') : null,
-                timestamp: message.timestamp,
+                timestamp: String(message.timestamp),
                 payload,
               });
 
@@ -247,13 +295,18 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
   ): Promise<ConsumerGroupLagResult> {
     const topicOffsets = await this.admin.fetchTopicOffsets(topic);
 
-    let groupPartitions: Array<{ partition: number; offset: string; metadata: string | null }> = [];
+    let groupPartitions: Array<{ partition: number; offset: string; metadata?: string | null }> =
+      [];
 
     try {
       const fetched = await this.admin.fetchOffsets({ groupId, topics: [topic] });
-      const topicEntry = fetched.find((f) => f.topic === topic);
+      const topicEntry = fetched.find((f: any) => f.topic === topic);
       if (topicEntry) {
-        groupPartitions = topicEntry.partitions;
+        groupPartitions = topicEntry.partitions.map((p: any) => ({
+          partition: p.partition,
+          offset: String(p.offset),
+          metadata: p.metadata ?? null,
+        }));
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -293,19 +346,18 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
     topic: string = this.config.purchaseTopic,
   ): Promise<ConsumerGroupDescriptionResult> {
     const res = await this.admin.describeGroups([groupId]);
-    const group = res.groups.find((g) => g.groupId === groupId);
+    const groupList = (res as any)?.groups ?? [];
+    const group = groupList.find((g: any) => g.groupId === groupId);
     if (!group) {
       throw new Error(`Consumer group '${groupId}' not found on Kafka broker`);
     }
 
-    const members: ConsumerGroupMemberDescription[] = group.members.map((m) => {
+    const members: ConsumerGroupMemberDescription[] = (group.members ?? []).map((m: any) => {
       let assignedPartitions: number[] = [];
       try {
         if (m.memberAssignment && m.memberAssignment.length > 0) {
-          const decoded = AssignerProtocol.MemberAssignment.decode(m.memberAssignment);
-          if (decoded && decoded.assignment) {
-            assignedPartitions = (decoded.assignment[topic] ?? []).slice().sort((a, b) => a - b);
-          }
+          const decoded = decodeMemberAssignment(m.memberAssignment);
+          assignedPartitions = (decoded[topic] ?? []).slice().sort((a, b) => a - b);
         }
       } catch (err: unknown) {
         this.logger.warn(`Failed to decode member assignment for ${m.memberId}: ${String(err)}`);
@@ -341,7 +393,7 @@ export class KafkaJsInspectorAdapter implements StreamInspectorPort, OnModuleIni
     return {
       topic,
       partition: first.partition,
-      offset: first.baseOffset ?? '0',
+      offset: first.baseOffset ?? first.offset ?? '0',
     };
   }
 }

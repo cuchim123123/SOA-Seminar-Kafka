@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
+import { MetricsService } from '@lab/observability';
 import { AppModule } from '../src/app.module';
 import { AppConfigService } from '../src/config/app-config.service';
 import { RAW_ENV_TOKEN } from '../src/config/config.module';
@@ -33,6 +34,12 @@ describe('Loyalty Worker Smoke Tests', () => {
       const ready = controller.getReady();
       expect(ready.status).toBe('ok');
       expect(ready.service).toBe('loyalty-worker');
+
+      const metricsService = moduleRef.get(MetricsService);
+      expect(metricsService).toBeDefined();
+      const metricsOutput = await metricsService.getMetrics();
+      expect(metricsOutput).toContain('lab_deliveries_total');
+      expect(metricsOutput).toContain('process_cpu_');
     });
   });
 

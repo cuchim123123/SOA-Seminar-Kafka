@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createPurchaseCompletedEnvelope, uuidv7 } from '@lab/contracts';
+import { MetricsService } from '@lab/observability';
 import { Purchase } from '../../../domain/purchase.entity';
 import { UNIT_OF_WORK_PORT, UnitOfWorkPort } from '../../ports/unit-of-work.port';
 import { OutboxRecord } from '../../ports/outbox-repository.port';
@@ -22,6 +23,8 @@ export class CreatePurchaseBatchHandler {
   constructor(
     @Inject(UNIT_OF_WORK_PORT)
     private readonly unitOfWork: UnitOfWorkPort,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {}
 
   async execute(command: CreatePurchaseBatchCommand): Promise<CreatePurchaseBatchResult> {
@@ -103,6 +106,12 @@ export class CreatePurchaseBatchHandler {
         }
       }
     });
+
+    if (this.metricsService) {
+      for (let i = 0; i < createdPurchases.length; i++) {
+        this.metricsService.recordSourceEventCommitted('PurchaseCompleted', 'outbox_cdc');
+      }
+    }
 
     const durationMs = Date.now() - startTime;
 

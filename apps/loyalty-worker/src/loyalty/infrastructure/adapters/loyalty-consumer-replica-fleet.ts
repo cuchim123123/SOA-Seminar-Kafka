@@ -1,4 +1,5 @@
-import { Consumer, Kafka, KafkaMessage } from 'kafkajs';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { StructuredLogger } from '@lab/observability';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
@@ -9,7 +10,7 @@ import {
 export interface ReplicaInstance {
   readonly id: string;
   readonly clientId: string;
-  readonly consumer: Consumer;
+  readonly consumer: any;
   status: 'RUNNING' | 'PAUSED' | 'KILLED' | 'STOPPED';
   assignedPartitions: number[];
 }
@@ -23,7 +24,7 @@ export class LoyaltyConsumerReplicaFleet {
 
   constructor(
     private readonly config: AppConfigService,
-    private readonly kafka: Kafka,
+    private readonly kafka: KafkaJS.Kafka,
     private readonly topic: string,
     private readonly logger: StructuredLogger,
   ) {}
@@ -54,72 +55,75 @@ export class LoyaltyConsumerReplicaFleet {
   }
 
   setupConsumerListeners(
-    consumer: Consumer,
+    consumer: any,
     instanceId: string,
     clientId: string,
     onAssignment: (partitions: number[]) => void,
   ): void {
-    consumer.on(consumer.events.REBALANCING, (e) => {
-      this.totalRebalanceCount++;
-      this.recordRebalanceEvent({
-        id: `reb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'REBALANCING',
-        memberId: (e.payload as { memberId?: string })?.memberId ?? instanceId,
-        clientId,
-        details: `Rebalance initiated for consumer group ${this.config.kafkaGroupId} on member ${clientId}`,
-      });
-      this.logger.warn('[KafkaRebalance] Rebalancing triggered', { instanceId, clientId });
-    });
+    if (typeof consumer.on === 'function') {
+      try {
+        if (consumer.events) {
+          consumer.on(consumer.events.REBALANCING, (e: any) => {
+            this.totalRebalanceCount++;
+            this.recordRebalanceEvent({
+              id: `reb_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              timestamp: new Date().toISOString(),
+              eventType: 'REBALANCING',
+              memberId: (e?.payload as { memberId?: string })?.memberId ?? instanceId,
+              clientId,
+              details: `Rebalance initiated for consumer group ${this.config.kafkaGroupId} on member ${clientId}`,
+            });
+            this.logger.warn('[KafkaRebalance] Rebalancing triggered', { instanceId, clientId });
+          });
 
-    consumer.on(consumer.events.GROUP_JOIN, (e) => {
-      const payload = e.payload as {
-        memberAssignment?: Record<string, number[]>;
-        memberId: string;
-        isLeader: boolean;
-        duration: number;
-        groupGenerationId?: number;
-      };
-      const assignment = payload.memberAssignment?.[this.topic] ?? [];
-      const sortedPartitions = assignment.slice().sort((a: number, b: number) => a - b);
-      onAssignment(sortedPartitions);
+          consumer.on(consumer.events.GROUP_JOIN, (e: any) => {
+            const payload = e?.payload as {
+              memberAssignment?: Record<string, number[]>;
+              memberId: string;
+              isLeader: boolean;
+              duration: number;
+              groupGenerationId?: number;
+            };
+            const assignment = payload?.memberAssignment?.[this.topic] ?? [];
+            const sortedPartitions = assignment.slice().sort((a: number, b: number) => a - b);
+            onAssignment(sortedPartitions);
 
-      this.recordRebalanceEvent({
-        id: `join_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'GROUP_JOIN',
-        memberId: payload.memberId,
-        clientId,
-        groupGenerationId: payload.groupGenerationId,
-        assignedPartitions: sortedPartitions,
-        durationMs: payload.duration,
-        details: `Rebalance completed in ${payload.duration}ms. Leader: ${payload.isLeader}. Assigned ${sortedPartitions.length} partitions: [${sortedPartitions.join(', ')}]`,
-      });
-      this.logger.info('[KafkaRebalance] Group join complete', { instanceId, clientId });
-    });
+            this.recordRebalanceEvent({
+              id: `join_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              timestamp: new Date().toISOString(),
+              eventType: 'GROUP_JOIN',
+              memberId: payload?.memberId ?? instanceId,
+              clientId,
+              groupGenerationId: payload?.groupGenerationId,
+              assignedPartitions: sortedPartitions,
+              durationMs: payload?.duration ?? 0,
+              details: `Rebalance completed in ${payload?.duration ?? 0}ms. Leader: ${payload?.isLeader}. Assigned ${sortedPartitions.length} partitions: [${sortedPartitions.join(', ')}]`,
+            });
+            this.logger.info('[KafkaRebalance] Group join complete', { instanceId, clientId });
+          });
 
-    consumer.on(consumer.events.CRASH, (e) => {
-      const payload = e.payload as { error: Error };
-      this.recordRebalanceEvent({
-        id: `crash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toISOString(),
-        eventType: 'MEMBER_KILLED',
-        memberId: instanceId,
-        clientId,
-        details: `Consumer crash detected on ${clientId}: ${payload.error?.message ?? 'Unknown error'}`,
-      });
-    });
+          consumer.on(consumer.events.CRASH, (e: any) => {
+            const payload = e?.payload as { error: Error };
+            this.recordRebalanceEvent({
+              id: `crash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              timestamp: new Date().toISOString(),
+              eventType: 'MEMBER_KILLED',
+              memberId: instanceId,
+              clientId,
+              details: `Consumer crash detected on ${clientId}: ${payload?.error?.message ?? 'Unknown error'}`,
+            });
+          });
+        }
+      } catch {
+        // Fallback for drivers where consumer.events is absent
+      }
+    }
   }
 
   async scaleInstances(
     targetCount: number,
     isPaused: boolean,
-    onMessage: (
-      consumer: Consumer,
-      topic: string,
-      partition: number,
-      message: KafkaMessage,
-    ) => Promise<void>,
+    onMessage: (consumer: any, topic: string, partition: number, message: any) => Promise<void>,
   ): Promise<void> {
     const clamped = Math.max(1, Math.min(4, targetCount));
     const currentReplicaCount = this.replicas.size;
@@ -129,7 +133,10 @@ export class LoyaltyConsumerReplicaFleet {
       for (let i = currentReplicaCount + 1; i <= neededReplicas; i++) {
         const replicaId = `loyalty-worker-replica-${i}`;
         const clientId = `${this.config.kafkaClientId}-replica-${i}`;
-        const replicaConsumer = this.kafka.consumer({ groupId: this.config.kafkaGroupId });
+        const replicaConsumer = this.kafka.consumer({
+          'enable.auto.commit': false,
+          kafkaJS: { groupId: this.config.kafkaGroupId, fromBeginning: false, autoCommit: false },
+        });
 
         this.setupConsumerListeners(replicaConsumer, replicaId, clientId, (partitions) => {
           const replica = this.replicas.get(replicaId);
@@ -137,7 +144,7 @@ export class LoyaltyConsumerReplicaFleet {
         });
 
         await replicaConsumer.connect();
-        await replicaConsumer.subscribe({ topic: this.topic, fromBeginning: false });
+        await (replicaConsumer as any).subscribe({ topic: this.topic });
 
         this.replicas.set(replicaId, {
           id: replicaId,
@@ -147,9 +154,8 @@ export class LoyaltyConsumerReplicaFleet {
           assignedPartitions: [],
         });
 
-        await replicaConsumer.run({
-          autoCommit: false,
-          eachMessage: async ({ topic, partition, message }) => {
+        await (replicaConsumer as any).run({
+          eachMessage: async ({ topic, partition, message }: any) => {
             await onMessage(replicaConsumer, topic, partition, message);
           },
         });

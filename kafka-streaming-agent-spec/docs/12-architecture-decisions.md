@@ -52,20 +52,20 @@ The following decisions are settled. An agent should not choose an alternative w
 
 ## Risks, mitigations and open proof obligations
 
-| Risk | Mitigation / required test |
-|---|---|
-| Kafka key ordering assumed sufficient | Customer row-lock sequence assignment + ordered publisher; concurrency test. |
-| Live invalidation yields stale loyalty | `correction_required` until bounded replay/cutover; dashboard explicitly distinguishes. |
-| Consumer duplicate points | Unique processed-event constraint in same tx as mutation; crash injection test. |
-| Outbox multiclaim reorders | Only one publisher, explicit per-aggregate ordering; no SKIP LOCKED multiworker. |
-| Replay history incomplete | Check retained offsets/required events, fail clearly; no silent DB substitution. |
-| KafkaJS offset precision lost | Treat offsets as decimal strings/BigInt. |
-| KafkaJS idempotent producer setting changes across releases | Verify installed version and test; never infer app-level exactly-once. |
-| Weak throughput improvement | Report actual measurements and potential Postgres bottleneck/hot partitions. |
-| 3 nodes all on one host | Document process-failure-only HA demonstration. |
-| Stopping two combined nodes confounds ISR/quorum | Distinguish errors; targeted ISR test if practical. |
-| Monitoring API compromises host | No browser Docker socket, local-only allowlisted commands, disabled by default. |
-| Over-engineering consumes seminar time | Phase gates, only build actively needed contexts/adapters. |
+| Risk                                                        | Mitigation / required test                                                              |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Kafka key ordering assumed sufficient                       | Customer row-lock sequence assignment + ordered publisher; concurrency test.            |
+| Live invalidation yields stale loyalty                      | `correction_required` until bounded replay/cutover; dashboard explicitly distinguishes. |
+| Consumer duplicate points                                   | Unique processed-event constraint in same tx as mutation; crash injection test.         |
+| Outbox multiclaim reorders                                  | Only one publisher, explicit per-aggregate ordering; no SKIP LOCKED multiworker.        |
+| Replay history incomplete                                   | Check retained offsets/required events, fail clearly; no silent DB substitution.        |
+| KafkaJS offset precision lost                               | Treat offsets as decimal strings/BigInt.                                                |
+| KafkaJS idempotent producer setting changes across releases | Verify installed version and test; never infer app-level exactly-once.                  |
+| Weak throughput improvement                                 | Report actual measurements and potential Postgres bottleneck/hot partitions.            |
+| 3 nodes all on one host                                     | Document process-failure-only HA demonstration.                                         |
+| Stopping two combined nodes confounds ISR/quorum            | Distinguish errors; targeted ISR test if practical.                                     |
+| Monitoring API compromises host                             | No browser Docker socket, local-only allowlisted commands, disabled by default.         |
+| Over-engineering consumes seminar time                      | Phase gates, only build actively needed contexts/adapters.                              |
 
 ## Documentation change procedure
 
@@ -86,24 +86,36 @@ If a design choice changes, update this ADR file, the relevant architecture/cont
 ## ADR-016 — Stream Key Authority and Aggregate ID Inconsistency Prevention
 
 **Decision:** In integration event envelopes (`IntegrationEventEnvelopeV1`), `aggregateId` represents the single authoritative identity of the stream (`CustomerPurchaseStream`) and the Kafka record partition key (`customerId`). While `payload.customerId` exists in the v1 envelope JSON for consumer schema compatibility with `docs/04-contracts-and-apis.md`, having two fields creates an inconsistency risk if callers construct envelopes manually or consumers read from different sources. To prevent data divergence:
+
 1. Event creation in application code and fixtures must use single-source-of-truth factory methods (`createPurchaseCompletedEnvelope`, `createPurchaseInvalidatedEnvelope`) taking `customerId` once and synchronizing both fields by construction.
 2. Fixture override merges must never allow shallow spread operations to overwrite `aggregateId` or `payload.customerId` independently.
 3. Kafka partition key routing must strictly extract `envelope.aggregateId` via `getEventPartitionKey(envelope)`.
 4. Runtime deserialization must reject any envelope where `aggregateId !== payload.customerId`.
-**Consequence:** Eliminates dual-source-of-truth drift, partition-key routing mismatches, and brittle manual object construction. **Status:** accepted.
+   **Consequence:** Eliminates dual-source-of-truth drift, partition-key routing mismatches, and brittle manual object construction. **Status:** accepted.
 
 ## ADR-017 — Debezium CDC as sole transactional outbox publisher
 
 **Decision:** Replace the polling outbox daemon (`apps/outbox-publisher`) entirely with Debezium Connect using PostgreSQL WAL logical replication (`pgoutput`) and the Outbox Event Router SMT.
+
 1. **Zero Polling & Append-Only Outbox:** Outbox events are written atomically with purchase transactions in PostgreSQL. Debezium streams committed WAL changes directly without database polling or status-update write-amplification on outbox rows.
 2. **Dedicated Docker Database Topology:** The entire lab operates against Docker PostgreSQL on host port 5433 (mapping to 5432 internally), completely isolating the lab from native Windows PostgreSQL installations and ensuring reproducible schema and WAL replication slot configuration.
 3. **Stream Key Authority:** The Debezium Outbox Event Router extracts `aggregate_id` (`customerId`) as the Kafka partition key, preserving partition-local per-customer ordering.
 4. **Timestamp Semantics:** PostgreSQL `created_at` timestamp is `timestamptz`. Because the SMT expects `INT64` for timestamp mapping, Kafka record metadata timestamp defaults to Debezium capture time, while the domain event's authoritative `occurredAt` is preserved immutably inside the envelope payload.
 5. **Recovery & Verifiability:** Verified via `pnpm cdc:verify` (transactional commit, rollback exclusion, single-partition ordering) and `pnpm cdc:recovery` (connector pause/resume with WAL buffering and zero event loss).
-**Consequence:** Polling loops and manual drain utilities are removed. Outbox publishing is decoupled from application runtime processes. **Status:** accepted.
+   **Consequence:** Polling loops and manual drain utilities are removed. Outbox publishing is decoupled from application runtime processes. **Status:** accepted.
 
+## ADR-018 — Prometheus and Grafana Observability Architecture and Measurement Contract
 
-
+**Decision:** Implement reproducible, production-grade telemetry for all applications and broker layers using Prometheus time-series storage and provisioned Grafana dashboards.
+1. **Isolated Process Registries:** `@lab/observability` provides an injectable `MetricsModule` and `MetricsService` encapsulating process-local `prom-client.Registry` instances to eliminate test cross-talk.
+2. **Strict Bounded Cardinality:** All Prometheus metrics use finite, enumerated label dimensions (`service`, `transport`, `mode`, `consumer_role`, `event_type`, `status`, `route`). High-cardinality values (`eventId`, `customerId`, `purchaseId`, raw URLs, error tracebacks, or trial run IDs) are strictly forbidden in metric labels.
+3. **Canonical Measurement Boundaries:**
+   - Source commits (`lab_source_events_committed_total`): incremented strictly upon successful local database transaction commit (Outbox atomic write), never upon HTTP handler entry.
+   - Deliveries vs. Handled Commits: `lab_deliveries_total` records ingress from transport; `lab_handler_commits_total` records new domain projection state (excluding duplicates); `lab_duplicate_deliveries_total` records idempotency deduplication hits.
+   - Lag & Native Positions: Native Kafka group committed positions and lags are inspected as real offset differences without simulating fake global sequences.
+4. **Provisioned Infrastructure as Code:** Prometheus and Grafana are orchestrated via an optional `docker-compose.monitoring.yml` overlay with persistent volumes and file-provisioned datasources and dashboards (`apps-pipeline.json`, `kafka-system-diagnostics.json`).
+5. **No Polling Publishers:** Prometheus scraping and telemetry export operate strictly out-of-band and do not alter CDC or application outbox mechanics.
+**Consequence:** Full end-to-end operational visibility, real p50/p95/p99 latency distributions, and reproducible benchmark observability without compromising domain purity or broker safety. **Status:** accepted.
 
 ## Kafbat UI — 2026-11-01
 

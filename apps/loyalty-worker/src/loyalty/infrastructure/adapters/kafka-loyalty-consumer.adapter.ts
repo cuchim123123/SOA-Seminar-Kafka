@@ -1,7 +1,8 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { deserializeEnvelope } from '@lab/contracts';
-import { processKafkaRecord, StructuredLogger } from '@lab/observability';
-import { Consumer, Kafka, KafkaMessage } from 'kafkajs';
+import { MetricsService, processKafkaRecord, StructuredLogger } from '@lab/observability';
+import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { AppConfigService } from '../../../config/app-config.service';
 import { ApplyPurchaseEventCommand } from '../../application/commands/apply-purchase-event/apply-purchase-event.command';
 import { ApplyPurchaseEventHandler } from '../../application/commands/apply-purchase-event/apply-purchase-event.handler';
@@ -20,8 +21,8 @@ export class KafkaLoyaltyConsumerAdapter
   implements OnModuleInit, OnModuleDestroy, LoyaltyConsumerControlPort
 {
   private readonly logger: StructuredLogger;
-  private readonly kafka: Kafka;
-  private readonly consumer: Consumer;
+  private readonly kafka: KafkaJS.Kafka;
+  private readonly consumer: any;
   private readonly topic: string;
   private readonly replicaFleet: LoyaltyConsumerReplicaFleet;
   private isPaused = false;
@@ -35,18 +36,28 @@ export class KafkaLoyaltyConsumerAdapter
     private readonly handler: ApplyPurchaseEventHandler,
     @Inject(ApplyPurchaseInvalidationHandler)
     private readonly invalidationHandler: ApplyPurchaseInvalidationHandler,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {
     this.logger = new StructuredLogger(KafkaLoyaltyConsumerAdapter.name, {
       serviceName: 'loyalty-worker',
       format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
     });
     this.topic = this.config.purchaseTopic;
-    this.kafka = new Kafka({
-      clientId: this.config.kafkaClientId,
-      brokers: this.config.kafkaBrokers,
+    this.kafka = new KafkaJS.Kafka({
+      'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      kafkaJS: {
+        clientId: this.config.kafkaClientId,
+        brokers: this.config.kafkaBrokers,
+      },
     });
     this.consumer = this.kafka.consumer({
-      groupId: this.config.kafkaGroupId,
+      'enable.auto.commit': false,
+      kafkaJS: {
+        groupId: this.config.kafkaGroupId,
+        fromBeginning: this.config.kafkaFromBeginning,
+        autoCommit: false,
+      },
     });
     this.replicaFleet = new LoyaltyConsumerReplicaFleet(
       this.config,
@@ -57,10 +68,10 @@ export class KafkaLoyaltyConsumerAdapter
   }
 
   private async handleMessage(
-    consumer: Consumer,
+    consumer: any,
     topic: string,
     partition: number,
-    message: KafkaMessage,
+    message: any,
   ): Promise<void> {
     if (this.processingDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.processingDelayMs));
@@ -76,6 +87,9 @@ export class KafkaLoyaltyConsumerAdapter
       rawValue: message.value?.toString(),
       logger: this.logger,
       consumerGroupId: this.config.kafkaGroupId,
+      metricsService: this.metricsService,
+      consumerRole: 'loyalty',
+      transport: 'kafka',
       deserializer: deserializeEnvelope,
       handler: async (envelope) => {
         processedEventId = envelope.eventId;
@@ -143,13 +157,19 @@ export class KafkaLoyaltyConsumerAdapter
 
     // Explicit manual commit discipline: Consumed offset N is committed as N + 1
     const nextOffset = (BigInt(message.offset) + 1n).toString();
-    await consumer.commitOffsets([
-      {
-        topic,
-        partition,
-        offset: nextOffset,
-      },
-    ]);
+    try {
+      await consumer.commitOffsets([
+        {
+          topic,
+          partition,
+          offset: nextOffset,
+        },
+      ]);
+      this.metricsService?.recordAck('loyalty', 'kafka', 'success');
+    } catch (commitErr: unknown) {
+      this.metricsService?.recordAck('loyalty', 'kafka', 'failure');
+      throw commitErr;
+    }
   }
 
   async onModuleInit(): Promise<void> {
@@ -169,9 +189,8 @@ export class KafkaLoyaltyConsumerAdapter
     );
 
     await this.consumer.connect();
-    await this.consumer.subscribe({
+    await (this.consumer as any).subscribe({
       topic: this.topic,
-      fromBeginning: this.config.kafkaFromBeginning,
     });
 
     this.logger.info('Loyalty consumer subscribed and started message loop', {
@@ -179,18 +198,19 @@ export class KafkaLoyaltyConsumerAdapter
       groupId: this.config.kafkaGroupId,
     });
 
-    await this.consumer.run({
-      autoCommit: false,
-      eachMessage: async ({ topic, partition, message }) => {
+    await (this.consumer as any).run({
+      eachMessage: async ({ topic, partition, message }: any) => {
         await this.handleMessage(this.consumer, topic, partition, message);
       },
     });
+    this.metricsService?.setConsumerState('loyalty', 'polling');
   }
 
   async pause(): Promise<void> {
     this.consumer.pause([{ topic: this.topic }]);
     this.replicaFleet.pauseReplicas();
     this.isPaused = true;
+    this.metricsService?.setConsumerState('loyalty', 'paused');
     this.logger.warn('Loyalty Kafka consumer PAUSED by administrative request', {
       topic: this.topic,
       groupId: this.config.kafkaGroupId,
@@ -201,6 +221,7 @@ export class KafkaLoyaltyConsumerAdapter
     this.consumer.resume([{ topic: this.topic }]);
     this.replicaFleet.resumeReplicas();
     this.isPaused = false;
+    this.metricsService?.setConsumerState('loyalty', 'polling');
     this.logger.info('Loyalty Kafka consumer RESUMED by administrative request', {
       topic: this.topic,
       groupId: this.config.kafkaGroupId,
@@ -263,8 +284,8 @@ export class KafkaLoyaltyConsumerAdapter
   async getStatus(): Promise<LoyaltyConsumerControlStatus> {
     const pausedPartitions = this.consumer
       .paused()
-      .filter((p) => p.topic === this.topic)
-      .flatMap((p) => p.partitions);
+      .filter((p: any) => p.topic === this.topic)
+      .flatMap((p: any) => p.partitions ?? []);
 
     const instances: LoyaltyConsumerInstanceInfo[] = [
       {
@@ -295,6 +316,7 @@ export class KafkaLoyaltyConsumerAdapter
     });
     await this.replicaFleet.disconnectAll();
     await this.consumer.disconnect().catch(() => {});
+    this.metricsService?.setConsumerState('loyalty', 'stopped');
     this.logger.info('All Loyalty Kafka consumers disconnected');
   }
 }

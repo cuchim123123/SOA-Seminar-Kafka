@@ -357,4 +357,68 @@ describe('CreatePurchaseHandler with Unit of Work and Outbox', () => {
     expect(result.eventId).toBe('evt_winner_123');
     expect(result.amountCents).toBe(7500);
   });
+
+  it('records lab_source_events_committed_total only when transaction commits', async () => {
+    const mockMetricsService = {
+      recordSourceEventCommitted: vi.fn(),
+    } as unknown as import('@lab/observability').MetricsService;
+
+    const mockPurchaseRepo: PurchaseRepositoryPort = {
+      save: vi.fn(async () => {}),
+      findById: vi.fn(),
+    };
+    const mockOutboxRepo: OutboxRepositoryPort = {
+      save: vi.fn(async () => {}),
+      findByAggregateAndSequence: vi.fn(async () => null),
+    };
+    const mockSequenceGenerator: SequenceGeneratorPort = {
+      nextSequence: vi.fn(async () => 1),
+    };
+    const mockIdempotencyRepo = {
+      find: vi.fn(async () => null),
+      save: vi.fn(async () => {}),
+    };
+
+    let shouldFail = false;
+    const mockUnitOfWork: UnitOfWorkPort = {
+      execute: async <T>(work: (ctx: UnitOfWorkContext) => Promise<T>): Promise<T> => {
+        if (shouldFail) {
+          throw new Error('Database transaction aborted');
+        }
+        return work({
+          purchaseRepository: mockPurchaseRepo,
+          outboxRepository: mockOutboxRepo,
+          sequenceGenerator: mockSequenceGenerator,
+          idempotencyRepository: mockIdempotencyRepo,
+        });
+      },
+    };
+
+    const handler = new CreatePurchaseHandler(mockUnitOfWork, mockMetricsService);
+
+    // 1. Successful commit records metric
+    await handler.execute(
+      new CreatePurchaseCommand({
+        customerId: 'CUST_M001',
+        amountCents: 5000,
+      }),
+    );
+    expect(mockMetricsService.recordSourceEventCommitted).toHaveBeenCalledTimes(1);
+    expect(mockMetricsService.recordSourceEventCommitted).toHaveBeenCalledWith(
+      'PurchaseCompleted',
+      'outbox_cdc',
+    );
+
+    // 2. Failed transaction does NOT record metric
+    shouldFail = true;
+    await expect(
+      handler.execute(
+        new CreatePurchaseCommand({
+          customerId: 'CUST_M001',
+          amountCents: 5000,
+        }),
+      ),
+    ).rejects.toThrow('Database transaction aborted');
+    expect(mockMetricsService.recordSourceEventCommitted).toHaveBeenCalledTimes(1);
+  });
 });

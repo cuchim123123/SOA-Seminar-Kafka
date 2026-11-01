@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Test, TestingModule } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
+import { MetricsService } from '@lab/observability';
 import { AppModule } from '../src/app.module';
 import { HealthController } from '../src/health/health.controller';
 import { AppConfigService } from '../src/config/app-config.service';
@@ -34,6 +35,12 @@ describe('P0-01 Smoke Tests', () => {
       const ready = controller.getReady();
       expect(ready.status).toBe('ok');
       expect(new Date(ready.timestamp).getTime()).not.toBeNaN();
+
+      const metricsService = moduleRef.get(MetricsService);
+      expect(metricsService).toBeDefined();
+      const metricsOutput = await metricsService.getMetrics();
+      expect(metricsOutput).toContain('lab_source_events_committed_total');
+      expect(metricsOutput).toContain('process_cpu_');
     });
   });
 

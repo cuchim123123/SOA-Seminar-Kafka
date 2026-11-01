@@ -104,3 +104,20 @@ until their tickets are selected. Report commands actually run.
 ## Kafbat UI migration — 2026-11-01
 
 - [x] Replace the administration UI in both Compose profiles with pinned Kafbat UI v1.5.0; update environment example, launcher messages, frontend labels, and operator documentation. Runtime cluster validation requires an active Kafka profile.
+
+## Milestone: Observability Infrastructure (Prometheus & Grafana) — 2026-11-01
+
+- [x] **OBS-01 Freeze telemetry contract and inventory**: ADR-018 written and approved. Metric dictionary, explicit measurement boundaries, and finite cardinality budget established.
+- [x] **OBS-02 Application metrics MVP**: Process-local registry in `@lab/observability`, `MetricsModule`, `HttpMetricsInterceptor`, `/metrics` endpoint across `producer-api`, `loyalty-worker`, `analytics-worker`, and `replay-worker`. Transaction commit and consumer delivery/ack boundaries instrumented without polluting domain models.
+- [x] **OBS-03 Provision Prometheus and Grafana**: `docker-compose.monitoring.yml`, template config renderer (`scripts/render-monitoring-config.mjs`), stable provisioned datasource (`prometheus`), provisioned canonical dashboards (`apps-pipeline.json`, `kafka-system-diagnostics.json`), and monitoring verification CLI (`scripts/verify-monitoring.mjs`).
+
+## Milestone: Standalone Ingress Benchmark (Kafka vs Redis Streams vs RabbitMQ Streams) — 2026-11-01
+
+- [x] **ING-01 Capability Proof & Pinned Adapters**: KafkaJS (`acks=-1`), `ioredis` (AOF verified, offline queue disabled), `rabbitmq-stream-js-client` (native Stream protocol 5552, wire `PublishConfirm` callback mapping).
+- [x] **ING-02 Isolated Runner & Workload Generator**: `@lab/ingress-benchmark` Node.js CLI package with bounded concurrency scheduler, deterministic byte-reproducible Mulberry32 payload generator with SHA-256 hash, exact decimal MB/s arithmetic, and monotonic latency histograms.
+- [x] **ING-03 Isolated Kafka Baseline**: Docker Compose single-node KRaft broker on port 9094, partition 0, acks=-1. Zero business topic pollution.
+- [x] **ING-04 Redis Streams Publisher**: Single-node Redis 7 on port 6380, AOF enabled (`appendfsync no`, `noeviction`), per-record server acknowledged `XADD`.
+- [x] **ING-05 RabbitMQ Native Streams Publisher**: RabbitMQ 3.13 Stream on port 5552, server PublishConfirm correlation mapping, clean error and disconnect handling.
+- [x] **ING-06 Shared Monitoring Integration**: Prometheus target (`job_name: ingress-benchmark` on port 3006) and Grafana dashboard (`ingress-benchmark.json`).
+- [x] **ING-07 Matrix Execution & Reasonableness Analysis**: 3 repetitions per cell across concurrencies 1, 16, 64 with 1 KiB payload. Complete Little's Law, RTT, and mechanical bottleneck analysis.
+

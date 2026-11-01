@@ -1,5 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { uuidv7 } from 'uuidv7';
+import { MetricsService } from '@lab/observability';
 import {
   InsufficientRetentionError,
   PartitionRetentionDiagnostic,
@@ -52,9 +53,12 @@ export class StartBoundedReplayHandler {
     private readonly boundaryInspector: TopicBoundaryInspectorPort,
     @Inject(BOUNDED_REPLAY_SCANNER_PORT)
     private readonly replayScanner: BoundedReplayScannerPort,
+    @Optional()
+    private readonly metricsService?: MetricsService,
   ) {}
 
   async execute(command: StartBoundedReplayCommand): Promise<StartBoundedReplayResult> {
+    const startTime = performance.now();
     const runId = command.runId || uuidv7();
     const groupId = `replay-${runId}`;
     const topic = command.topic || 'purchase.events';
@@ -187,6 +191,9 @@ export class StartBoundedReplayHandler {
       run.complete();
       await this.runRepository.save(run);
 
+      const durationSeconds = (performance.now() - startTime) / 1000;
+      this.metricsService?.recordReplayRun('completed', durationSeconds);
+
       return {
         id: run.id,
         groupId: run.groupId,
@@ -201,6 +208,8 @@ export class StartBoundedReplayHandler {
         completedAt: run.completedAt,
       };
     } catch (error) {
+      const durationSeconds = (performance.now() - startTime) / 1000;
+      this.metricsService?.recordReplayRun('failed', durationSeconds);
       const errorMessage = error instanceof Error ? error.message : String(error);
       run.fail(errorMessage);
       await this.runRepository.save(run);

@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Inject, Injectable } from '@nestjs/common';
 import { StructuredLogger } from '@lab/observability';
-import { Consumer, Kafka } from 'kafkajs';
+import { KafkaJS } from '@confluentinc/kafka-javascript';
 import { deserializeEnvelope } from '@lab/contracts';
 import { AppConfigService } from '../../../config/app-config.service';
 import {
@@ -12,24 +13,30 @@ import {
 @Injectable()
 export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerPort {
   private readonly logger: StructuredLogger;
-  private readonly kafka: Kafka;
+  private readonly kafka: KafkaJS.Kafka;
 
   constructor(@Inject(AppConfigService) private readonly config: AppConfigService) {
     this.logger = new StructuredLogger(KafkaJsBoundedReplayScannerAdapter.name, {
       serviceName: 'replay-worker',
       format: this.config.nodeEnv === 'production' ? 'json' : 'pretty',
     });
-    this.kafka = new Kafka({
-      clientId: `${this.config.kafkaClientId}-bounded-scanner`,
-      brokers: this.config.kafkaBrokers,
+    this.kafka = new KafkaJS.Kafka({
+      'bootstrap.servers': this.config.kafkaBrokers.join(','),
+      kafkaJS: {
+        clientId: `${this.config.kafkaClientId}-bounded-scanner`,
+        brokers: this.config.kafkaBrokers,
+      },
     });
   }
 
   async scanBoundedTopic(options: BoundedScanOptions): Promise<BoundedScanResult> {
-    const consumer: Consumer = this.kafka.consumer({
-      groupId: options.groupId,
-      allowAutoTopicCreation: false,
-      maxWaitTimeInMs: 100,
+    const consumer: any = this.kafka.consumer({
+      'enable.auto.commit': false,
+      kafkaJS: {
+        groupId: options.groupId,
+        fromBeginning: true,
+        autoCommit: false,
+      },
     });
 
     this.logger.info('Starting bounded replay scan with on-demand group', {
@@ -62,7 +69,7 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
     }
 
     await consumer.connect();
-    await consumer.subscribe({ topic: options.topic, fromBeginning: true });
+    await consumer.subscribe({ topic: options.topic });
 
     return new Promise<BoundedScanResult>((resolve, reject) => {
       let isCompleted = false;
@@ -101,7 +108,7 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
           await consumer.disconnect().catch(() => {});
 
           if (!committed) {
-            const admin = this.kafka.admin();
+            const admin = this.kafka.admin() as any;
             await admin.connect();
             try {
               await admin.setOffsets({
@@ -172,10 +179,9 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
 
       resetIdleTimeout();
 
-      consumer
+      (consumer as any)
         .run({
-          autoCommit: false,
-          eachMessage: async ({ topic, partition, message }) => {
+          eachMessage: async ({ topic, partition, message }: any) => {
             resetIdleTimeout();
             const offset = BigInt(message.offset);
             const hw = BigInt(options.highWatermarks[partition] ?? '0');
@@ -223,7 +229,7 @@ export class KafkaJsBoundedReplayScannerAdapter implements BoundedReplayScannerP
             }
           },
         })
-        .catch((err) => {
+        .catch((err: any) => {
           if (!isCompleted) {
             isCompleted = true;
             if (idleTimeout) clearTimeout(idleTimeout);
