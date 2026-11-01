@@ -71,7 +71,16 @@
     "prepare": "husky",
     "cdc:setup": "node scripts/setup-cdc.mjs",
     "cdc:verify": "node scripts/verify-cdc.mjs",
-    "cdc:recovery": "node scripts/verify-cdc-recovery.mjs"
+    "cdc:recovery": "node scripts/verify-cdc-recovery.mjs",
+    "monitoring:render": "node scripts/render-monitoring-config.mjs",
+    "monitoring:up": "node scripts/render-monitoring-config.mjs && docker compose -f docker-compose.monitoring.yml up -d",
+    "monitoring:down": "docker compose -f docker-compose.monitoring.yml down",
+    "monitoring:verify": "node scripts/verify-monitoring.mjs",
+    "benchmark:up": "docker compose -f docker-compose.ingress-benchmark.yml up -d",
+    "benchmark:down": "docker compose -f docker-compose.ingress-benchmark.yml down",
+    "benchmark:preview": "node scripts/official-benchmark.mjs preview",
+    "benchmark:run": "node scripts/official-benchmark.mjs run",
+    "benchmark:test": "vitest run scripts/official-benchmark/config.test.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
@@ -89,9 +98,13 @@
     "typescript": "~5.7.3",
     "typescript-eslint": "^8.20.0",
     "unplugin-swc": "^1.5.1",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "zod": "3.24.1"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "@confluentinc/kafka-javascript"
+    ],
     "overrides": {
       "typescript": "~5.7.3"
     }

@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "network": "ingress-benchmark_default",
+  "payloadBytes": 1024,
+  "client": { "cpus": 2, "memoryMiB": 2048 },
+  "safety": {
+    "minFreeDiskMiB": 2048,
+    "pollSeconds": 2,
+    "timeoutSeconds": 90,
+    "cleanupOwnedData": true,
+    "additionalHostPaths": []
+  },
+  "kafka": {
+    "image": "apache/kafka:4.3.1",
+    "container": "kafka-bench",
+    "host": "kafka-bench",
+    "port": 29092,
+    "dataPath": "/var/lib/kafka/data",
+    "partitions": 1,
+    "records": 10000,
+    "warmupRecords": 1000,
+    "recordsPerSecond": 1000,
+    "batchBytes": 262144,
+    "lingerMs": 0,
+    "bufferBytes": 67108864
+  },
+  "rabbitmq": {
+    "image": "pivotalrabbitmq/stream-perf-test:latest",
+    "container": "rabbitmq-bench",
+    "host": "rabbitmq-bench",
+    "port": 5552,
+    "dataPath": "/var/lib/rabbitmq",
+    "username": "guest",
+    "passwordEnv": "BENCH_RABBITMQ_PASSWORD",
+    "durationSeconds": 10,
+    "producers": 1,
+    "batchRecords": 256,
+    "dynamicBatch": true,
+    "outstandingConfirms": 10000,
+    "recordsPerSecondPerProducer": 1000
+  },
+  "redis": {
+    "image": "redislabs/memtier_benchmark:latest",
+    "container": "redis-bench",
+    "host": "redis-bench",
+    "port": 6379,
+    "dataPath": "/data",
+    "durationSeconds": 10,
+    "threads": 1,
+    "clientsPerThread": 1,
+    "pipeline": 16,
+    "requestsPerSecondPerConnection": 1000
+  }
+}

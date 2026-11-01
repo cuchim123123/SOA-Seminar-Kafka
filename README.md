@@ -213,6 +213,73 @@ pnpm cluster:down
 
 ---
 
+## 2.1 Ingress Benchmark & Monitoring Quick Start
+
+### 1. Isolated Broker Ingress Benchmark Infrastructure
+Start the dedicated, isolated broker containers (Kafka, Redis, RabbitMQ) configured with explicit volume storage and identical resource budgets (`2.0 CPUs`, `2048 MB RAM`):
+
+```bash
+# 1. Start isolated benchmark broker containers (Kafka, Redis, RabbitMQ)
+pnpm benchmark:up
+
+# 2. Stop benchmark broker containers when done
+pnpm benchmark:down
+```
+
+### 2. Independent Official Benchmark Tools (GitHub / Docker Hub)
+For an editable centralized configuration, use `config/official-benchmark.json`:
+
+```bash
+pnpm benchmark:preview all
+pnpm benchmark:run kafka
+pnpm benchmark:run redis
+# Set BENCH_RABBITMQ_PASSWORD in .env before RabbitMQ or all:
+pnpm benchmark:run all
+```
+
+See [the launcher guide](docs/official-benchmarks.md) for settings, results, disk checks and automatic owned-data cleanup. Defaults are small smoke workloads. The launcher preserves raw official output under `benchmark/official/`; it is separate from the web Purchase Benchmark Studio. The manual commands below remain available.
+
+All benchmark scenarios are executed using established, high-performance official benchmark tools running in isolated containers under identical CPU/memory constraints:
+
+```bash
+# Kafka Official Producer Perf Test (Single stream / 1 partition):
+docker run --rm --network ingress-benchmark_default --cpus="2.0" --memory="2048m" \
+  apache/kafka:4.3.1 /opt/kafka/bin/kafka-producer-perf-test.sh \
+  --topic perf-p1 --num-records 3500000 --record-size 1024 --throughput -1 \
+  --command-property acks=all batch.size=262144 buffer.memory=67108864 linger.ms=0 \
+  --warmup-records 200000 --bootstrap-server kafka-bench:29092
+
+# RabbitMQ Official Stream Perf Test:
+docker run --rm --network ingress-benchmark_default --cpus="2.0" --memory="2048m" \
+  pivotalrabbitmq/stream-perf-test:latest \
+  -u rabbitmq-stream://guest:guest@rabbitmq-bench:5552 \
+  -s 1024 -x 16 -y 0 -z 30 --streams scen_a_stream -bs 256
+
+# Redis Official Memtier Benchmark (Pipelined XADD):
+docker run --rm --network ingress-benchmark_default --cpus="2.0" --memory="2048m" \
+  redislabs/memtier_benchmark:latest \
+  -s redis-bench -p 6379 --protocol=redis -t 2 -c 8 --pipeline=16 --test-time=30 \
+  --command="XADD scen_a_key * payload __data__" -d 1024
+```
+
+### 3. Broker Ingress Monitoring Stack (Prometheus & Grafana)
+A dedicated, lightweight monitoring stack provisions Prometheus (with Kafka Exporter, Redis Exporter, and native RabbitMQ Prometheus plugin) and Grafana.
+
+```bash
+# 1. Start Prometheus, Grafana, and broker exporters
+pnpm monitoring:up
+
+# 2. Access Dashboards:
+# - Grafana: http://localhost:3005 (Anonymous Viewer enabled, or admin/admin)
+#   Dashboard: "Broker Ingress Benchmark" (real-time 2s refresh of offset advance & confirm rate)
+# - Prometheus: http://localhost:9090 (targets: http://localhost:9090/targets)
+
+# 3. Stop monitoring stack
+pnpm monitoring:down
+```
+
+---
+
 ## 3. Project Structure
 
 ```text
@@ -277,26 +344,31 @@ pnpm cluster:down
 ## 5. Milestone Progress
 
 ### Phase 0 — Foundation
+
 - [x] **P0-01: Workspace Setup** — Monorepo foundation, strict TypeScript, ESLint 9 flat config, Vitest multi-project, NestJS shell with injectable configuration, smoke unit tests.
 - [x] **P0-02: Local Kafka Environment** — Single-node KRaft broker RF1, Kafbat UI, persistent named volume, health checks, topic lifecycle verification script.
 - [x] **P0-03: Contracts Foundation** — `IntegrationEventEnvelopeV1` Zod validation, deterministic ID/correlation fixtures, typed serializer/deserializer.
 
 ### Phase 1 — Pipeline MVP
+
 - [x] **P1-01: HTTP Producer** — `POST /api/v1/demo/purchases` generates purchase event, sends via KafkaJS with `acks=-1`, awaits ack, returns 202 Accepted with Kafka metadata. Real Kafka record confirmed with `key=customerId`.
 - [x] **P1-02: Loyalty Consumer** — Independent worker subscribing to `purchase.events` in group `loyalty-v1`, calculating loyalty points fixture ($120/$200/$100 -> 82 points). Live broker integration test verified.
 - [x] **P1-03: Phase 1 Smoke Script** — Reproducible end-to-end startup, purchase production, consumer verification, and broker inspection (`pnpm demo:smoke`).
 
 ### Phase 2 — Partitioning and Ordering
+
 - [x] **P2-01: Six-Partition Reset & Migration** — Explicit controlled reset recreating `purchase.events` with 6 partitions (`pnpm demo:reset -- --confirm`). Refuses unconfirmed reset.
 - [x] **P2-02: Ordered Workload Fixture** — Multi-customer load generator with per-customer sequential ordering (U001 P001/P002/P003 -> 82 points).
 - [x] **P2-03: Partition Inspector** — Live inspection of key distribution across partitions and broker offsets.
 
 ### Phase 3 — Consumer Groups and Offsets
+
 - [x] **P3-01: Independent Analytics Group** — Separate worker process in consumer group `analytics-v1`, independently calculating sales aggregations (revenue, order counts, unique customers) from the same `purchase.events` stream (`pnpm demo:groups`).
 - [x] **P3-02: Manual Commit + Lag Reader** — Explicit manual offset commit discipline (`autoCommit: false`, `N + 1`) and live Kafka Admin lag calculation `(logEndOffset - committedOffset)` per partition with `UNCOMMITTED` handling (`pnpm demo:lag`).
 - [x] **P3-03: Pause/Resume Scenario** — CLI and HTTP allowlisted control to pause Analytics, observe lag accumulation while Loyalty proceeds, and catch up back to 0 lag upon resume (`pnpm demo:pause-resume`).
 
 ### Phase 4 — Reliable DB/Kafka Integration & Outbox
+
 - [x] **P4-01: Postgres Migrations & Concurrency** — Customer sequence allocation with row locks and atomic transactions (`pnpm demo:concurrency`).
 - [x] **P4-02: CQRS Purchase Flow & Outbox Persistence** — Command handler persisting purchase + outbox atomically, query handler for read model (`pnpm demo:outbox`).
 - [x] **P4-03: Debezium CDC Outbox Streaming** — Zero-polling PostgreSQL WAL logical replication via Debezium Connect and Outbox Event Router (`pnpm cdc:verify`, `pnpm cdc:recovery`, ADR-017).
@@ -305,20 +377,33 @@ pnpm cluster:down
 - [x] **P4-06: Fault Injection Integration Suite** — Post-DB-commit pre-offset crash injection and consumer recovery (`pnpm demo:faults`).
 
 ### Phase 5 — Replay & Stream Correction
+
 - [x] **P5-01: Purchase Invalidation Event** — Monotonic sequence allocation for invalidation events with single-partition ordering (`pnpm demo:invalidation`).
 - [x] **P5-02: Replay Group & Boundary Isolation** — On-demand unique consumer group scanning from offset 0 to fixed high-watermark boundaries without affecting live groups (`pnpm demo:replay`).
 - [x] **P5-03: Two-Pass Stream Correction** — Two-pass state reconstruction (discovering invalidations then recomputing historical points 82 -> 40) in isolated staging tables (`pnpm demo:correction`).
 - [x] **P5-04: Retention Failure Guardrails** — Explicit failure detection when earliest retained offsets exceed required historical sequence.
 
 ### Phase 6 — Scaling & Dynamic Consumer Rebalancing
+
 - [x] **P6-01: Dynamic Fleet Scaling** — Live scale up / scale down of consumer group instances with partition rebalancing (`RoundRobinAssigner`).
 - [x] **P6-02: Worker Kill & Failover** — Graceful disconnect and failover reassigning partitions with zero duplicate points.
 
 ### Phase 8 — Observability Platform & Interactive Topology Studio
+
 - [x] **P8-01: Interactive Topology Studio** — Real-time interactive canvas with live broker, partition, producer, consumer group, and database nodes (`apps/demo-ui`).
 - [x] **P8-02: Benchmark Studio & Audit Evidence** — End-to-end telemetry measurement, percentile latency tracking, and Markdown/JSON audit export.
 - [x] **P8-04: Live Workload Simulator** — Single, burst, and continuous traffic generator with partition routing and latency controls.
 
+### Standalone Ingress Benchmark: Kafka vs Redis Streams vs RabbitMQ Streams (2026-11-01)
+
+- [x] **ING-01 to ING-07: Isolated Stream Benchmark**: Dedicated CLI `@lab/ingress-benchmark` comparing Apache Kafka (KRaft, `acks=-1`), Redis Streams (AOF `appendfsync no`, `noeviction`), and RabbitMQ Streams (native stream protocol 5552, server `PublishConfirm` tracking).
+  - **Single-Node Async Profile**: Like-for-like asynchronous persistence baseline.
+  - **Commands**:
+    - `pnpm benchmark:up`: Starts isolated benchmark broker containers.
+    - `pnpm benchmark:matrix`: Runs the complete automated matrix (3 repetitions across concurrencies 1, 16, 64) and prints the median comparison table.
+    - `pnpm benchmark:ingress -- --broker <kafka|redis-streams|rabbitmq-streams>`: Runs an individual trial with customizable payload, concurrency, and count.
+    - `pnpm benchmark:down`: Stops isolated benchmark containers.
+  - **Shared Monitoring**: Auto-scraped by Prometheus on port 3006; Grafana dashboard provisioned at `ingress-benchmark.json`.
 
 ### Kafbat UI migration (2026-11-01)
 

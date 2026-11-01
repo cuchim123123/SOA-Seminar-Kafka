@@ -33,3 +33,4 @@ pnpm-debug.log*
 
 # Benchmark run results (large; committed via separate archive if needed)
 infra/benchmark/results/*/timeseries.ndjson
+benchmark/
