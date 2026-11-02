@@ -4,10 +4,10 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Overall status
 
-- Current phase: Phase1b backend push and browser primitives complete; next is Phase2 shell integration.
+- Current phase: Phase2 shell and read-only overview implemented; browser/live-service acceptance remains in progress.
 - Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
-- In progress: preparing shell integration. All service streams, transactional projection/replay notifications and browser subscription/reconciliation primitives are implemented and tested. Hooks are not mounted in a page yet. Simulation build repair/commit scope question is pending.
-- Remaining: Phase1 APIs/client; Phase1b transactional notifications/SSE and one verified end-to-end flow; Phase2 sidebar; Phase3 business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 browser/runtime validation.
+- In progress: persistent sidebar and real overview mount the resource hooks. Browser confirms honest unavailable/stale states against old running backends; fresh-service push acceptance is still required. Simulation repair was approved and committed separately as c55ea47.
+- Remaining: browser push flow through Vite against fresh service builds; Phase2 responsive/navigation acceptance; Phase3 purchase mutations/history pagination/receipts and business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 presenter validation.
 - Blockers: none currently. User approved repairing/committing the pre-existing simulation changes separately; frontend build repaired (C5). Global review/confirmation UI is still required before exposing promotion.
 
 ## Decisions and boundaries
@@ -29,10 +29,10 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. Simulation repair/commit was approved and completed (C5). Implement Phase2 persistent sidebar/hash routes, preserving Simulation/Benchmark/Guide and mounting the real-workspace resource hooks. Do not repeat completed backend work.
-2. Mount the shared subscription pool via `useLiveResource`; verify real EventSource through Vite and dependency outages in an actual browser. Backend/direct HTTP tests do not certify this yet. Implement business pages sequentially afterward.
-3. Cutover locking was approved and implemented; do not rework it. Retain global review/explicit confirmation requirements when building recovery UI.
-4. Before frontend shell integration, reconcile the pre-existing simulation build failures without reverting the user's ongoing changes. `pnpm typecheck` does not run the same referenced app configuration as `pnpm --filter @lab/demo-ui build`; run both.
+1. C5 is committed as `c55ea47`. C6 implements sidebar/routes/read-only overview. Inspect `App.tsx`, `components/WorkspaceSidebar.tsx`, `real/RealApplication.tsx`, `real/state/routes.ts` and `real/workspace.css` before continuing.
+2. Running backend processes predate new endpoints: browser at `http://localhost:5173/#real/overview` returned `Cannot GET /api/v1/purchases?limit=25`; Analytics existing summary works, streams show disconnected. Build/restart verified workspace-owned services without resetting data, then verify a real EventSource invalidation updates the page through Vite. Do not claim push integration complete based on backend tests alone.
+3. Verify desktop collapse, mobile drawer/focus and legacy Simulation/Benchmark/Guide navigation. Only overview is a supported real route currently. Then implement the next approved business page, including mutations and durable receipts, sequentially.
+4. Cutover locking is approved and tested; retain all-customer review and explicit confirmation. Do not rework eligibility rules. Run frontend production build in addition to workspace typecheck.
 
 Resume protocol: read plan and this document, inspect `git status`/recent commits, reconcile code with these statements, continue first incomplete milestone. Do not mark integration complete based only on mocks.
 
@@ -91,3 +91,14 @@ No commits pushed. Unrelated simulation/benchmark edits remain unstaged. Existin
 - Added required broker icons to blueprint data; imported the missing broker type and explicitly typed palette initial data. Fixed palette callback dependencies so broker-ID allocation uses the current node list.
 - Frontend production build now passes. Format/lint/workspace typecheck and244 unit tests passed. Build emits non-fatal bundle-size and React Flow module-directive warnings. No browser behavior certification claimed yet.
 - This resolves the build blocker for Phase2. Simulation changes belong in their own commit, not the Real Application shell commit.
+
+### C6 — sidebar and read-only overview checkpoint
+
+- Persistent sidebar preserves legacy hash entry points and customer/purchase/run selection context. Includes desktop collapse and mobile drawer/focus handling; explicit accessible link names. Only implemented real route is `#real/overview`.
+- Overview reads actual purchase history, selected-customer Loyalty state and global Analytics via existing APIs and shared push hooks. Loading, missing account, service errors, disconnected/stale snapshots and manual refresh are explicit. Source status never asserts downstream completion; Analytics totals are labelled gross.
+- Existing periodic legacy telemetry runs only on the existing benchmark page. Removed unsupported partition-count/single-node claims from shared footer.
+- Production build passed (existing non-fatal bundle-size and React Flow directive warnings). Browser confirmed existing Analytics totals and honest unavailable history/disconnected streams against old running services. No service restarted or business mutation performed during this check.
+- Added route tests for legacy/fallback behavior and encoded context round-trips. Final quality gates recorded below after execution.
+- Incomplete: fresh-backend browser push verification, responsive acceptance, purchase actions/detail receipts, dedicated business/controls/recovery pages. This is a resumable checkpoint, not completion of the approved plan.
+
+- C6 final gates: format/lint/typecheck passed; 59 test files / 246 unit tests passed; kafka:verify passed, including owned test-topic lifecycle and Kafbat health. Frontend production build passed before the final label/footer-only adjustments. Full application UI remains incomplete.
