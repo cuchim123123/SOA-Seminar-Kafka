@@ -1,3 +1,5 @@
+import { AppConfigService as LoyaltyPushConfig } from '../../src/config/app-config.service';
+import { validateEnv as validateLoyaltyPushEnv } from '../../src/config/env.validation';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { validateEnv } from '../../src/config/env.validation';
@@ -22,7 +24,10 @@ describe('Loyalty Durable Processing Integration Test (P4-04)', () => {
     prisma = new PrismaService(config);
     await prisma.onModuleInit();
 
-    const uow = new PostgresLoyaltyUnitOfWorkAdapter(prisma);
+    const uow = new PostgresLoyaltyUnitOfWorkAdapter(
+      prisma,
+      new LoyaltyPushConfig(validateLoyaltyPushEnv({})),
+    );
     handler = new ApplyPurchaseEventHandler(uow);
     readDao = new PostgresLoyaltyAccountReadDaoAdapter(prisma);
   });

@@ -1,3 +1,5 @@
+import { UseInterceptors } from '@nestjs/common';
+import { ChangeFeedMutationInterceptor } from '@lab/observability';
 import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post } from '@nestjs/common';
 import {
   LOYALTY_CONSUMER_CONTROL_PORT,
@@ -5,6 +7,7 @@ import {
   LoyaltyConsumerControlStatus,
 } from '../../application/ports/consumer-control.port';
 
+@UseInterceptors(ChangeFeedMutationInterceptor)
 @Controller('api/v1/loyalty/consumer')
 export class LoyaltyConsumerControlController {
   constructor(

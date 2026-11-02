@@ -20,3 +20,4 @@ export type {
   NotificationConnection,
   EventStreamResponse,
 } from './live/postgres-change-feed';
+export { ChangeFeedMutationInterceptor } from './live/change-feed-mutation.interceptor';

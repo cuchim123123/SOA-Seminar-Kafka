@@ -412,4 +412,4 @@ Both single-broker and replicated Compose profiles use Kafbat UI (`ghcr.io/kafba
 
 ## Real Application workspace implementation
 
-The approved workspace is being implemented incrementally. Read the [persistent progress and next steps](docs/real-application-implementation-progress.md) before resuming. The read API foundation is implemented; server push and the new workspace UI remain in progress.
+The approved workspace is being implemented incrementally. Read the [persistent progress and next steps](docs/real-application-implementation-progress.md) before resuming. The read APIs, coordinated cutover locking and server-push foundation are implemented and tested; sidebar/page integration remains unfinished.

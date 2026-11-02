@@ -4,9 +4,9 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Overall status
 
-- Current phase: Phase1b server push; producer path implemented and validated; other contexts remain.
+- Current phase: Phase1b backend push and browser primitives complete; next is Phase2 shell integration.
 - Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
-- In progress: reusable PostgreSQL/SSE feed and producer transaction invalidation implemented. Focused unit/live HTTP tests and workspace typecheck pass; full gates passed (C3). Worker/replay feeds and browser subscription integration are not implemented yet.
+- In progress: preparing shell integration. All service streams, transactional projection/replay notifications and browser subscription/reconciliation primitives are implemented and tested. Hooks are not mounted in a page yet. Simulation build repair/commit scope question is pending.
 - Remaining: Phase1 APIs/client; Phase1b transactional notifications/SSE and one verified end-to-end flow; Phase2 sidebar; Phase3 business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 browser/runtime validation.
 - Blockers: existing unrelated simulation edits fail the frontend build (see C1). Cutover concurrency tests now pass; global review/confirmation UI is still required before exposing promotion.
 
@@ -29,8 +29,8 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. Begin Phase1b with one producer-owned transactional notification → SSE → authoritative history-read flow. Existing `pg`/types dependencies are already present in the services. Inspect source unit-of-work and configuration modules before changes; do not introduce polling or a new service.
-2. Test commit visibility, rollback silence, listener reconnect/resync and bounded stream behavior before adding worker/replay notifications.
+1. Resolve the pending scope question about pre-existing simulation build errors. Then implement Phase2 persistent sidebar/hash routes, preserving Simulation/Benchmark/Guide and mounting the real-workspace resource hooks. Do not repeat completed backend work.
+2. Mount the shared subscription pool via `useLiveResource`; verify real EventSource through Vite and dependency outages in an actual browser. Backend/direct HTTP tests do not certify this yet. Implement business pages sequentially afterward.
 3. Cutover locking was approved and implemented; do not rework it. Retain global review/explicit confirmation requirements when building recovery UI.
 4. Before frontend shell integration, reconcile the pre-existing simulation build failures without reverting the user's ongoing changes. `pnpm typecheck` does not run the same referenced app configuration as `pnpm --filter @lab/demo-ui build`; run both.
 
@@ -65,3 +65,22 @@ Resume protocol: read plan and this document, inspect `git status`/recent commit
 - Four transport unit tests and one live PostgreSQL→SSE→HTTP integration test pass. The live test creates exactly one random `real-ui-push-*` purchase per execution, retaining its source/outbox evidence rather than retracting CDC history. It also verifies cross-session notification, rollback silence and fresh initial invalidation on SSE reconnection. No browser UI is integrated yet.
 - Workspace typecheck and observability build pass. Full format/lint/typecheck passed; unit suite56 files/240 tests passed. Tests do not yet cover a real database-server disconnect, browser EventSource through Vite, worker/replay changes or consumer-control updates.
 - Exact next task: finish/record gates, commit C3; then reuse this feed for Loyalty/Analytics and replay (including cross-process cutover → Loyalty invalidation), implement subscription/reconciliation hooks, and verify those paths before shell/page expansion.
+
+### C4 — projection/replay push and browser primitives
+
+- Reused feed for `/api/v1/loyalty-changes`, `/api/v1/analytics-changes`, `/api/v1/replay-changes`. Each uses its own context database/channel. Environment defaults documented; no dependency added.
+- Loyalty/Analytics units-of-work emit transactional invalidation; replay run/staging writes emit with their own commit. Cutover emits to both replay and Loyalty channels in its existing transaction. Application control POST success emits a local hint; GET/error paths do not, avoiding feedback loops.
+- Browser `real/state/change-subscriptions.ts` shares one EventSource per active service; `resource-observer.ts` coalesces dirty reads, cancels obsolete reads and retains explicitly failed snapshots. `useLiveResource` wires these without timer polling and prevents old-customer snapshots from rendering after selection change. No pages mounted yet; no browser/Vite validation claimed.
+- Focused validation: both worker unit-of-work→HTTP SSE integration checks passed; cross-process replay run/staging/cutover notification test passed; four cutover concurrency tests still pass; three subscription/reconciliation tests and control-interceptor test pass. Worker notification tests use empty transactions, not live Kafka processing. Replay test affects only random owned fixtures and cleans those exact IDs.
+- Full gates: format/lint/typecheck passed;58 files/244 unit tests passed. A new replay integration fixture initially used number instead of bigint; corrected and reran both typecheck and that live test successfully. No outstanding error introduced by this checkpoint is known.
+- Next: sidebar/pages and actual browser integration. Existing simulation build errors remain; user was asked whether to repair and separately commit the pre-existing simulation edits or leave them for their owner. Do not fold those unrelated changes into a Real Application commit without that decision.
+
+## Commit checkpoints
+
+- `cc86217`: approved plan and initial progress file.
+- `92c7b61`: durable purchase history, receipts, HTTP evidence and read-only integration checks.
+- `c19a2c1`: user-approved coordinated cutover/Loyalty locking and concurrency tests.
+- `beef746`: producer PostgreSQL→SSE flow and live HTTP validation.
+- C4 commit: projection/replay push and browser reconciliation primitives (find by its descriptive commit subject in `git log`).
+
+No commits pushed. Unrelated simulation/benchmark edits remain unstaged. Existing running services were not restarted, so running app processes may still execute previous builds. Build/restart the selected services before browser acceptance testing; preserve databases and Kafka history.

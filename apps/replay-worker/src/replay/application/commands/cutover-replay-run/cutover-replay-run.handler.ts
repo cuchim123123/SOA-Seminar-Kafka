@@ -1,3 +1,4 @@
+import { AppConfigService } from '../../../../config/app-config.service';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
 import { CutoverReplayRunCommand, CutoverReplayRunResult } from './cutover-replay-run.command';
@@ -7,6 +8,7 @@ export class CutoverReplayRunHandler {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(AppConfigService) private readonly config: AppConfigService,
   ) {}
 
   async execute(command: CutoverReplayRunCommand): Promise<CutoverReplayRunResult> {
@@ -95,6 +97,9 @@ export class CutoverReplayRunHandler {
           status: 'CUTOVER_COMPLETED',
         },
       });
+
+      await tx.$executeRaw`SELECT pg_notify(${this.config.loyaltyChangesChannel}, '')`;
+      await tx.$executeRaw`SELECT pg_notify(${this.config.changeFeedOptions.channel}, '')`;
 
       return {
         runId,

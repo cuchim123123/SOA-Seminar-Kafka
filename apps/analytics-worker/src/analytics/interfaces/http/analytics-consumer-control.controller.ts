@@ -1,3 +1,5 @@
+import { UseInterceptors } from '@nestjs/common';
+import { ChangeFeedMutationInterceptor } from '@lab/observability';
 import { Body, Controller, Get, Inject, Param, ParseIntPipe, Post } from '@nestjs/common';
 import {
   PauseAnalyticsConsumerCommand,
@@ -17,6 +19,7 @@ import {
   GetConsumerControlStatusQuery,
 } from '../../application/queries/get-consumer-control-status';
 
+@UseInterceptors(ChangeFeedMutationInterceptor)
 @Controller('api/v1/analytics/consumer')
 export class AnalyticsConsumerControlController {
   constructor(

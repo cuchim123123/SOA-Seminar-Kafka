@@ -1,6 +1,6 @@
 # Real Application workspace — implementation plan
 
-Date: 2026-11-02. Status: repository analysis complete; user decisions incorporated: minimal history/receipt APIs, server-pushed updates, and explicit global cutover review. Detailed design still awaits implementation approval. **Planning only: no application code changed.**
+Date: 2026-11-02. Status: **approved for incremental implementation**, including server push. The user subsequently approved coordinated database locking and concurrency tests for cutover and live Loyalty processing. Implementation checkpoints, validation and remaining work are tracked in [the progress document](docs/real-application-implementation-progress.md). Historical approval boundaries below describe the original proposal; this explicit approval supersedes statements that implementation has not started. Global scope and business eligibility rules remain unchanged.
 
 ## 1. Scope and evidence
 

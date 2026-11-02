@@ -1,3 +1,5 @@
+import { AppConfigService as AnalyticsPushConfig } from '../../../src/config/app-config.service';
+import { validateEnv as validateAnalyticsPushEnv } from '../../../src/config/env.validation';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client-analytics';
 import { PrismaService } from '../../../src/database/prisma.service';
@@ -157,6 +159,7 @@ describe('Postgres Analytics Adapters', () => {
   describe('PostgresAnalyticsUnitOfWorkAdapter', () => {
     it('wraps execution inside $transaction', async () => {
       const mockTx = {
+        $executeRaw: vi.fn().mockResolvedValue(1),
         $queryRaw: vi.fn(),
         analyticsSummary: { upsert: vi.fn() },
       };
@@ -166,7 +169,10 @@ describe('Postgres Analytics Adapters', () => {
         }),
       } as unknown as PrismaService;
 
-      const uow = new PostgresAnalyticsUnitOfWorkAdapter(mockPrisma);
+      const uow = new PostgresAnalyticsUnitOfWorkAdapter(
+        mockPrisma,
+        new AnalyticsPushConfig(validateAnalyticsPushEnv({})),
+      );
       const res = await uow.execute(async (ctx) => {
         expect(ctx.salesSummaryRepository).toBeDefined();
         expect(ctx.idempotencyRepository).toBeDefined();

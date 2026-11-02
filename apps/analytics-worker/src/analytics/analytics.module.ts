@@ -1,3 +1,7 @@
+import { Client } from 'pg';
+import { PostgresChangeFeed } from '@lab/observability';
+import { AppConfigService } from '../config/app-config.service';
+import { AnalyticsChangesController } from './interfaces/http/analytics-changes.controller';
 import { EVENT_RECEIPT_READ_PORT } from './application/ports/event-receipt-read.port';
 import { GetEventReceiptsHandler } from './application/queries/get-event-receipts.handler';
 import { PostgresEventReceiptReadAdapter } from './infrastructure/adapters/postgres-event-receipt-read.adapter';
@@ -20,8 +24,26 @@ import { AnalyticsConsumerControlController } from './interfaces/http/analytics-
 import { AnalyticsController } from './interfaces/http/analytics.controller';
 
 @Module({
-  controllers: [EventReceiptsController, AnalyticsController, AnalyticsConsumerControlController],
+  controllers: [
+    AnalyticsChangesController,
+    EventReceiptsController,
+    AnalyticsController,
+    AnalyticsConsumerControlController,
+  ],
   providers: [
+    {
+      provide: PostgresChangeFeed,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) =>
+        new PostgresChangeFeed(
+          config.changeFeedOptions,
+          () =>
+            new Client({
+              connectionString: config.databaseUrl,
+              connectionTimeoutMillis: config.changeFeedOptions.reconnectMs,
+            }),
+        ),
+    },
     GetEventReceiptsHandler,
     { provide: EVENT_RECEIPT_READ_PORT, useClass: PostgresEventReceiptReadAdapter },
     ApplySalesEventHandler,

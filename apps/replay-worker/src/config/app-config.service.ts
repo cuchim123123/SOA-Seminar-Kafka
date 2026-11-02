@@ -39,4 +39,16 @@ export class AppConfigService implements IAppConfig {
   get databaseUrl(): string {
     return this.config.LOYALTY_DATABASE_URL || this.config.DATABASE_URL;
   }
+  get changeFeedOptions() {
+    return {
+      channel: this.config.UI_PUSH_REPLAY_CHANNEL,
+      heartbeatMs: this.config.UI_PUSH_HEARTBEAT_MS,
+      reconnectMs: this.config.UI_PUSH_RECONNECT_MS,
+      coalesceMs: this.config.UI_PUSH_COALESCE_MS,
+      maxClients: this.config.UI_PUSH_MAX_CLIENTS,
+    };
+  }
+  get loyaltyChangesChannel(): string {
+    return this.config.UI_PUSH_LOYALTY_CHANNEL;
+  }
 }

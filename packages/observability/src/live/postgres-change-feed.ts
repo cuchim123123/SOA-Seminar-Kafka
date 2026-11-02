@@ -66,10 +66,7 @@ export class PostgresChangeFeed implements OnModuleInit, OnModuleDestroy {
         this.flush
       )
         return;
-      this.flush = setTimeout(() => {
-        this.flush = undefined;
-        this.broadcast('event: resync-required\ndata: {}\n\n');
-      }, this.options.coalesceMs);
+      this.invalidate();
     });
     try {
       await connection.connect();
@@ -79,6 +76,15 @@ export class PostgresChangeFeed implements OnModuleInit, OnModuleDestroy {
     } catch {
       this.disconnected(connection);
     }
+  }
+
+  /** Application-local controls have no database row, but still invalidate reads. */
+  invalidate(): void {
+    if (!this.ready || this.stopped || this.flush) return;
+    this.flush = setTimeout(() => {
+      this.flush = undefined;
+      this.broadcast('event: resync-required\ndata: {}\n\n');
+    }, this.options.coalesceMs);
   }
 
   private disconnected(connection: NotificationConnection): void {

@@ -1,3 +1,7 @@
+import { AppConfigService as LoyaltyPushConfig } from '../../../loyalty-worker/src/config/app-config.service';
+import { validateEnv as validateLoyaltyPushEnv } from '../../../loyalty-worker/src/config/env.validation';
+import { AppConfigService as ReplayPushConfig } from '../../src/config/app-config.service';
+import { validateEnv as validateReplayPushEnv } from '../../src/config/env.validation';
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -114,7 +118,10 @@ describe('coordinated cutover and live Loyalty PostgreSQL locking', () => {
     const liveRead = gate();
     const releaseLive = gate();
     const cutoverAttempt = gate();
-    const live = new PostgresLoyaltyUnitOfWorkAdapter(prisma as unknown as LoyaltyPrismaService);
+    const live = new PostgresLoyaltyUnitOfWorkAdapter(
+      prisma as unknown as LoyaltyPrismaService,
+      new LoyaltyPushConfig(validateLoyaltyPushEnv({})),
+    );
     const liveWork = live.execute(async (ctx) => {
       const account = await ctx.loyaltyRepository.findByCustomerId(customerId);
       liveRead.release();
@@ -127,6 +134,7 @@ describe('coordinated cutover and live Loyalty PostgreSQL locking', () => {
       intercepted((key) => {
         if (key === `loyalty-account:${customerId}`) cutoverAttempt.release();
       }),
+      new ReplayPushConfig(validateReplayPushEnv({})),
     );
     const outcome = handler.execute(new CutoverReplayRunCommand(runId)).then(
       (value) => ({ value }),
@@ -162,13 +170,17 @@ describe('coordinated cutover and live Loyalty PostgreSQL locking', () => {
           cutoverRead.release();
           await releaseCutover.promise;
         }),
+        new ReplayPushConfig(validateReplayPushEnv({})),
       );
       const cutover = handler.execute(new CutoverReplayRunCommand(runId));
       await cutoverRead.promise;
       const liveDb = intercepted((key) => {
         if (key === `loyalty-account:${customerId}`) liveAttempt.release();
       });
-      const live = new PostgresLoyaltyUnitOfWorkAdapter(liveDb as unknown as LoyaltyPrismaService);
+      const live = new PostgresLoyaltyUnitOfWorkAdapter(
+        liveDb as unknown as LoyaltyPrismaService,
+        new LoyaltyPushConfig(validateLoyaltyPushEnv({})),
+      );
       const liveWork = live.execute(async (ctx) => {
         const account =
           (await ctx.loyaltyRepository.findByCustomerId(customerId)) ??
@@ -193,7 +205,10 @@ describe('coordinated cutover and live Loyalty PostgreSQL locking', () => {
 
   it('serializes concurrent promotion requests for the same run', async () => {
     const { runId } = await fixture();
-    const handler = new CutoverReplayRunHandler(prisma);
+    const handler = new CutoverReplayRunHandler(
+      prisma,
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     const results = await Promise.all([
       handler.execute(new CutoverReplayRunCommand(runId)),
       handler.execute(new CutoverReplayRunCommand(runId)),

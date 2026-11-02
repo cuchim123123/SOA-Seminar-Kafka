@@ -1,3 +1,7 @@
+import { Client } from 'pg';
+import { PostgresChangeFeed } from '@lab/observability';
+import { AppConfigService } from '../config/app-config.service';
+import { ReplayChangesController } from './interfaces/http/replay-changes.controller';
 import { Module } from '@nestjs/common';
 import { CutoverReplayRunHandler } from './application/commands/cutover-replay-run';
 import { StartBoundedReplayHandler } from './application/commands/start-bounded-replay';
@@ -15,8 +19,21 @@ import { PostgresReplayStagingRepositoryAdapter } from './infrastructure/adapter
 import { ReplayController } from './interfaces/http/replay.controller';
 
 @Module({
-  controllers: [ReplayController],
+  controllers: [ReplayChangesController, ReplayController],
   providers: [
+    {
+      provide: PostgresChangeFeed,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) =>
+        new PostgresChangeFeed(
+          config.changeFeedOptions,
+          () =>
+            new Client({
+              connectionString: config.databaseUrl,
+              connectionTimeoutMillis: config.changeFeedOptions.reconnectMs,
+            }),
+        ),
+    },
     StartBoundedReplayHandler,
     GetReplayRunHandler,
     GetReplayStagingHandler,

@@ -126,7 +126,7 @@ until their tickets are selected. Report commands actually run.
 ## Milestone: Real Application workspace — in progress
 
 - [x] REAL-01: bounded purchase history, context-owned receipt queries, HTTP error evidence and live read-only integration tests.
-- [ ] REAL-02: transaction-aware server push and verified end-to-end subscription.
+- [x] REAL-02 backend: transaction-aware server push and live HTTP integration verified; browser subscription primitives tested. Actual workspace/browser mounting remains unfinished.
 - [ ] REAL-03: sidebar, business pages, teaching controls and explicit global recovery review.
 - [ ] REAL-04: cutover concurrency decision, browser integration and presenter validation.
 

@@ -1,3 +1,5 @@
+import { AppConfigService as AnalyticsPushConfig } from '../../src/config/app-config.service';
+import { validateEnv as validateAnalyticsPushEnv } from '../../src/config/env.validation';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppConfigService } from '../../src/config/app-config.service';
 import { validateEnv } from '../../src/config/env.validation';
@@ -23,7 +25,10 @@ describe('Analytics Durable Processing Integration Test (P4-05)', () => {
     prisma = new PrismaService(config);
     await prisma.onModuleInit();
 
-    const uow = new PostgresAnalyticsUnitOfWorkAdapter(prisma);
+    const uow = new PostgresAnalyticsUnitOfWorkAdapter(
+      prisma,
+      new AnalyticsPushConfig(validateAnalyticsPushEnv({})),
+    );
     handler = new ApplySalesEventHandler(uow);
     readDao = new PostgresSalesSummaryReadDaoAdapter(prisma);
   });

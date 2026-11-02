@@ -1,3 +1,5 @@
+import { AppConfigService as LoyaltyPushConfig } from '../../../src/config/app-config.service';
+import { validateEnv as validateLoyaltyPushEnv } from '../../../src/config/env.validation';
 import { describe, expect, it, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client-loyalty';
 import { PrismaService } from '../../../src/database/prisma.service';
@@ -134,6 +136,7 @@ describe('Postgres Loyalty Adapters', () => {
   describe('PostgresLoyaltyUnitOfWorkAdapter', () => {
     it('wraps execution within $transaction', async () => {
       const mockTx = {
+        $executeRaw: vi.fn().mockResolvedValue(1),
         loyaltyAccount: { findUnique: vi.fn() },
         $queryRaw: vi.fn(),
       };
@@ -143,7 +146,10 @@ describe('Postgres Loyalty Adapters', () => {
         }),
       } as unknown as PrismaService;
 
-      const uow = new PostgresLoyaltyUnitOfWorkAdapter(mockPrisma);
+      const uow = new PostgresLoyaltyUnitOfWorkAdapter(
+        mockPrisma,
+        new LoyaltyPushConfig(validateLoyaltyPushEnv({})),
+      );
       const output = await uow.execute(async (ctx) => {
         expect(ctx.loyaltyRepository).toBeDefined();
         expect(ctx.idempotencyRepository).toBeDefined();

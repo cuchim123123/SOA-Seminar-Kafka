@@ -1,3 +1,4 @@
+import { AppConfigService } from '../../../config/app-config.service';
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { ReplayStagingRepositoryPort } from '../../application/ports/replay-staging-repository.port';
@@ -8,34 +9,38 @@ export class PostgresReplayStagingRepositoryAdapter implements ReplayStagingRepo
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(AppConfigService) private readonly config: AppConfigService,
   ) {}
 
   async upsertRecord(record: ReplayStagingRecord): Promise<void> {
-    await this.prisma.replayStagingRecord.upsert({
-      where: {
-        runId_customerId: {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.replayStagingRecord.upsert({
+        where: {
+          runId_customerId: {
+            runId: record.runId,
+            customerId: record.customerId,
+          },
+        },
+        create: {
+          id: record.id,
           runId: record.runId,
           customerId: record.customerId,
+          points: record.points,
+          tier: record.tier,
+          eligibleSpendCents: record.eligibleSpendCents,
+          scannedEventCount: record.scannedEventCount,
+          lastCustomerSequence: record.lastCustomerSequence,
+          createdAt: record.createdAt,
         },
-      },
-      create: {
-        id: record.id,
-        runId: record.runId,
-        customerId: record.customerId,
-        points: record.points,
-        tier: record.tier,
-        eligibleSpendCents: record.eligibleSpendCents,
-        scannedEventCount: record.scannedEventCount,
-        lastCustomerSequence: record.lastCustomerSequence,
-        createdAt: record.createdAt,
-      },
-      update: {
-        points: record.points,
-        tier: record.tier,
-        eligibleSpendCents: record.eligibleSpendCents,
-        scannedEventCount: record.scannedEventCount,
-        lastCustomerSequence: record.lastCustomerSequence,
-      },
+        update: {
+          points: record.points,
+          tier: record.tier,
+          eligibleSpendCents: record.eligibleSpendCents,
+          scannedEventCount: record.scannedEventCount,
+          lastCustomerSequence: record.lastCustomerSequence,
+        },
+      });
+      await tx.$executeRaw`SELECT pg_notify(${this.config.changeFeedOptions.channel}, '')`;
     });
   }
 

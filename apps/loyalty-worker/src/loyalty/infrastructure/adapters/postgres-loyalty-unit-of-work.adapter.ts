@@ -1,3 +1,4 @@
+import { AppConfigService } from '../../../config/app-config.service';
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import {
@@ -12,6 +13,7 @@ export class PostgresLoyaltyUnitOfWorkAdapter implements LoyaltyUnitOfWorkPort {
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(AppConfigService) private readonly config: AppConfigService,
   ) {}
 
   async execute<T>(work: (context: LoyaltyUnitOfWorkContext) => Promise<T>): Promise<T> {
@@ -30,7 +32,9 @@ export class PostgresLoyaltyUnitOfWorkAdapter implements LoyaltyUnitOfWorkPort {
           },
           idempotencyRepository: new PostgresConsumerIdempotencyRepositoryAdapter(tx),
         };
-        return await work(context);
+        const result = await work(context);
+        await tx.$executeRaw`SELECT pg_notify(${this.config.changeFeedOptions.channel}, '')`;
+        return result;
       },
       {
         maxWait: 5000,

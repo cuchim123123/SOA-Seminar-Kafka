@@ -1,3 +1,5 @@
+import { AppConfigService as ReplayPushConfig } from '../../../src/config/app-config.service';
+import { validateEnv as validateReplayPushEnv } from '../../../src/config/env.validation';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { CutoverReplayRunCommand } from '../../../src/replay/application/commands/cutover-replay-run/cutover-replay-run.command';
@@ -27,7 +29,10 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
+    const handler = new CutoverReplayRunHandler(
+      transactional(mockPrisma),
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     await expect(handler.execute(new CutoverReplayRunCommand('non-existent'))).rejects.toThrow(
       NotFoundException,
     );
@@ -44,7 +49,10 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
+    const handler = new CutoverReplayRunHandler(
+      transactional(mockPrisma),
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     const result = await handler.execute(new CutoverReplayRunCommand('run-1'));
 
     expect(result.status).toBe('CUTOVER_COMPLETED');
@@ -61,7 +69,10 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
+    const handler = new CutoverReplayRunHandler(
+      transactional(mockPrisma),
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     await expect(handler.execute(new CutoverReplayRunCommand('run-1'))).rejects.toThrow(
       BadRequestException,
     );
@@ -104,7 +115,10 @@ describe('CutoverReplayRunHandler', () => {
       }),
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
+    const handler = new CutoverReplayRunHandler(
+      transactional(mockPrisma),
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     await expect(handler.execute(new CutoverReplayRunCommand('run-1'))).rejects.toThrow(
       BadRequestException,
     );
@@ -150,7 +164,10 @@ describe('CutoverReplayRunHandler', () => {
       }),
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
+    const handler = new CutoverReplayRunHandler(
+      transactional(mockPrisma),
+      new ReplayPushConfig(validateReplayPushEnv({})),
+    );
     const result = await handler.execute(new CutoverReplayRunCommand('run-1'));
 
     expect(result.status).toBe('CUTOVER_COMPLETED');

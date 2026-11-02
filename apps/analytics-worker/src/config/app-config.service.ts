@@ -49,4 +49,13 @@ export class AppConfigService implements IAppConfig {
   get kafkaFromBeginning(): boolean {
     return this.config.KAFKA_FROM_BEGINNING;
   }
+  get changeFeedOptions() {
+    return {
+      channel: this.config.UI_PUSH_ANALYTICS_CHANNEL,
+      heartbeatMs: this.config.UI_PUSH_HEARTBEAT_MS,
+      reconnectMs: this.config.UI_PUSH_RECONNECT_MS,
+      coalesceMs: this.config.UI_PUSH_COALESCE_MS,
+      maxClients: this.config.UI_PUSH_MAX_CLIENTS,
+    };
+  }
 }

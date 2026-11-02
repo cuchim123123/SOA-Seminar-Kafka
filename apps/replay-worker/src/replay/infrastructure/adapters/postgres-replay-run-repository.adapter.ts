@@ -1,3 +1,4 @@
+import { AppConfigService } from '../../../config/app-config.service';
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { ReplayRunRepositoryPort } from '../../application/ports/replay-run-repository.port';
@@ -8,33 +9,37 @@ export class PostgresReplayRunRepositoryAdapter implements ReplayRunRepositoryPo
   constructor(
     @Inject(PrismaService)
     private readonly prisma: PrismaService,
+    @Inject(AppConfigService) private readonly config: AppConfigService,
   ) {}
 
   async save(run: ReplayRun): Promise<void> {
-    await this.prisma.replayRun.upsert({
-      where: { id: run.id },
-      create: {
-        id: run.id,
-        groupId: run.groupId,
-        topic: run.topic,
-        status: run.status,
-        startOffsets: run.startOffsets,
-        highWatermarks: run.highWatermarks,
-        scannedCount: run.scannedCount,
-        errorMessage: run.errorMessage,
-        startedAt: run.startedAt,
-        completedAt: run.completedAt,
-        createdAt: run.createdAt,
-        updatedAt: run.updatedAt,
-      },
-      update: {
-        status: run.status,
-        scannedCount: run.scannedCount,
-        errorMessage: run.errorMessage,
-        startedAt: run.startedAt,
-        completedAt: run.completedAt,
-        updatedAt: run.updatedAt,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.replayRun.upsert({
+        where: { id: run.id },
+        create: {
+          id: run.id,
+          groupId: run.groupId,
+          topic: run.topic,
+          status: run.status,
+          startOffsets: run.startOffsets,
+          highWatermarks: run.highWatermarks,
+          scannedCount: run.scannedCount,
+          errorMessage: run.errorMessage,
+          startedAt: run.startedAt,
+          completedAt: run.completedAt,
+          createdAt: run.createdAt,
+          updatedAt: run.updatedAt,
+        },
+        update: {
+          status: run.status,
+          scannedCount: run.scannedCount,
+          errorMessage: run.errorMessage,
+          startedAt: run.startedAt,
+          completedAt: run.completedAt,
+          updatedAt: run.updatedAt,
+        },
+      });
+      await tx.$executeRaw`SELECT pg_notify(${this.config.changeFeedOptions.channel}, '')`;
     });
   }
 
