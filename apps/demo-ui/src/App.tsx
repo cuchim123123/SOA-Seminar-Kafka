@@ -12,10 +12,10 @@ import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { RealApplication } from './real/RealApplication';
 import { parseRoute } from './real/state/routes';
 import './real/workspace.css';
-import type { TabId } from './components/Navigation';
 import { UserGuide } from './components/UserGuide';
 import { BenchmarkStudio } from './components/BenchmarkStudio';
 import { SimulationLab } from './simulation/ui/SimulationLab';
+import { SimulationSessionProvider } from './simulation/store/SimulationSession';
 
 export function App() {
   const [route, setRoute] = useState(() => parseRoute(window.location.hash));
@@ -46,7 +46,7 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleTabChange = (tab: TabId) => {
+  const handleTabChange = (tab: string) => {
     window.location.hash = tab;
   };
 
@@ -93,64 +93,68 @@ export function App() {
   };
 
   return (
-    <div className="workspace-shell">
-      <WorkspaceSidebar route={route} />
-      <div className="workspace-content">
-        {/* 1. Header with Cluster Health & Telemetry */}
-        {activeTab === 'benchmark' && (
-          <Header health={health} refreshing={refreshing} onRefresh={handleManualRefresh} />
-        )}
-
-        {/* 3. Primary Views (Simulation Lab, Benchmark, Guide) */}
-        <main tabIndex={-1}>
-          {activeTab === 'real' && <RealApplication key={route.customerId} route={route} />}
-
-          {activeTab === 'simulation' && <SimulationLab />}
-
+    <SimulationSessionProvider active={activeTab === 'simulation'}>
+      <div className="workspace-shell">
+        <WorkspaceSidebar route={route} />
+        <div className="workspace-content">
+          {/* 1. Header with Cluster Health & Telemetry */}
           {activeTab === 'benchmark' && (
-            <BenchmarkStudio
-              topicMetadata={topicMetadata}
-              loyaltyLag={loyaltyLag}
-              analyticsLag={analyticsLag}
-              salesSummary={salesSummary}
-              loyaltyAccount={null}
-              onRefreshTelemetry={fetchTelemetry}
-              onBenchmarkStateChange={setIsBenchmarking}
-            />
+            <Header health={health} refreshing={refreshing} onRefresh={handleManualRefresh} />
           )}
 
-          {activeTab === 'guide' && <UserGuide onNavigateToTab={handleTabChange} />}
-        </main>
+          {/* 3. Primary Views (Simulation Lab, Benchmark, Guide) */}
+          <main tabIndex={-1}>
+            {activeTab === 'real' && <RealApplication key={route.customerId} route={route} />}
 
-        {/* Footer */}
-        <footer
-          style={{
-            marginTop: '36px',
-            textAlign: 'center',
-            color: 'var(--text-muted)',
-            fontSize: '0.75rem',
-            fontFamily: 'var(--font-mono)',
-            borderTop: '1px solid var(--border-subtle)',
-            paddingTop: '18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-            alignItems: 'center',
-          }}
-        >
-          <div style={{ fontWeight: 600, color: 'var(--text-body)' }}>
-            KAFKA STREAMING LAB — ARCHITECTURAL DEMO &amp; EVIDENCE OBSERVABILITY PLATFORM
-          </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <span>• Partition-scoped Ordering</span>
-            <span>• Transactional Outbox (Postgres)</span>
-            <span>• Consumer Idempotency (N+1 Commits)</span>
-            <span>• Bounded Replay &amp; Correction</span>
-            <span>• Kafka KRaft</span>
-          </div>
-        </footer>
+            {activeTab === 'simulation' && <SimulationLab />}
+
+            {activeTab === 'benchmark' && (
+              <BenchmarkStudio
+                topicMetadata={topicMetadata}
+                loyaltyLag={loyaltyLag}
+                analyticsLag={analyticsLag}
+                salesSummary={salesSummary}
+                loyaltyAccount={null}
+                onRefreshTelemetry={fetchTelemetry}
+                onBenchmarkStateChange={setIsBenchmarking}
+              />
+            )}
+
+            {activeTab === 'guide' && <UserGuide onNavigateToTab={handleTabChange} />}
+          </main>
+
+          {/* Footer */}
+          <footer
+            style={{
+              marginTop: '36px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-mono)',
+              borderTop: '1px solid var(--border-subtle)',
+              paddingTop: '18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              alignItems: 'center',
+            }}
+          >
+            <div style={{ fontWeight: 600, color: 'var(--text-body)' }}>
+              KAFKA STREAMING LAB — ARCHITECTURAL DEMO &amp; EVIDENCE OBSERVABILITY PLATFORM
+            </div>
+            <div
+              style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}
+            >
+              <span>• Partition-scoped Ordering</span>
+              <span>• Transactional Outbox (Postgres)</span>
+              <span>• Consumer Idempotency (N+1 Commits)</span>
+              <span>• Bounded Replay &amp; Correction</span>
+              <span>• Kafka KRaft</span>
+            </div>
+          </footer>
+        </div>
       </div>
-    </div>
+    </SimulationSessionProvider>
   );
 }
 

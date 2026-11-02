@@ -55,6 +55,7 @@ export function applyDiagram(engine: SimEngine, nodes: SimCustomNode[], edges: S
     nodes.map((node) => ({
       ...structuredClone(node),
       data: {
+        status: 'IDLE',
         ...structuredClone(
           engine.nodes.get(node.id)?.data ??
             COMPONENT_REGISTRY.find((entry) => entry.kind === node.data.kind)?.defaultData ??

@@ -120,8 +120,7 @@ export const COMPONENT_REGISTRY: ComponentMetadata[] = [
     title: 'CDC / Outbox Relay',
     category: 'application',
     icon: '🔄',
-    description:
-      'Debezium CDC connector or polling worker streaming committed outbox rows to Kafka topics.',
+    description: 'Simplified Debezium CDC relay streaming committed outbox rows to Kafka topics.',
     allowedSourcePorts: ['publish'],
     allowedTargetPorts: ['cdc-tail'],
     defaultData: {

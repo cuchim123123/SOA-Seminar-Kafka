@@ -72,11 +72,9 @@ export const SimProducerNode: React.FC<NodeProps> = ({ data, selected }) => {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: '#64748b' }}>Key Strategy:</span>
+          <span style={{ color: '#64748b' }}>Routing model:</span>
           <span style={{ fontWeight: 700, color: '#0284c7' }}>
-            {d.keyOrderingMode === 'ROUND_ROBIN'
-              ? 'Round robin'
-              : `Murmur2 (${d.messageKey || 'U001'})`}
+            {d.keyOrderingMode === 'ROUND_ROBIN' ? 'Round robin' : 'Murmur2 key hashing'}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>

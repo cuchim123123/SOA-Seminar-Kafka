@@ -132,4 +132,4 @@ until their tickets are selected. Report commands actually run.
 
 See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.
 
-Simulation Playground enhancement: S1–S4 are implemented: correctness boundaries, validated paused scaling, virtual-clock rendering and presenter controls with a flexible builder. Independent projections, source-aware sending, scenario defaults and filtered evidence are available. Session persistence and final acceptance remain in progress. See SIMULATION-PLAYGROUND-ENHANCEMENT-PLAN.md.
+Simulation Playground enhancement: S1–S5 are implemented, including presenter controls, validated builder/scaling, virtual-clock rendering, paused navigation retention and validated local diagram/settings restoration. Frontend verification now checks actual sources in strict mode. Final burst/resource and browser acceptance remain in progress. See docs/simulation-playground.md and SIMULATION-PLAYGROUND-ENHANCEMENT-PLAN.md.

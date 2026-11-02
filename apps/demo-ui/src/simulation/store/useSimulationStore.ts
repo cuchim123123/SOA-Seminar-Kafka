@@ -1,10 +1,20 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { SimEngine } from '../engine/sim-engine';
 import { applyDiagram, captureNodeData, projectNodeViews } from './diagram-state';
 import { VirtualClockStore } from './virtual-clock-store';
 import { loadScenario } from './load-scenario';
+import {
+  createDiagramDocument,
+  readSavedDiagram,
+  restoreDiagramDocument,
+  writeSavedDiagram,
+  DIAGRAM_STORAGE_KEY,
+  type DiagramStorage,
+  type DiagramViewport,
+  DEFAULT_COMPOSER,
+} from './diagram-document';
 import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-registry';
 import { validateTopology } from '../domain/topology-validation';
 import { scaleConsumers } from '../domain/scale-consumers';
@@ -29,24 +39,52 @@ function allocateNodeId(kind: ComponentKind, nodes: SimCustomNode[]) {
   return id;
 }
 
-export function useSimulationStore() {
-  const engineRef = useRef<SimEngine | null>(null);
-  if (!engineRef.current) engineRef.current = new SimEngine();
-  const engine = engineRef.current;
+export function useSimulationState(active: boolean) {
+  const [bootstrap] = useState(() => {
+    let storage: DiagramStorage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      /* Storage can be denied by the browser. */
+    }
+    const saved = readSavedDiagram(storage);
+    const restored = saved.document ? restoreDiagramDocument(saved.document) : null;
+    const engine = restored?.engine ?? new SimEngine();
+    const diagram = restored ?? loadScenario(engine, SYSTEM_BLUEPRINTS[0]);
+    return { engine, nodes: diagram.nodes, edges: diagram.edges, saved, storage };
+  });
+  const engine = bootstrap.engine;
+  const storageRef = useRef(bootstrap.storage);
+  const [storageBlocked, setStorageBlocked] = useState(bootstrap.saved.blocked);
+  const [storageMessage, setStorageMessage] = useState(bootstrap.saved.error);
+  const [sessionNotice, setSessionNotice] = useState(
+    bootstrap.saved.document
+      ? 'Restored diagram and settings into a fresh paused run. Previous messages, offsets and evidence are not restored.'
+      : 'Diagram and settings save locally. Navigation retains this run paused; refresh starts a fresh paused run.',
+  );
+  const [documentRevision, setDocumentRevision] = useState(0);
+  const [composer, setComposer] = useState(bootstrap.saved.document?.composer ?? DEFAULT_COMPOSER);
+  const [viewport, setViewport] = useState<DiagramViewport | null>(
+    bootstrap.saved.document?.viewport ?? null,
+  );
   const [frameClock] = useState(() => new VirtualClockStore());
-  const [runtimeData, setRuntimeData] = useState<ReadonlyMap<string, SimNodeData>>(new Map());
+  const [runtimeData, setRuntimeData] = useState<ReadonlyMap<string, SimNodeData>>(() =>
+    captureNodeData(engine, new Map()),
+  );
   const snapshotVersion = useRef(-1);
 
   const [validationMessage, setValidationMessage] = useState('');
-  const [isModified, setIsModified] = useState(false);
-  const [nodes, setNodes] = useState<SimCustomNode[]>([]);
-  const [edges, setEdges] = useState<SimCustomEdge[]>([]);
+  const [isModified, setIsModified] = useState(bootstrap.saved.document?.customized ?? false);
+  const [nodes, setNodes] = useState<SimCustomNode[]>(bootstrap.nodes);
+  const [edges, setEdges] = useState<SimCustomEdge[]>(bootstrap.edges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [activeBlueprintId, setActiveBlueprintId] = useState<string>('full-enterprise-production');
+  const [activeBlueprintId, setActiveBlueprintId] = useState<string>(
+    bootstrap.saved.document?.scenarioId ?? SYSTEM_BLUEPRINTS[0].id,
+  );
   const [eventLog, setEventLog] = useState<SimEvent[]>([]);
   const [virtualTimeMs, setVirtualTimeMs] = useState<number>(0);
-  const [playbackStatus, setPlaybackStatus] = useState<'STOPPED' | 'RUNNING' | 'PAUSED'>('STOPPED');
-  const [speedMultiplier, setSpeedMultiplier] = useState<number>(1.0);
+  const [playbackStatus, setPlaybackStatus] = useState<'STOPPED' | 'RUNNING' | 'PAUSED'>('PAUSED');
+  const [speedMultiplier, setSpeedMultiplier] = useState<number>(engine.clock.speedMultiplier);
   const [inFlightTokens, setInFlightTokens] = useState(engine.inFlightTokens);
   const [mechanicsConfig, setMechanicsConfig] = useState({ ...engine.mechanicsConfig });
 
@@ -80,6 +118,7 @@ export function useSimulationStore() {
 
   const pauseForEdit = useCallback(() => {
     setIsModified(true);
+    setDocumentRevision((revision) => revision + 1);
     engine.clock.pause();
     syncFromEngine();
   }, [engine, syncFromEngine]);
@@ -105,7 +144,7 @@ export function useSimulationStore() {
 
   // Full panels publish at 10 Hz; only the frame-clock subscribers animate every RAF.
   useEffect(() => {
-    if (playbackStatus !== 'RUNNING') return;
+    if (!active || playbackStatus !== 'RUNNING') return;
     let animationId: number;
     let lastRealTime = performance.now();
     let lastPanelTime = lastRealTime;
@@ -131,7 +170,20 @@ export function useSimulationStore() {
       cancelAnimationFrame(animationId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [engine, frameClock, playbackStatus, syncFromEngine]);
+  }, [engine, frameClock, playbackStatus, syncFromEngine, active]);
+
+  const wasActive = useRef(active);
+  useLayoutEffect(() => {
+    if (!active) {
+      if (wasActive.current)
+        setSessionNotice(
+          'Run retained in memory and paused. Messages, offsets, pending work and evidence are unchanged; use Resume when ready.',
+        );
+      engine.clock.pause();
+      syncFromEngine();
+    }
+    wasActive.current = active;
+  }, [active, engine, syncFromEngine]);
 
   // Diagram owns geometry/configuration. Engine owns independent mutable runtime data.
   useEffect(() => {
@@ -207,7 +259,7 @@ export function useSimulationStore() {
           portType:
             sourceNode.data.kind === 'producer'
               ? 'publish'
-              : sourceNode.data.kind === 'kafka-cluster'
+              : ['kafka-cluster', 'kafka-broker'].includes(sourceNode.data.kind)
                 ? 'dispatch'
                 : 'handler-action',
         },
@@ -403,6 +455,7 @@ export function useSimulationStore() {
 
   const reset = useCallback(() => {
     engine.reset();
+    setSessionNotice('Run reset and paused. Your diagram and effective settings are preserved.');
     syncFromEngine();
   }, [engine, syncFromEngine]);
 
@@ -584,8 +637,13 @@ export function useSimulationStore() {
       setEdges(fresh.edges);
       setSelectedNodeId(null);
       setActiveBlueprintId(blueprintId);
+      setSessionNotice(
+        'Fresh scenario run, paused. Diagram and settings save locally; transient execution is not saved.',
+      );
+      setComposer(DEFAULT_COMPOSER);
       setIsModified(false);
       setValidationMessage('');
+      setViewport(null);
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -1006,8 +1064,92 @@ export function useSimulationStore() {
     setValidationMessage('');
   }, [nodes, edges, selectedNodeId, pauseForEdit]);
 
+  const serializedDiagram = useMemo(() => {
+    try {
+      return {
+        text: JSON.stringify(
+          createDiagramDocument(
+            engine,
+            nodes,
+            edges,
+            activeBlueprintId,
+            isModified,
+            viewport,
+            composer,
+          ),
+        ),
+        error: '',
+      };
+    } catch {
+      return {
+        text: '',
+        error: 'Diagram contains invalid settings; autosave resumes when they are repaired.',
+      };
+    }
+  }, [
+    engine,
+    nodes,
+    edges,
+    activeBlueprintId,
+    isModified,
+    viewport,
+    mechanicsConfig,
+    speedMultiplier,
+    documentRevision,
+    composer,
+  ]);
+
+  useEffect(() => {
+    if (storageBlocked) return;
+    const timer = setTimeout(() => {
+      setStorageMessage(
+        serializedDiagram.error || writeSavedDiagram(storageRef.current, serializedDiagram.text),
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [serializedDiagram, storageBlocked]);
+
+  const replaceSavedDiagram = useCallback(() => {
+    try {
+      storageRef.current = window.localStorage;
+      if (bootstrap.saved.raw !== null)
+        storageRef.current.setItem(
+          `${DIAGRAM_STORAGE_KEY}.recovery.${Date.now()}`,
+          bootstrap.saved.raw,
+        );
+      setStorageBlocked(false);
+      setDocumentRevision((revision) => revision + 1);
+      setStorageMessage('');
+    } catch {
+      setStorageMessage(
+        'Could not preserve the original document. Download it before changing browser storage.',
+      );
+    }
+  }, [bootstrap]);
+
+  const downloadRecoveryDocument = useCallback(() => {
+    if (bootstrap.saved.raw === null) return;
+    const url = URL.createObjectURL(new Blob([bootstrap.saved.raw], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'simulation-diagram-recovery.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [bootstrap]);
+
   return {
     topologyIssues,
+    sessionNotice,
+    composer,
+    setComposer,
+    storageMessage,
+    storageBlocked,
+    retryAutosave: () => setDocumentRevision((revision) => revision + 1),
+    replaceSavedDiagram,
+    downloadRecoveryDocument,
+    hasRecoveryDocument: bootstrap.saved.raw !== null,
+    viewport,
+    setViewport,
     validationMessage,
     scaleGroup,
     isModified,

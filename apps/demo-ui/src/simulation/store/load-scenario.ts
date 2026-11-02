@@ -21,5 +21,6 @@ export function loadScenario(engine: SimEngine, blueprint: SystemBlueprint) {
   engine.setMechanicsConfig({ producerAcks: config.producerAcks });
   applyDiagram(engine, nodes, edges);
   engine.clock.pause();
+  engine.clock.setSpeed(1);
   return { nodes, edges };
 }

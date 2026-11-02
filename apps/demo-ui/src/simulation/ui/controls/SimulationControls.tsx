@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { useSimulationStore } from '../../store/useSimulationStore';
+import type { useSimulationStore } from '../../store/SimulationSession';
 import { producerTopic } from '../../domain/producer-route';
 import { CurrentOffsetMenu } from './CurrentOffsetMenu';
 
@@ -20,9 +20,14 @@ export function SimulationControls({
   onPoison: (producerId: string) => void;
 }) {
   const { engine, nodes, edges, blueprints, activeBlueprintId, mechanicsConfig: config } = store;
-  const [selectedProducerId, setSelectedProducerId] = useState('');
-  const [key, setKey] = useState<string | null>(null);
-  const [count, setCount] = useState(5);
+  const selectedProducerId = store.composer.producerId;
+  const key = store.composer.key;
+  const count = store.composer.burstCount;
+  const setSelectedProducerId = (producerId: string) =>
+    store.setComposer((previous) => ({ ...previous, producerId }));
+  const setKey = (key: string | null) => store.setComposer((previous) => ({ ...previous, key }));
+  const setCount = (burstCount: number) =>
+    store.setComposer((previous) => ({ ...previous, burstCount }));
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -72,6 +77,7 @@ export function SimulationControls({
               value={activeBlueprintId}
               onChange={(event) => replaceScenario(event.target.value)}
             >
+              {!scenario && <option value={activeBlueprintId}>Custom saved system</option>}
               {blueprints.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}

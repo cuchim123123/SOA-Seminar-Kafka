@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -12,7 +12,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import './simulation.css';
 
-import { useSimulationStore } from '../store/useSimulationStore';
+import { useSimulationStore } from '../store/SimulationSession';
 import { SimProducerNode } from './nodes/SimProducerNode';
 import { SimKafkaNode } from './nodes/SimKafkaNode';
 import { SimKafkaBrokerNode } from './nodes/SimKafkaBrokerNode';
@@ -34,7 +34,7 @@ import { SimNodeInspector } from './inspector/SimNodeInspector';
 import { SimulationControls } from './controls/SimulationControls';
 import { SimEventTimeline } from './timeline/SimEventTimeline';
 import { PoisonPillModal } from './controls/PoisonPillModal';
-import type { ComponentKind, SimCustomNode } from '../domain/types';
+import type { ComponentKind, SimCustomNode, SimCustomEdge } from '../domain/types';
 
 export const SimulationLab: React.FC = () => {
   const store = useSimulationStore();
@@ -53,7 +53,6 @@ export const SimulationLab: React.FC = () => {
     selectNode,
     updateNodeData,
     dispatchPoisonPill,
-    loadDefaultGraph,
     loadBlueprint,
     setTopicPartitionCount,
     setTopicReplicationFactor,
@@ -77,7 +76,10 @@ export const SimulationLab: React.FC = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [poisonProducerId, setPoisonProducerId] = useState<string>();
   const [poisonPillModalOpen, setPoisonPillModalOpen] = useState(false);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<
+    SimCustomNode,
+    SimCustomEdge
+  > | null>(null);
 
   const consumerNodes = useMemo(() => nodes.filter((n) => n.data.kind === 'consumer'), [nodes]);
 
@@ -86,16 +88,11 @@ export const SimulationLab: React.FC = () => {
     (blueprintId: string) => {
       loadBlueprint(blueprintId);
       setTimeout(() => {
-        reactFlowInstance?.fitView({ padding: 0.18, duration: 400 });
+        reactFlowInstance?.fitView({ padding: 0.18, duration: 0 });
       }, 80);
     },
     [loadBlueprint, reactFlowInstance],
   );
-
-  // Load starter graph on initial mount
-  useEffect(() => {
-    loadDefaultGraph();
-  }, [loadDefaultGraph]);
 
   // Node & Edge types registration
   const nodeTypes: NodeTypes = useMemo(
@@ -130,7 +127,16 @@ export const SimulationLab: React.FC = () => {
     }
     return edges.map((edge) => {
       const tokens = tokensByEdge.get(edge.id);
-      return tokens ? { ...edge, data: { ...edge.data, inFlightTokens: tokens } } : edge;
+      return tokens
+        ? {
+            ...edge,
+            data: {
+              ...edge.data,
+              portType: edge.data?.portType ?? 'publish',
+              inFlightTokens: tokens,
+            },
+          }
+        : edge;
     });
   }, [edges, inFlightTokens]);
 
@@ -223,6 +229,31 @@ export const SimulationLab: React.FC = () => {
           setPoisonPillModalOpen(true);
         }}
       />
+      <div className="sim-session-notice" role="status">
+        {store.sessionNotice} {store.storageMessage}
+        {store.storageMessage && !store.storageBlocked && (
+          <button onClick={store.retryAutosave}>Retry autosave</button>
+        )}
+        {store.storageBlocked && (
+          <>
+            <button onClick={store.downloadRecoveryDocument} disabled={!store.hasRecoveryDocument}>
+              Download saved document
+            </button>
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Save this diagram instead? The original saved document will be backed up first.',
+                  )
+                )
+                  store.replaceSavedDiagram();
+              }}
+            >
+              Replace saved diagram
+            </button>
+          </>
+        )}
+      </div>
       {(validationMessage || topologyIssues.length > 0) && (
         <section
           aria-label="Simulation setup feedback"
@@ -272,7 +303,7 @@ export const SimulationLab: React.FC = () => {
           onDrop={onDrop}
         >
           <SimulationClockContext.Provider value={frameClock}>
-            <ReactFlow
+            <ReactFlow<SimCustomNode, SimCustomEdge>
               nodes={canvasNodes}
               edges={animatedEdges}
               onNodesChange={handleNodesChange}
@@ -292,7 +323,9 @@ export const SimulationLab: React.FC = () => {
               }
               onPaneClick={() => selectNode(null)}
               onInit={setReactFlowInstance}
-              fitView
+              defaultViewport={store.viewport ?? undefined}
+              fitView={!store.viewport}
+              onMoveEnd={(_, next) => store.setViewport(next)}
               minZoom={0.2}
               maxZoom={2.0}
               defaultEdgeOptions={{ type: 'simFlowEdge' }}
