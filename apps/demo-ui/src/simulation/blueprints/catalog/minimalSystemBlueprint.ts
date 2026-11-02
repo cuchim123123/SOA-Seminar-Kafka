@@ -11,13 +11,19 @@ export const minimalSystemBlueprint: SystemBlueprint = {
   nodeCount: 4,
   edgeCount: 3,
   description:
-    'The quintessential lightweight Kafka streaming architecture: 1 Producer writing directly into a 2-partition Kafka Topic, consumed by a single Consumer with automatic offset commits, updating a PostgreSQL database.',
+    'The quintessential lightweight Kafka streaming architecture: 1 Producer writing directly into a 2-partition Kafka Topic, consumed by a single Consumer with manual offset commits after database persistence, updating a PostgreSQL database.',
   highlights: [
     'Direct Kafka produce with standard acks=1 delivery',
     '2-partition topic for clear Murmur2 key routing demonstration',
     'Single consumer in loyalty-v1 group receiving both partitions',
     'Zero extraneous overhead: ideal for beginners and quick experimentation',
   ],
+  topicConfiguration: {
+    partitionCount: 2,
+    replicationFactor: 1,
+    minInsyncReplicas: 1,
+    producerAcks: '1',
+  },
   nodes: [
     {
       id: 'node-producer-1',
@@ -67,7 +73,7 @@ export const minimalSystemBlueprint: SystemBlueprint = {
         assignedPartitions: [0, 1],
         processingDelayMs: 120,
         concurrencySlots: 1,
-        commitMode: 'auto',
+        commitMode: 'manual',
         failureRate: 0,
       },
     },

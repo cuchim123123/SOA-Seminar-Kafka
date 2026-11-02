@@ -16,8 +16,14 @@ export const deadLetterQueueBlueprint: SystemBlueprint = {
     'Dead-Letter Queue isolation protects operational partitions against poison pills',
     'Non-blocking error containment: regular consumer advances offsets safely',
     'Send Poison Pill button directly routes toxic payload into the pipeline to test handling',
-    'Segregated DLQ storage allows offline investigation and dead-letter replay',
+    'DLQ counters and timeline evidence show isolated failed deliveries',
   ],
+  topicConfiguration: {
+    partitionCount: 3,
+    replicationFactor: 2,
+    minInsyncReplicas: 1,
+    producerAcks: '1',
+  },
   nodes: [
     {
       id: 'node-producer-1',
@@ -82,7 +88,7 @@ export const deadLetterQueueBlueprint: SystemBlueprint = {
         assignedPartitions: [0, 1, 2],
         processingDelayMs: 120,
         concurrencySlots: 1,
-        commitMode: 'auto',
+        commitMode: 'manual',
         failureRate: 0,
       },
     },

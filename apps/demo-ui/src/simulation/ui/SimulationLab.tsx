@@ -31,25 +31,19 @@ import {
 } from './canvas/groupContainerNodes';
 import { ComponentPalette } from './palette/ComponentPalette';
 import { SimNodeInspector } from './inspector/SimNodeInspector';
-import { SimPlaybackBar } from './controls/SimPlaybackBar';
-import { KafkaMechanicsToolbar } from './controls/KafkaMechanicsToolbar';
-import { CurrentOffsetMenu } from './controls/CurrentOffsetMenu';
+import { SimulationControls } from './controls/SimulationControls';
 import { SimEventTimeline } from './timeline/SimEventTimeline';
-import { BlueprintSelectorModal } from './blueprints/BlueprintSelectorModal';
 import { PoisonPillModal } from './controls/PoisonPillModal';
 import type { ComponentKind, SimCustomNode } from '../domain/types';
 
 export const SimulationLab: React.FC = () => {
+  const store = useSimulationStore();
   const {
     nodes,
     edges,
     selectedNode,
     eventLog,
-    virtualTimeMs,
-    playbackStatus,
-    speedMultiplier,
     inFlightTokens,
-    mechanicsConfig,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -58,26 +52,9 @@ export const SimulationLab: React.FC = () => {
     deleteNode,
     selectNode,
     updateNodeData,
-    play,
-    pause,
-    step,
-    reset,
-    setSpeed,
-    dispatchMessage,
     dispatchPoisonPill,
-    dispatchDuplicateMessage,
-    dispatchOrderedBurst,
-    setProducerAcks,
-    setPartitioningStrategy,
-    toggleConsumerIdempotency,
-    setCommitMode,
-    setAutoOffsetReset,
-    seekPartitionOffset,
-    resetGroupOffsets,
     loadDefaultGraph,
     loadBlueprint,
-    blueprints,
-    activeBlueprintId,
     setTopicPartitionCount,
     setTopicReplicationFactor,
     setTopicMinIsr,
@@ -95,10 +72,10 @@ export const SimulationLab: React.FC = () => {
     validationMessage,
     scaleGroup,
     frameClock,
-  } = useSimulationStore();
+  } = store;
 
-  const [paletteOpen, setPaletteOpen] = useState(true);
-  const [blueprintModalOpen, setBlueprintModalOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [poisonProducerId, setPoisonProducerId] = useState<string>();
   const [poisonPillModalOpen, setPoisonPillModalOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
@@ -222,11 +199,12 @@ export const SimulationLab: React.FC = () => {
 
   return (
     <div
+      className="simulation-workspace"
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 160px)',
-        minHeight: '740px',
+        height: 'max(820px, calc(100dvh - 72px))',
+        minHeight: '620px',
         background: '#ffffff',
         borderRadius: '12px',
         border: '1px solid #cbd5e1',
@@ -235,26 +213,16 @@ export const SimulationLab: React.FC = () => {
         position: 'relative',
       }}
     >
-      {/* ── TOP PLAYBACK & TIME CONTROLS ── */}
-      <SimPlaybackBar
-        status={playbackStatus}
-        virtualTimeMs={virtualTimeMs}
-        speedMultiplier={speedMultiplier}
-        onPlay={play}
-        onPause={pause}
-        onStep={step}
-        onReset={reset}
-        onSetSpeed={setSpeed}
-        onDispatchMessage={() => dispatchMessage()}
-        onDispatchPoisonPill={() => setPoisonPillModalOpen(true)}
-        onLoadDefaultGraph={loadDefaultGraph}
-        blueprints={blueprints}
-        activeBlueprintId={activeBlueprintId}
-        onOpenBlueprintModal={() => setBlueprintModalOpen(true)}
-        onSelectBlueprint={handleSelectBlueprint}
+      <SimulationControls
+        store={store}
+        builderOpen={paletteOpen}
+        onToggleBuilder={() => setPaletteOpen((open) => !open)}
+        onSelectScenario={handleSelectBlueprint}
+        onPoison={(producerId) => {
+          setPoisonProducerId(producerId);
+          setPoisonPillModalOpen(true);
+        }}
       />
-
-      {/* ── KAFKA STREAMING MECHANICS CONTROLS ── */}
       {(validationMessage || topologyIssues.length > 0) && (
         <section
           aria-label="Simulation setup feedback"
@@ -280,26 +248,6 @@ export const SimulationLab: React.FC = () => {
           )}
         </section>
       )}
-      <KafkaMechanicsToolbar
-        config={mechanicsConfig}
-        onSetAcks={setProducerAcks}
-        onSetPartitioning={setPartitioningStrategy}
-        onToggleIdempotency={toggleConsumerIdempotency}
-        onDispatchDuplicate={dispatchDuplicateMessage}
-        onDispatchOrderedBurst={dispatchOrderedBurst}
-        onDispatchPoisonPill={() => setPoisonPillModalOpen(true)}
-        offsetMenu={
-          <CurrentOffsetMenu
-            engine={engine}
-            config={mechanicsConfig}
-            onSetCommitMode={setCommitMode}
-            onSetAutoOffsetReset={setAutoOffsetReset}
-            onSeek={seekPartitionOffset}
-            onResetGroup={resetGroupOffsets}
-          />
-        }
-      />
-
       {/* ── CENTER WORKSPACE: PALETTE + CANVAS + INSPECTOR ── */}
       <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
         {/* Left Palette */}
@@ -307,6 +255,14 @@ export const SimulationLab: React.FC = () => {
           isOpen={paletteOpen}
           onToggle={() => setPaletteOpen(!paletteOpen)}
           onDragStart={onDragStart}
+          onAdd={(kind) => {
+            const point = reactFlowInstance?.screenToFlowPosition({
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 2,
+            }) ?? { x: 100, y: 100 };
+            addNodeFromPalette(kind, point);
+          }}
+          onAddProjection={store.addIndependentProjection}
         />
 
         {/* Main React Flow Canvas */}
@@ -324,7 +280,16 @@ export const SimulationLab: React.FC = () => {
               onConnect={onConnect}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
-              onNodeClick={(_, node) => selectNode(node.id)}
+              onNodeClick={(_, node) =>
+                selectNode(
+                  node.id.startsWith(GROUP_BOX_PREFIX)
+                    ? (nodes.find(
+                        (item) =>
+                          item.data.kind === 'consumer' && item.data.groupId === node.data.groupId,
+                      )?.id ?? null)
+                    : node.id,
+                )
+              }
               onPaneClick={() => selectNode(null)}
               onInit={setReactFlowInstance}
               fitView
@@ -360,7 +325,9 @@ export const SimulationLab: React.FC = () => {
             onSetPartitionCount={setTopicPartitionCount}
             onSetReplicationFactor={setTopicReplicationFactor}
             onSetMinIsr={setTopicMinIsr}
-            onSetAssignorStrategy={setAssignorStrategy}
+            onSetAssignorStrategy={(strategy) =>
+              setAssignorStrategy(strategy, String(selectedNode?.data.groupId))
+            }
             onCrashBroker={crashBroker}
             onReviveBroker={reviveBroker}
             onCrashConsumer={crashConsumer}
@@ -377,10 +344,13 @@ export const SimulationLab: React.FC = () => {
             minInsyncReplicas={engine.kafkaCluster.topics.get('purchases')?.minInsyncReplicas ?? 2}
             replicationFactor={engine.kafkaCluster.topics.get('purchases')?.replicationFactor ?? 3}
             assignorStrategy={
-              engine.consumerGroups.get('loyalty-v1')?.assignorStrategy || 'round-robin'
+              engine.consumerGroups.get(String(selectedNode?.data.groupId))?.assignorStrategy ||
+              'round-robin'
             }
             partitionLogs={engine.kafkaCluster.getAllPartitions(
-              (selectedNode?.data.activeTopic as string) || 'purchases',
+              String(
+                selectedNode?.data.subscribedTopic ?? selectedNode?.data.activeTopic ?? 'purchases',
+              ),
             )}
             committedOffsets={
               engine.consumerGroups.get((selectedNode?.data.groupId as string) || 'loyalty-v1')
@@ -393,23 +363,14 @@ export const SimulationLab: React.FC = () => {
       </div>
 
       {/* ── BOTTOM DISCRETE-EVENT TIMELINE ── */}
-      <SimEventTimeline events={eventLog} />
-
-      {/* ── ARCHITECTURAL BLUEPRINT SELECTOR MODAL ── */}
-      <BlueprintSelectorModal
-        isOpen={blueprintModalOpen}
-        onClose={() => setBlueprintModalOpen(false)}
-        blueprints={blueprints}
-        activeBlueprintId={activeBlueprintId}
-        onSelectBlueprint={handleSelectBlueprint}
-      />
+      <SimEventTimeline events={eventLog} total={engine.totalEventsRecorded} />
 
       {/* ── TARGETED POISON PILL INJECTION MODAL ── */}
       <PoisonPillModal
         isOpen={poisonPillModalOpen}
         onClose={() => setPoisonPillModalOpen(false)}
         consumerNodes={consumerNodes}
-        onInject={(options) => dispatchPoisonPill(options)}
+        onInject={(options) => dispatchPoisonPill({ ...options, producerId: poisonProducerId })}
       />
     </div>
   );

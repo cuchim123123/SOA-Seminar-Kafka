@@ -1,5 +1,5 @@
 import type { SimEngine } from '../sim-engine';
-import type { SimConsumerData, SimEvent } from '../../domain/types';
+import type { SimConsumerData, SimEvent, SimProducerAcks } from '../../domain/types';
 import { createSimEvent } from '../../domain/events';
 import { activeDelivery, finishDelivery, scheduleCommit } from './consumer-delivery';
 import { SimClusterOperations } from '../operations/sim-cluster-operations';
@@ -16,6 +16,9 @@ export class SimEventHandlers {
 
         const partitionId = Number(metadata.partitionId ?? 0);
         const topicName = (metadata.topic as string) || 'purchases';
+        const effectiveAcks =
+          (metadata.producerAcks as SimProducerAcks | undefined) ??
+          engine.mechanicsConfig.producerAcks;
 
         // Append to broker partition log
         let offset: number;
@@ -25,6 +28,7 @@ export class SimEventHandlers {
             partitionId,
             message,
             event.scheduledTime,
+            effectiveAcks,
           ));
         } catch (error) {
           message.status = 'FAILED';
@@ -41,7 +45,6 @@ export class SimEventHandlers {
         }
 
         // Record ACK confirmation into timeline
-        const effectiveAcks = engine.mechanicsConfig.producerAcks;
         if (effectiveAcks === '1') {
           engine.recordEvent(
             createSimEvent(

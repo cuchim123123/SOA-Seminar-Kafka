@@ -4,6 +4,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { SimEngine } from '../engine/sim-engine';
 import { applyDiagram, captureNodeData, projectNodeViews } from './diagram-state';
 import { VirtualClockStore } from './virtual-clock-store';
+import { loadScenario } from './load-scenario';
 import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-registry';
 import { validateTopology } from '../domain/topology-validation';
 import { scaleConsumers } from '../domain/scale-consumers';
@@ -37,6 +38,7 @@ export function useSimulationStore() {
   const snapshotVersion = useRef(-1);
 
   const [validationMessage, setValidationMessage] = useState('');
+  const [isModified, setIsModified] = useState(false);
   const [nodes, setNodes] = useState<SimCustomNode[]>([]);
   const [edges, setEdges] = useState<SimCustomEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -77,6 +79,7 @@ export function useSimulationStore() {
   }, [engine, frameClock]);
 
   const pauseForEdit = useCallback(() => {
+    setIsModified(true);
     engine.clock.pause();
     syncFromEngine();
   }, [engine, syncFromEngine]);
@@ -154,6 +157,8 @@ export function useSimulationStore() {
     (changes: NodeChange<SimCustomNode>[]) => {
       if (changes.some((change) => !['position', 'dimensions', 'select'].includes(change.type)))
         pauseForEdit();
+      if (changes.some((change) => change.type === 'position' && change.dragging))
+        setIsModified(true);
       setNodes((nds) => applyNodeChanges(changes, nds));
     },
     [pauseForEdit],
@@ -403,6 +408,7 @@ export function useSimulationStore() {
 
   const setSpeed = useCallback(
     (multiplier: number) => {
+      setIsModified(true);
       engine.clock.setSpeed(multiplier);
       syncFromEngine();
     },
@@ -493,9 +499,10 @@ export function useSimulationStore() {
   );
 
   const setAssignorStrategy = useCallback(
-    (strategy: 'round-robin' | 'range') => {
+    (strategy: 'round-robin' | 'range', groupId?: string) => {
       pauseForEdit();
       for (const group of engine.consumerGroups.values()) {
+        if (groupId && group.groupId !== groupId) continue;
         engine.invalidateConsumerWork(group.groupId);
         group.setAssignorStrategy(strategy);
         const topic = engine.kafkaCluster.topics.get(group.topicName);
@@ -572,19 +579,13 @@ export function useSimulationStore() {
       const blueprint = SYSTEM_BLUEPRINTS.find((b) => b.id === blueprintId);
       if (!blueprint) return;
 
-      // Deep clone nodes and edges to ensure fresh state
-      const clonedNodes: SimCustomNode[] = JSON.parse(JSON.stringify(blueprint.nodes));
-      const clonedEdges: SimCustomEdge[] = JSON.parse(JSON.stringify(blueprint.edges));
-
-      setNodes(clonedNodes);
-      setEdges(clonedEdges);
+      const fresh = loadScenario(engine, blueprint);
+      setNodes(fresh.nodes);
+      setEdges(fresh.edges);
       setSelectedNodeId(null);
       setActiveBlueprintId(blueprintId);
-
-      engine.nodes.clear();
-      engine.edges.clear();
-      engine.reset(false);
-      applyDiagram(engine, clonedNodes, clonedEdges);
+      setIsModified(false);
+      setValidationMessage('');
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -804,9 +805,15 @@ export function useSimulationStore() {
   }, [engine, crashBroker, reviveBroker]);
 
   const dispatchPoisonPill = useCallback(
-    (options?: { targetFailedConsumerIds?: string[]; targetFailedGroupIds?: string[] }) => {
+    (options?: {
+      targetFailedConsumerIds?: string[];
+      targetFailedGroupIds?: string[];
+      producerId?: string;
+    }) => {
       if (!readyToExecute()) return;
-      const pNode = nodes.find((n) => n.data.kind === 'producer');
+      const pNode = nodes.find(
+        (n) => n.data.kind === 'producer' && (!options?.producerId || n.id === options.producerId),
+      );
       if (!pNode) {
         setValidationMessage('Add a Producer to the canvas first.');
         return;
@@ -824,7 +831,8 @@ export function useSimulationStore() {
 
   const setProducerAcks = useCallback(
     (acks: SimProducerAcks) => {
-      engine.mechanicsConfig.producerAcks = acks;
+      pauseForEdit();
+      engine.setMechanicsConfig({ producerAcks: acks });
       setMechanicsConfig({ ...engine.mechanicsConfig });
       syncFromEngine();
     },
@@ -833,9 +841,11 @@ export function useSimulationStore() {
 
   const setPartitioningStrategy = useCallback(
     (strategy: 'murmur2-key' | 'round-robin') => {
+      pauseForEdit();
       engine.mechanicsConfig.partitioningStrategy = strategy;
       engine.mechanicsConfig.keyOrderingMode =
         strategy === 'round-robin' ? 'ROUND_ROBIN' : 'MURMUR2_KEYED';
+      engine.notifyStateUpdated();
       setMechanicsConfig({ ...engine.mechanicsConfig });
       syncFromEngine();
     },
@@ -843,13 +853,15 @@ export function useSimulationStore() {
   );
 
   const toggleConsumerIdempotency = useCallback(() => {
-    engine.mechanicsConfig.consumerIdempotency = !engine.mechanicsConfig.consumerIdempotency;
+    pauseForEdit();
+    engine.setMechanicsConfig({ consumerIdempotency: !engine.mechanicsConfig.consumerIdempotency });
     setMechanicsConfig({ ...engine.mechanicsConfig });
     syncFromEngine();
   }, [engine, syncFromEngine]);
 
   const setCommitMode = useCallback(
     (mode: SimCommitMode) => {
+      pauseForEdit();
       engine.setMechanicsConfig({ commitMode: mode });
       syncFromEngine();
     },
@@ -858,6 +870,7 @@ export function useSimulationStore() {
 
   const setAutoOffsetReset = useCallback(
     (policy: SimOffsetResetPolicy) => {
+      pauseForEdit();
       engine.setMechanicsConfig({ autoOffsetReset: policy });
       syncFromEngine();
     },
@@ -883,29 +896,40 @@ export function useSimulationStore() {
 
   const dispatchDuplicateMessage = useCallback(() => {
     if (!readyToExecute()) return;
-    const pNode = nodes.find((n) => n.data.kind === 'producer');
-    if (!pNode) {
-      setValidationMessage('Add a Producer to the canvas first.');
+    if (!engine.lastDispatchedMessage || !engine.nodes.has(engine.lastDispatchedProducerId ?? '')) {
+      setValidationMessage(
+        'Send an event first. Duplicate retries the previous event through its original producer.',
+      );
       return;
     }
-    const customKey = (pNode.data.messageKey as string) || 'U001';
-    engine.dispatchDuplicateMessage(customKey);
+    engine.dispatchDuplicateMessage();
     syncFromEngine();
-  }, [nodes, engine, syncFromEngine, readyToExecute]);
+  }, [engine, syncFromEngine, readyToExecute]);
 
   const dispatchOrderedBurst = useCallback(
-    (count = 5, customerId = 'U001') => {
+    (count = 5, customerId = 'U001', producerId?: string) => {
       if (!readyToExecute()) return;
-      const pNode = nodes.find((n) => n.data.kind === 'producer');
-      if (!pNode) {
-        setValidationMessage('Add a Producer to the canvas first.');
+      if (!Number.isInteger(count) || count < 1 || count > 100) {
+        setValidationMessage('Choose a burst of 1–100 messages.');
         return;
       }
-      engine.dispatchOrderedBurst(customerId, count);
+      engine.dispatchOrderedBurst(customerId, count, producerId);
       syncFromEngine();
     },
-    [nodes, engine, syncFromEngine, readyToExecute],
+    [engine, syncFromEngine, readyToExecute],
   );
+
+  const clearCanvas = useCallback(() => {
+    pauseForEdit();
+    engine.nodes.clear();
+    engine.edges.clear();
+    engine.reset(false);
+    setNodes([]);
+    setEdges([]);
+    setSelectedNodeId(null);
+    setValidationMessage('');
+    syncFromEngine();
+  }, [engine, pauseForEdit, syncFromEngine]);
 
   const scaleGroup = useCallback(
     (groupId: string, count: number) => {
@@ -924,10 +948,71 @@ export function useSimulationStore() {
     [nodes, edges, pauseForEdit],
   );
 
+  const addIndependentProjection = useCallback(() => {
+    const template =
+      nodes.find((node) => node.id === selectedNodeId && node.data.kind === 'consumer') ??
+      nodes.find((node) => node.data.kind === 'consumer');
+    const sinkEdge = edges.find(
+      (edge) =>
+        edge.source === template?.id &&
+        nodes.find((node) => node.id === edge.target)?.data.kind === 'database',
+    );
+    const sink = nodes.find((node) => node.id === sinkEdge?.target);
+    if (!template || !sink) {
+      setValidationMessage(
+        'Connect a consumer to one database first; then add an independent projection from that template.',
+      );
+      return;
+    }
+    const consumerId = allocateNodeId('consumer', nodes),
+      dbId = allocateNodeId('database', nodes);
+    const groupId = `projection-${consumerId}`;
+    const consumer = {
+      ...structuredClone(template),
+      id: consumerId,
+      position: { x: template.position.x, y: template.position.y + 260 },
+      data: {
+        ...structuredClone(template.data),
+        id: consumerId,
+        instanceId: consumerId,
+        groupId,
+        title: 'Independent projection',
+      },
+    };
+    const database = {
+      ...structuredClone(sink),
+      id: dbId,
+      position: { x: sink.position.x, y: sink.position.y + 260 },
+      data: {
+        ...structuredClone(sink.data),
+        id: dbId,
+        title: 'Projection database',
+        databaseName: groupId,
+      },
+    };
+    const wires = edges
+      .filter((edge) => edge.source === template.id || edge.target === template.id)
+      .map((edge) => ({
+        ...structuredClone(edge),
+        id: `${edge.id}:${consumerId}`,
+        source: edge.source === template.id ? consumerId : edge.source,
+        target:
+          edge.target === template.id ? consumerId : edge.target === sink.id ? dbId : edge.target,
+      }));
+    pauseForEdit();
+    setNodes((previous) => [...previous, consumer, database]);
+    setEdges((previous) => [...previous, ...wires]);
+    setSelectedNodeId(consumerId);
+    setValidationMessage('');
+  }, [nodes, edges, selectedNodeId, pauseForEdit]);
+
   return {
     topologyIssues,
     validationMessage,
     scaleGroup,
+    isModified,
+    addIndependentProjection,
+    clearCanvas,
     frameClock,
     engine,
     nodes: viewNodes,

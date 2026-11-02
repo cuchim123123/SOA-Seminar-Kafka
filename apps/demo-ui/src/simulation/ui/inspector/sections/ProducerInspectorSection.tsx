@@ -24,7 +24,7 @@ export const ProducerInspectorSection: React.FC<ProducerInspectorSectionProps> =
             marginBottom: '4px',
           }}
         >
-          Customer Key (Murmur2 Target):
+          Default customer key (routing shown in composer):
         </label>
         <select
           value={(data.messageKey as string) || 'U001'}
@@ -38,12 +38,12 @@ export const ProducerInspectorSection: React.FC<ProducerInspectorSectionProps> =
             fontFamily: 'var(--font-mono)',
           }}
         >
-          <option value="U001">U001 (Murmur2 ➔ P3)</option>
-          <option value="U002">U002 (Murmur2 ➔ P0)</option>
-          <option value="U003">U003 (Murmur2 ➔ P2)</option>
-          <option value="U004">U004 (Murmur2 ➔ P4)</option>
-          <option value="U005">U005 (Murmur2 ➔ P3)</option>
-          <option value="U006">U006 (Murmur2 ➔ P3)</option>
+          <option value="U001">U001</option>
+          <option value="U002">U002</option>
+          <option value="U003">U003</option>
+          <option value="U004">U004</option>
+          <option value="U005">U005</option>
+          <option value="U006">U006</option>
           <option value="POISON_PILL">POISON_PILL (Trigger DLQ Isolation)</option>
         </select>
 

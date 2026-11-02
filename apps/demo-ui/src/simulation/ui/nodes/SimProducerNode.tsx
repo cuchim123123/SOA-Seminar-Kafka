@@ -22,7 +22,14 @@ export const SimProducerNode: React.FC<NodeProps> = ({ data, selected }) => {
       }}
     >
       {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '8px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '1.25rem' }}>{d.icon || '🚀'}</span>
           <div>
@@ -66,7 +73,11 @@ export const SimProducerNode: React.FC<NodeProps> = ({ data, selected }) => {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#64748b' }}>Key Strategy:</span>
-          <span style={{ fontWeight: 700, color: '#0284c7' }}>Murmur2 ({d.messageKey || 'U001'})</span>
+          <span style={{ fontWeight: 700, color: '#0284c7' }}>
+            {d.keyOrderingMode === 'ROUND_ROBIN'
+              ? 'Round robin'
+              : `Murmur2 (${d.messageKey || 'U001'})`}
+          </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#64748b' }}>Target Topic:</span>

@@ -1,132 +1,138 @@
-import React, { useState } from 'react';
+import { useId, useState } from 'react';
 import type { SimEvent } from '../../domain/events';
+import { filterEvents } from '../../domain/event-filter';
 
-interface SimEventTimelineProps {
+export function SimEventTimeline({
+  events,
+  total = events.length,
+}: {
   events: SimEvent[];
-}
-
-export const SimEventTimeline: React.FC<SimEventTimelineProps> = ({ events }) => {
-  const [isOpen, setIsOpen] = useState(true);
-
+  total?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState(''),
+    [group, setGroup] = useState(''),
+    [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const panelId = useId();
+  const types = [...new Set(events.map((event) => event.type))].sort();
+  const groups = [
+    ...new Set(events.map((event) => String(event.metadata?.groupId ?? '')).filter(Boolean)),
+  ].sort();
+  const selected = events.find((event) => event.id === selectedId);
+  const visible = filterEvents(events, type, group, query);
   return (
-    <div
-      style={{
-        background: '#ffffff',
-        borderTop: '1px solid #e2e8f0',
-        display: 'flex',
-        flexDirection: 'column',
-        height: isOpen ? '160px' : '36px',
-        transition: 'height 0.2s ease',
-        zIndex: 10,
-        boxShadow: '0 -2px 8px rgba(0,0,0,0.03)',
-      }}
-    >
-      {/* Timeline Header Bar */}
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          padding: '8px 16px',
-          background: '#f8fafc',
-          borderBottom: isOpen ? '1px solid #e2e8f0' : 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
+    <section className="sim-evidence" aria-label="Simulation evidence">
+      <button
+        className="sim-evidence-toggle"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen(!open)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.9rem' }}>⏱️</span>
-          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0f172a' }}>
-            SIMULATION EVENT TIMELINE
-          </span>
-          <span
-            style={{
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              padding: '1px 6px',
-              borderRadius: '10px',
-              background: '#e0f2fe',
-              color: '#0369a1',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {events.length} events
-          </span>
-        </div>
-
-        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-          {isOpen ? '▼ Collapse' : '▲ Expand'}
+        Evidence{' '}
+        <span>
+          {events.length} retained / {total} recorded
         </span>
-      </div>
-
-      {/* Events Stream */}
-      {isOpen && (
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '8px 16px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.7rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-          }}
-        >
-          {events.length === 0 ? (
-            <div style={{ color: '#94a3b8', textAlign: 'center', padding: '16px 0' }}>
-              No simulation events yet. Click &quot;Send 1 Message&quot; to begin.
-            </div>
-          ) : (
-            events.map((ev) => {
-              const seconds = (ev.scheduledTime / 1000).toFixed(3);
-
-              const badgeColor =
-                ev.type === 'DISPATCH_MESSAGE'
-                  ? '#38bdf8'
-                  : ev.type === 'APPEND_PARTITION'
-                    ? '#a855f7'
-                    : ev.type === 'START_PROCESSING'
-                      ? '#fbbf24'
-                      : ev.type === 'COMPLETE_PROCESSING'
-                        ? '#059669'
-                        : '#10b981';
-
-              return (
-                <div
-                  key={ev.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: '10px',
-                    borderBottom: '1px solid #f8fafc',
-                    paddingBottom: '4px',
-                  }}
+        <span>{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open && (
+        <div id={panelId} className="sim-evidence-body">
+          <div className="sim-evidence-filters">
+            <label>
+              Type
+              <select value={type} onChange={(event) => setType(event.target.value)}>
+                <option value="">All types</option>
+                {[...new Set([...types, ...(type ? [type] : [])])].map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Group
+              <select value={group} onChange={(event) => setGroup(event.target.value)}>
+                <option value="">All groups</option>
+                {[...new Set([...groups, ...(group ? [group] : [])])].map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <input
+              aria-label="Find event evidence"
+              placeholder="Message ID, key or description"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div className="sim-evidence-columns">
+            <div className="sim-evidence-list">
+              {visible.map((event) => (
+                <button
+                  key={event.id}
+                  aria-pressed={selectedId === event.id}
+                  onClick={() => setSelectedId(event.id)}
                 >
-                  <span style={{ color: '#64748b', minWidth: '60px' }}>{seconds}s</span>
-                  <span
-                    style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 700,
-                      padding: '1px 5px',
-                      borderRadius: '3px',
-                      background: `${badgeColor}22`,
-                      color: badgeColor,
-                      border: `1px solid ${badgeColor}44`,
-                      minWidth: '85px',
-                      textAlign: 'center',
-                    }}
+                  <time>{(event.scheduledTime / 1000).toFixed(3)} s</time>
+                  <strong>{event.type}</strong>
+                  <span>{event.description}</span>
+                </button>
+              ))}
+              {visible.length === 0 && (
+                <p className="sim-muted">
+                  {events.length
+                    ? 'No retained events match these filters.'
+                    : 'Send an event, then Run or Step to inspect its journey.'}
+                </p>
+              )}
+            </div>
+            <div className="sim-evidence-detail">
+              {selected ? (
+                <>
+                  <strong>{selected.type}</strong>
+                  <p>{selected.description}</p>
+                  <dl>
+                    <dt>Event / message</dt>
+                    <dd>
+                      {selected.id}
+                      <br />
+                      {selected.message?.id ?? 'No message'}
+                    </dd>
+                    <dt>Group · topic · partition · record offset</dt>
+                    <dd>
+                      {String(selected.metadata?.groupId ?? '—')} ·{' '}
+                      {String(selected.metadata?.topic ?? '—')} ·{' '}
+                      {String(selected.metadata?.partitionId ?? '—')} ·{' '}
+                      {String(selected.metadata?.offset ?? '—')}
+                    </dd>
+                  </dl>
+                  <p className="sim-muted">
+                    Record offset N is distinct from committed next offset N+1. Group offsets are
+                    independent.
+                  </p>
+                  <pre>
+                    {JSON.stringify(selected.message?.payload ?? selected.metadata ?? {}, null, 2)}
+                  </pre>
+                  <button
+                    onClick={() => setQuery(selected.message?.id ?? '')}
+                    disabled={!selected.message}
                   >
-                    {ev.type}
-                  </span>
-                  <span style={{ color: '#334155', flex: 1 }}>{ev.description}</span>
-                </div>
-              );
-            })
-          )}
+                    Show this message's retained journey
+                  </button>
+                </>
+              ) : (
+                <p className="sim-muted">
+                  {selectedId
+                    ? 'This event is outside the retained window. Select another event.'
+                    : 'Select an event to inspect its message and processing evidence.'}
+                </p>
+              )}
+              <p className="sim-muted">
+                Only the latest 100 events are retained. Filters and message journeys cover this
+                window, not a complete audit history.
+              </p>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </section>
   );
-};
+}

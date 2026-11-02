@@ -36,6 +36,14 @@ export function validateTopology(
   }
   const groups = new Map<string, { topic: string; sink: string }>();
   for (const node of nodes) {
+    for (const key of ['processingDelayMs', 'writeDelayMs'])
+      if (
+        key in node.data &&
+        (!Number.isFinite(node.data[key]) ||
+          Number(node.data[key]) < 0 ||
+          Number(node.data[key]) > 60000)
+      )
+        issues.push(`${node.data.title}: ${key} must be between 0 and 60000 virtual ms.`);
     if (node.data.kind === 'worker-service')
       issues.push(`${node.data.title}: worker-service execution is not supported.`);
     if (node.data.kind !== 'consumer') continue;

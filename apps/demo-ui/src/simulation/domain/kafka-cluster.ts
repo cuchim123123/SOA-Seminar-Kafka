@@ -1,4 +1,5 @@
 import type { SimMessage } from './message';
+import type { SimProducerAcks } from './types';
 import { calculateKafkaPartition } from '../../utils/kafkaPartitioner';
 
 export interface SimPartitionRecord {
@@ -211,6 +212,7 @@ export class SimKafkaClusterModel {
   public canWriteToPartition(
     topicName: string,
     partitionId: number,
+    acks: SimProducerAcks = 'all',
   ): { allowed: boolean; reason?: string } {
     const topic = this.topics.get(topicName);
     if (!topic) return { allowed: false, reason: `Topic ${topicName} not found` };
@@ -228,7 +230,7 @@ export class SimKafkaClusterModel {
     const onlineIsrCount = partition.isr.filter(
       (bId) => this.brokers.get(bId)?.status === 'ONLINE',
     ).length;
-    if (onlineIsrCount < topic.minInsyncReplicas) {
+    if (acks === 'all' && onlineIsrCount < topic.minInsyncReplicas) {
       return {
         allowed: false,
         reason: `NOT_ENOUGH_REPLICAS (ISR ${onlineIsrCount} < MinISR ${topic.minInsyncReplicas})`,
@@ -246,6 +248,7 @@ export class SimKafkaClusterModel {
     partitionId: number,
     message: SimMessage,
     virtualTimeMs: number,
+    acks: SimProducerAcks = 'all',
   ): { offset: number; partition: SimPartition } {
     const topic = this.topics.get(topicName);
     if (!topic) throw new Error(`Topic ${topicName} not found`);
@@ -253,7 +256,7 @@ export class SimKafkaClusterModel {
     const partition = topic.partitions.get(partitionId);
     if (!partition) throw new Error(`Partition ${partitionId} not found in ${topicName}`);
 
-    const writeCheck = this.canWriteToPartition(topicName, partitionId);
+    const writeCheck = this.canWriteToPartition(topicName, partitionId, acks);
     if (!writeCheck.allowed) {
       throw new Error(`Write rejected for ${topicName}:${partitionId} - ${writeCheck.reason}`);
     }

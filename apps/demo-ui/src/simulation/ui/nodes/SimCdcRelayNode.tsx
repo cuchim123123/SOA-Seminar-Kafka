@@ -36,7 +36,14 @@ export const SimCdcRelayNode: React.FC<NodeProps> = ({ data, selected }) => {
       />
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '8px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '1.25rem' }}>{d.icon || '🔄'}</span>
           <div>
@@ -80,8 +87,8 @@ export const SimCdcRelayNode: React.FC<NodeProps> = ({ data, selected }) => {
           <span style={{ fontWeight: 800, color: '#0891b2' }}>{streamed}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: '#64748b' }}>Poll Frequency:</span>
-          <span style={{ fontWeight: 700, color: '#0f172a' }}>{d.pollIntervalMs || 150}ms</span>
+          <span style={{ color: '#64748b' }}>Transfer timing:</span>
+          <span style={{ fontWeight: 700, color: '#0f172a' }}>{'Model default'}</span>
         </div>
       </div>
 

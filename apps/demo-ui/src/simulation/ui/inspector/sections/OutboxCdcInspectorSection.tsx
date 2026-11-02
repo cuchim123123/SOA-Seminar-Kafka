@@ -112,9 +112,9 @@ export const OutboxCdcInspectorSection: React.FC<OutboxCdcInspectorSectionProps>
             lineHeight: 1.4,
           }}
         >
-          💡 <strong>Transactional Outbox Pattern</strong>: Dual-write atomicity between
-          database operations and Kafka message publishing without two-phase commit (2PC).
-          Events are buffered in this table and polled by a CDC Relay.
+          💡 <strong>Transactional Outbox Pattern</strong>: Dual-write atomicity between database
+          operations and Kafka message publishing without two-phase commit (2PC). Events are
+          buffered in this table and tailed by the CDC relay model.
         </div>
       </>
     );
@@ -135,54 +135,22 @@ export const OutboxCdcInspectorSection: React.FC<OutboxCdcInspectorSectionProps>
           >
             CDC Connector Engine:
           </label>
-          <select
-            value={(data.relayType as string) || 'debezium'}
-            onChange={(e) => onUpdateData(id, { relayType: e.target.value })}
-            style={{
-              width: '100%',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '0.75rem',
-            }}
-          >
-            <option value="debezium">Debezium CDC (Postgres WAL)</option>
-            <option value="polling-publisher">
-              Polling Outbox Relay (SELECT ... FOR UPDATE)
-            </option>
-          </select>
+          <p className="sim-muted">
+            Debezium CDC (simplified model). This does not launch a real connector.
+          </p>
         </div>
-
-        <div>
-          <label
-            style={{
-              display: 'block',
-              fontSize: '0.725rem',
-              fontWeight: 700,
-              color: '#475569',
-              marginBottom: '4px',
-            }}
-          >
-            Poll Interval (ms):
-          </label>
+        <p className="sim-muted">
+          Fixed transfer timing is simulated. Poll interval and batch-size settings do not control
+          this model; no polling publisher is provided.
+        </p>
+        <label>
+          Target Kafka topic
           <input
-            type="number"
-            min="50"
-            max="2000"
-            step="50"
-            value={(data.pollIntervalMs as number) || 150}
-            onChange={(e) => onUpdateData(id, { pollIntervalMs: Number(e.target.value) })}
-            style={{
-              width: '100%',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-mono)',
-              boxSizing: 'border-box',
-            }}
+            aria-label="CDC target topic"
+            value={String(data.targetTopic ?? 'purchases')}
+            onChange={(event) => onUpdateData(id, { targetTopic: event.target.value })}
           />
-        </div>
+        </label>
 
         <div
           style={{

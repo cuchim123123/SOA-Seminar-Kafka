@@ -14,10 +14,16 @@ export const transactionalOutboxBlueprint: SystemBlueprint = {
     'Implements the Transactional Outbox pattern to eliminate distributed 2PC dual-write failures. The application writes business data and an outbox record inside one local atomic transaction; Debezium CDC continuously streams outbox rows to Kafka.',
   highlights: [
     'Atomic database transaction guarantees domain state and outbox record commit together',
-    'No message loss even if Kafka brokers are temporarily unreachable',
+    'Outbox-to-CDC flow is modeled; automatic broker retry is not simulated',
     'Debezium CDC connector tails write-ahead logs (WAL) asynchronously',
     'At-least-once streaming guarantee from database to Kafka',
   ],
+  topicConfiguration: {
+    partitionCount: 4,
+    replicationFactor: 2,
+    minInsyncReplicas: 2,
+    producerAcks: 'all',
+  },
   nodes: [
     {
       id: 'node-producer-1',
@@ -116,7 +122,7 @@ export const transactionalOutboxBlueprint: SystemBlueprint = {
         assignedPartitions: [0, 1, 2, 3],
         processingDelayMs: 120,
         concurrencySlots: 1,
-        commitMode: 'auto',
+        commitMode: 'manual',
         failureRate: 0,
       },
     },

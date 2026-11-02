@@ -88,12 +88,13 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
   const kind = data.kind;
 
   return (
-    <div
+    <aside
+      aria-label="Component inspector"
       style={{
         position: 'absolute',
         top: '16px',
         right: '16px',
-        width: '380px',
+        width: 'min(380px, calc(100% - 24px))',
         background: '#ffffff',
         border: '1px solid #cbd5e1',
         borderRadius: '12px',
@@ -136,6 +137,7 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
         </div>
 
         <button
+          aria-label="Close component inspector"
           onClick={onClose}
           style={{
             border: 'none',
@@ -313,6 +315,6 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
           <span>Delete Node</span>
         </button>
       </div>
-    </div>
+    </aside>
   );
 };

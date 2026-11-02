@@ -35,6 +35,7 @@ export class SimEngine {
   public edges: Map<string, SimCustomEdge> = new Map();
 
   public eventLog: SimEvent[] = [];
+  public totalEventsRecorded = 0;
   public inFlightTokens: SimInFlightToken[] = [];
   public processedMessageCount: number = 0;
 
@@ -43,6 +44,7 @@ export class SimEngine {
   public processedEvents: Set<string> = new Set();
   public roundRobinIndex: number = 0;
   public lastDispatchedMessage: SimMessage | null = null;
+  public lastDispatchedProducerId: string | null = null;
   private tokenSequence: number = 0;
   public stateVersion = 0;
   private topologySignature = '';
@@ -354,8 +356,12 @@ export class SimEngine {
     return SimMessageDispatcher.dispatchDuplicateMessage(this, customKey);
   }
 
-  public dispatchOrderedBurst(customerKey: string = 'U001', count: number = 3): void {
-    SimMessageDispatcher.dispatchOrderedBurst(this, customerKey, count);
+  public dispatchOrderedBurst(
+    customerKey: string = 'U001',
+    count: number = 3,
+    producerId?: string,
+  ): void {
+    SimMessageDispatcher.dispatchOrderedBurst(this, customerKey, count, producerId);
   }
 
   public tick(realDeltaMs: number): void {
@@ -402,11 +408,13 @@ export class SimEngine {
     this.clock.reset();
     this.queue.clear();
     this.eventLog = [];
+    this.totalEventsRecorded = 0;
     this.inFlightTokens = [];
     this.processedMessageCount = 0;
     this.processedEvents.clear();
     this.roundRobinIndex = 0;
     this.lastDispatchedMessage = null;
+    this.lastDispatchedProducerId = null;
     this.tokenSequence = 0;
 
     const defaults = new SimKafkaClusterModel('kraft-sim', 3);
@@ -522,6 +530,7 @@ export class SimEngine {
   }
 
   public recordEvent(event: SimEvent): void {
+    this.totalEventsRecorded += 1;
     this.eventLog.unshift(event);
     if (this.eventLog.length > 100) {
       this.eventLog.pop();
@@ -626,6 +635,14 @@ export class SimEngine {
           node.data.topicPartitions = hosted;
         }
       }
+    }
+
+    for (const node of this.nodes.values()) {
+      if (node.data.kind === 'producer') {
+        node.data.acks = this.mechanicsConfig.producerAcks;
+        node.data.keyOrderingMode = this.mechanicsConfig.keyOrderingMode;
+      }
+      if (node.data.kind === 'consumer') node.data.commitMode = this.mechanicsConfig.commitMode;
     }
 
     for (const listener of this.listeners) {

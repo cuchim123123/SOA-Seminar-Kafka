@@ -1,4 +1,4 @@
-import type { SimCustomNode, SimCustomEdge } from '../domain/types';
+import type { SimCustomNode, SimCustomEdge, SimProducerAcks } from '../domain/types';
 
 export interface SystemBlueprint {
   id: string;
@@ -14,4 +14,10 @@ export interface SystemBlueprint {
   highlights: string[];
   nodes: SimCustomNode[];
   edges: SimCustomEdge[];
+  topicConfiguration: {
+    partitionCount: number;
+    replicationFactor: number;
+    minInsyncReplicas: number;
+    producerAcks: SimProducerAcks;
+  };
 }

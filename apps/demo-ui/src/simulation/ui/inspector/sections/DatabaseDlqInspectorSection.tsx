@@ -88,6 +88,22 @@ export const DatabaseDlqInspectorSection: React.FC<DatabaseDlqInspectorSectionPr
   if (kind === 'database') {
     return (
       <>
+        <label>
+          Database write delay (virtual ms)
+          <input
+            aria-label="Database write delay"
+            type="number"
+            min={0}
+            max={60000}
+            value={Number(data.writeDelayMs ?? 20)}
+            onChange={(event) => onUpdateData(id, { writeDelayMs: event.target.valueAsNumber })}
+          />
+        </label>
+        <p className="sim-muted">
+          Database engine and schema names are labels. Every sink uses the same in-memory projection
+          model.
+        </p>
+
         <div>
           <label
             style={{
@@ -139,8 +155,7 @@ export const DatabaseDlqInspectorSection: React.FC<DatabaseDlqInspectorSectionPr
               },
             ].map((eng) => {
               const isSelected =
-                (data.engine as string)?.includes(eng.id) ||
-                (data.engine as string) === eng.engine;
+                (data.engine as string)?.includes(eng.id) || (data.engine as string) === eng.engine;
 
               return (
                 <button

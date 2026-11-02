@@ -41,6 +41,7 @@ export class SimMessageDispatcher {
 
     // Save as last dispatched message for duplicate testing
     engine.lastDispatchedMessage = message;
+    engine.lastDispatchedProducerId = producerNodeId;
 
     // Case 1: Wired to Transactional Outbox Table
     if (targetNode && targetNode.data.kind === 'outbox-table') {
@@ -139,7 +140,7 @@ export class SimMessageDispatcher {
         engine.clock.virtualTimeMs,
         'DISPATCH_MESSAGE',
         producerNodeId,
-        `⚡ [acks=0] Fire-and-forget: Producer acknowledged immediately without waiting for broker commit log!`,
+        `⚡ [acks=0] Fire-and-forget: send accepted locally; no broker acknowledgment is available.`,
       );
       engine.recordEvent(ackEvent);
     }
@@ -171,6 +172,7 @@ export class SimMessageDispatcher {
         message,
         metadata: {
           partitionId: targetPartition,
+          producerAcks: engine.mechanicsConfig.producerAcks,
           topic,
           leaderBrokerId,
         },
@@ -184,22 +186,18 @@ export class SimMessageDispatcher {
   /**
    * Dispatch duplicate message to test consumer idempotency filter vs phantom writes
    */
-  public static dispatchDuplicateMessage(engine: SimEngine, customKey?: string): SimMessage | null {
-    const producerNode = Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
-    if (!producerNode) return null;
+  public static dispatchDuplicateMessage(
+    engine: SimEngine,
+    _customKey?: string,
+  ): SimMessage | null {
+    const producerNode = engine.nodes.get(engine.lastDispatchedProducerId ?? '');
+    if (!producerNode || producerNode.data.kind !== 'producer' || !engine.lastDispatchedMessage)
+      return null;
 
-    let messageToDup: SimMessage;
-    if (engine.lastDispatchedMessage) {
-      // Re-use exact same message payload & ID to simulate transport retry / at-least-once duplicate
-      messageToDup = {
-        ...engine.lastDispatchedMessage,
-        timestampMs: engine.clock.virtualTimeMs,
-      };
-    } else {
-      const key = customKey || (producerNode.data.messageKey as string) || 'U001';
-      messageToDup = createSimMessage(key, 5000, engine.clock.virtualTimeMs);
-      engine.lastDispatchedMessage = messageToDup;
-    }
+    const messageToDup: SimMessage = {
+      ...engine.lastDispatchedMessage,
+      timestampMs: engine.clock.virtualTimeMs,
+    };
 
     const publishEdge = Array.from(engine.edges.values()).find((e) => e.source === producerNode.id);
     if (!publishEdge) return null;
@@ -294,6 +292,7 @@ export class SimMessageDispatcher {
         message: messageToDup,
         metadata: {
           partitionId: targetPartition,
+          producerAcks: engine.mechanicsConfig.producerAcks,
           topic,
         },
       },
@@ -310,8 +309,12 @@ export class SimMessageDispatcher {
     engine: SimEngine,
     customerKey: string = 'U001',
     count: number = 3,
+    producerId?: string,
   ): void {
-    const producerNode = Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
+    if (!Number.isInteger(count) || count < 1 || count > 100) return;
+    const producerNode = producerId
+      ? engine.nodes.get(producerId)
+      : Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
     if (!producerNode) return;
 
     const publishEdge = Array.from(engine.edges.values()).find((e) => e.source === producerNode.id);
@@ -329,6 +332,7 @@ export class SimMessageDispatcher {
         engine.clock.virtualTimeMs + i * 120,
       );
       engine.lastDispatchedMessage = message;
+      engine.lastDispatchedProducerId = producerNode.id;
 
       // Handle Outbox Table burst
       if (targetNode && targetNode.data.kind === 'outbox-table') {
@@ -414,6 +418,7 @@ export class SimMessageDispatcher {
           message,
           metadata: {
             partitionId: targetPartition,
+            producerAcks: engine.mechanicsConfig.producerAcks,
             topic,
             burstIndex: i + 1,
             burstTotal: count,

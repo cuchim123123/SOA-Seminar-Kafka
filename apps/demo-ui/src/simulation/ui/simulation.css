@@ -1,3 +1,345 @@
+.simulation-workspace {
+  color: #172438;
+  font-size: 13px;
+}
+.simulation-workspace button,
+.simulation-workspace input,
+.simulation-workspace select,
+.sim-confirm button {
+  font: inherit;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #24354d;
+  padding: 7px 10px;
+}
+.simulation-workspace button,
+.simulation-workspace summary,
+.sim-confirm button {
+  cursor: pointer;
+}
+.simulation-workspace button:hover:not(:disabled) {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+.simulation-workspace button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.simulation-workspace :focus-visible,
+.sim-confirm :focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+.simulation-workspace .sim-primary,
+.sim-confirm .sim-primary {
+  background: #0369a1;
+  color: white;
+  border-color: #0369a1;
+  font-weight: 650;
+}
+.simulation-workspace .sim-primary:hover:not(:disabled) {
+  background: #075985;
+  color: white;
+}
+.sim-header,
+.sim-playback,
+.sim-composer,
+.sim-settings {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 18px;
+}
+.sim-header {
+  justify-content: space-between;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+.sim-header h1 {
+  margin: 2px 0;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.sim-eyebrow {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+}
+.sim-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.simulation-workspace label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.sim-header select {
+  max-width: 320px;
+}
+.sim-badge {
+  font-size: 11px;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  border-radius: 20px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.sim-playback {
+  border-bottom: 1px solid #e2e8f0;
+  min-height: 58px;
+}
+.sim-playback > .sim-primary {
+  min-width: 80px;
+}
+.sim-clock {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: #0f172a;
+}
+.sim-clock span {
+  color: #64748b;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  margin-left: 6px;
+}
+.sim-muted {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.sim-composer {
+  gap: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.sim-composer input:not([type='number']) {
+  width: 115px;
+}
+.sim-composer input[type='number'] {
+  width: 64px;
+}
+.sim-composer select {
+  max-width: 200px;
+}
+.sim-routing {
+  flex-basis: 100%;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+.sim-mechanics,
+.sim-scenario-guide {
+  border-bottom: 1px solid #e2e8f0;
+}
+.sim-mechanics > summary,
+.sim-scenario-guide > summary {
+  padding: 8px 18px;
+  color: #475569;
+  font-size: 12px;
+}
+.sim-settings {
+  background: #f8fafc;
+  align-items: flex-start;
+}
+.sim-settings > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.sim-checkbox {
+  padding: 7px 0;
+}
+.sim-scenario-guide p {
+  margin: 6px 18px 12px;
+  color: #64748b;
+}
+.sim-overflow {
+  position: relative;
+}
+.sim-overflow > summary {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+.sim-overflow[open] > div {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 40;
+  min-width: 240px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 8px 25px #0f172a26;
+}
+.sim-overflow small {
+  color: #64748b;
+  line-height: 1.5;
+}
+.sim-builder {
+  width: 270px;
+  flex: 0 0 270px;
+  overflow: auto;
+  padding: 14px;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.sim-builder > input,
+.sim-builder > button {
+  width: 100%;
+}
+.sim-builder h3 {
+  text-transform: uppercase;
+  font-size: 11px;
+  color: #64748b;
+  margin: 18px 0 6px;
+}
+.sim-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sim-panel-heading h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.simulation-workspace .sim-component {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 7px;
+}
+.sim-component small {
+  display: block;
+  color: #64748b;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.sim-confirm {
+  width: min(450px, 85vw);
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 24px;
+  color: #172438;
+  box-shadow: 0 20px 80px #0f172a40;
+}
+.sim-confirm::backdrop {
+  background: #0f172a80;
+}
+.sim-confirm h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.sim-confirm p {
+  line-height: 1.6;
+}
+.sim-confirm > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.sim-evidence {
+  border-top: 1px solid #cbd5e1;
+  background: #f8fafc;
+  z-index: 15;
+}
+.simulation-workspace .sim-evidence-toggle {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+  border: none;
+  border-radius: 0;
+  font-weight: 650;
+  padding: 10px 18px;
+}
+.sim-evidence-toggle span {
+  color: #64748b;
+  font-weight: 400;
+  font-size: 12px;
+}
+.sim-evidence-toggle span:last-child {
+  margin-left: auto;
+}
+.sim-evidence-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.sim-evidence-filters input {
+  flex: 1;
+  min-width: 180px;
+}
+.sim-evidence-columns {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  height: 240px;
+}
+.sim-evidence-list,
+.sim-evidence-detail {
+  overflow: auto;
+  padding: 8px 14px;
+}
+.simulation-workspace .sim-evidence-list > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 70px 170px 1fr;
+  gap: 10px;
+  text-align: left;
+  font-size: 11px;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  padding: 6px 3px;
+}
+.sim-evidence-list button[aria-pressed='true'] {
+  background: #e0f2fe;
+}
+.sim-evidence-detail {
+  border-left: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+.sim-evidence-detail dd {
+  margin: 4px 0 10px;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.sim-evidence-detail pre {
+  white-space: pre-wrap;
+  font-size: 11px;
+}
+@media (max-width: 900px) {
+  .sim-header-actions {
+    width: 100%;
+  }
+  .sim-header select {
+    max-width: 240px;
+  }
+  .sim-builder {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 25;
+    box-shadow: 4px 0 18px #0f172a20;
+  }
+  .sim-composer label {
+    flex-wrap: wrap;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .simulation-token {
     offset-distance: 50% !important;

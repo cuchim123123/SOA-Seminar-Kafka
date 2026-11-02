@@ -496,7 +496,10 @@ describe('Milestone 1 — Simulation Engine & Mechanics', () => {
       engine.setTopology(outboxNodes, outboxEdges);
       engine.clock.start();
 
-      // Dispatch duplicate message
+      // A duplicate requires a real previous event; first publish and drain it.
+      expect(engine.dispatchDuplicateMessage('U001')).toBeNull();
+      engine.dispatchProducerMessage('producer-1', 'U001');
+      while (engine.queue.size()) engine.step();
       engine.dispatchDuplicateMessage('U001');
 
       // Must be WRITE_OUTBOX

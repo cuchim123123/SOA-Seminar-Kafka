@@ -30,6 +30,17 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
 
   return (
     <>
+      <label>
+        Subscribed topic
+        <input
+          aria-label="Subscribed topic"
+          value={String(data.subscribedTopic ?? 'purchases')}
+          onChange={(event) => onUpdateData(id, { subscribedTopic: event.target.value })}
+        />
+      </label>
+      <p className="sim-muted">
+        One processing slot per replica. Group members must share this topic and one database sink.
+      </p>
       <section
         aria-label="Consumer group scaling"
         style={{ padding: 10, border: '1px solid #cbd5e1', borderRadius: 8 }}
