@@ -1,3 +1,7 @@
+import { Client } from 'pg';
+import { PostgresChangeFeed } from '@lab/observability';
+import { AppConfigService } from '../config/app-config.service';
+import { PurchaseChangesController } from './interfaces/http/purchase-changes.controller';
 import { PURCHASE_HISTORY_PORT } from './application/ports/purchase-history.port';
 import { ListPurchasesHandler } from './application/queries/list-purchases.handler';
 import { PostgresPurchaseHistoryAdapter } from './infrastructure/adapters/postgres-purchase-history.adapter';
@@ -22,8 +26,21 @@ import { PostgresUnitOfWorkAdapter } from './infrastructure/adapters/postgres-un
 import { PurchasesController } from './interfaces/http/purchases.controller';
 
 @Module({
-  controllers: [PurchaseHistoryController, PurchasesController],
+  controllers: [PurchaseChangesController, PurchaseHistoryController, PurchasesController],
   providers: [
+    {
+      provide: PostgresChangeFeed,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) =>
+        new PostgresChangeFeed(
+          config.changeFeedOptions,
+          () =>
+            new Client({
+              connectionString: config.databaseUrl,
+              connectionTimeoutMillis: config.changeFeedOptions.reconnectMs,
+            }),
+        ),
+    },
     ListPurchasesHandler,
     { provide: PURCHASE_HISTORY_PORT, useClass: PostgresPurchaseHistoryAdapter },
     CreatePurchaseHandler,

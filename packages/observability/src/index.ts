@@ -14,3 +14,9 @@ export * from './http/global-http-exception.filter';
 export * from './http/http-logging.interceptor';
 
 export * from './metrics';
+export { PostgresChangeFeed } from './live/postgres-change-feed';
+export type {
+  ChangeFeedOptions,
+  NotificationConnection,
+  EventStreamResponse,
+} from './live/postgres-change-feed';

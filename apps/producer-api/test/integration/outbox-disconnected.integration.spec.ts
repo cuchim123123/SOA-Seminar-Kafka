@@ -21,7 +21,7 @@ describe('P4-02 CQRS Purchase Flow & Outbox Offline Durability', () => {
     const prisma = new PrismaService(config);
     await prisma.onModuleInit();
 
-    const unitOfWork = new PostgresUnitOfWorkAdapter(prisma);
+    const unitOfWork = new PostgresUnitOfWorkAdapter(prisma, config);
     const createPurchaseHandler = new CreatePurchaseHandler(unitOfWork);
     const readDao = new PostgresPurchaseReadDaoAdapter(prisma);
 

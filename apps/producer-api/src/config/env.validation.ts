@@ -15,6 +15,14 @@ export const envSchema = z.object({
     .min(1)
     .default('postgresql://postgres:postgres@localhost:5433/purchases_db?schema=public'),
   PURCHASES_DATABASE_URL: z.string().optional(),
+  UI_PUSH_PURCHASE_CHANNEL: z
+    .string()
+    .regex(/^[a-z_][a-z0-9_]{0,62}$/)
+    .default('real_app_purchases_v1'),
+  UI_PUSH_HEARTBEAT_MS: z.coerce.number().int().min(1000).max(60000).default(15000),
+  UI_PUSH_RECONNECT_MS: z.coerce.number().int().min(100).max(30000).default(1000),
+  UI_PUSH_COALESCE_MS: z.coerce.number().int().min(0).max(1000).default(25),
+  UI_PUSH_MAX_CLIENTS: z.coerce.number().int().min(1).max(1000).default(32),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

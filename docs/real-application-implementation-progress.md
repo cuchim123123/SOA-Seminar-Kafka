@@ -4,9 +4,9 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Overall status
 
-- Current phase: Phase1 read foundation complete; next is Phase1b server push.
+- Current phase: Phase1b server push; producer path implemented and validated; other contexts remain.
 - Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
-- In progress: preparing Phase1b server push. User-approved coordinated cutover/Loyalty locking implemented and validated (C2).
+- In progress: reusable PostgreSQL/SSE feed and producer transaction invalidation implemented. Focused unit/live HTTP tests and workspace typecheck pass; full gates passed (C3). Worker/replay feeds and browser subscription integration are not implemented yet.
 - Remaining: Phase1 APIs/client; Phase1b transactional notifications/SSE and one verified end-to-end flow; Phase2 sidebar; Phase3 business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 browser/runtime validation.
 - Blockers: existing unrelated simulation edits fail the frontend build (see C1). Cutover concurrency tests now pass; global review/confirmation UI is still required before exposing promotion.
 
@@ -57,3 +57,11 @@ Resume protocol: read plan and this document, inspect `git status`/recent commit
 - Four real PostgreSQL tests pass: live-first skips obsolete staging; cutover-first preserves later live update for existing and absent accounts; duplicate cutovers apply once. Random test-owned accounts/runs/staging were removed by exact owned IDs; no application history was reset and no Kafka messages published.
 - Existing five cutover unit tests pass; full unit suite remains236 tests/55 files. Format/lint passed. A subsequent typecheck caught missing response casts in the new C1 integration test; corrected those test types and reran workspace typecheck successfully.
 - Browser build still blocked by the unrelated pre-existing simulation errors documented above. Full Real Application feature is incomplete.
+
+### C3 — producer push checkpoint complete
+
+- Shared `packages/observability/src/live/postgres-change-feed.ts` accepts an existing pg connection factory; no new package dependency. One dedicated LISTEN session per service, coalesced invalidations, bounded clients, disconnect on backpressure, heartbeat-only timer, reconnect and resnapshot semantics. No database polling or durable SSE event-ID claims.
+- Producer `GET /api/v1/purchase-changes` exposes SSE; its unit-of-work issues transactional NOTIFY before commit. This is a transient invalidation, not CDC publication or processing success. Channel/timing/client limits are Zod-validated bootstrap settings documented in `.env.example`.
+- Four transport unit tests and one live PostgreSQL→SSE→HTTP integration test pass. The live test creates exactly one random `real-ui-push-*` purchase per execution, retaining its source/outbox evidence rather than retracting CDC history. It also verifies cross-session notification, rollback silence and fresh initial invalidation on SSE reconnection. No browser UI is integrated yet.
+- Workspace typecheck and observability build pass. Full format/lint/typecheck passed; unit suite56 files/240 tests passed. Tests do not yet cover a real database-server disconnect, browser EventSource through Vite, worker/replay changes or consumer-control updates.
+- Exact next task: finish/record gates, commit C3; then reuse this feed for Loyalty/Analytics and replay (including cross-process cutover → Loyalty invalidation), implement subscription/reconciliation hooks, and verify those paths before shell/page expansion.
