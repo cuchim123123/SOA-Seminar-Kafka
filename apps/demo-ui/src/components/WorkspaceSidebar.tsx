@@ -83,6 +83,7 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
         {link('simulation', 'Simulation Playground')}
         <h2 className="sidebar-label">Real Application</h2>
         {link('overview', 'Overview', true)}
+        {link('purchases', 'Purchases', true)}
         {link('benchmark', 'Purchase Benchmark')}
         {link('guide', 'Architecture Guide')}
       </nav>

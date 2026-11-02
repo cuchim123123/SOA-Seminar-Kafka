@@ -131,3 +131,5 @@ until their tickets are selected. Report commands actually run.
 - [ ] REAL-04: coordinated cutover locking approved and integration-tested; browser integration and presenter validation remain.
 
 See `docs/real-application-implementation-progress.md` for exact checks, blockers and resume instructions.
+
+Real UI checkpoint C7: purchase entry, retained idempotency key, paginated history and canonical detail implemented; browser acceptance and remaining business/recovery features pending. See `docs/real-application-implementation-progress.md`.

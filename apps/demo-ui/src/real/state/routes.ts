@@ -1,4 +1,4 @@
-export const realPages = ['overview'] as const;
+export const realPages = ['overview', 'purchases'] as const;
 export type RealPage = (typeof realPages)[number];
 export interface WorkspaceRoute {
   page: 'simulation' | 'benchmark' | 'guide' | RealPage;
