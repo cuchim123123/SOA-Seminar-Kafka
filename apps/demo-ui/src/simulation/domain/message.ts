@@ -30,9 +30,15 @@ export function createSimMessage(
   key: string = 'U001',
   amountCents: number = 4999,
   virtualTimeMs: number = 0,
+  options?: {
+    purchaseId?: string;
+    itemDescription?: string;
+    targetFailedConsumerIds?: string[];
+    targetFailedGroupIds?: string[];
+  },
 ): SimMessage {
   messageSeq += 1;
-  const purchaseId = `sim-order-${String(messageSeq).padStart(4, '0')}`;
+  const purchaseId = options?.purchaseId || `sim-order-${String(messageSeq).padStart(4, '0')}`;
 
   return {
     id: `msg-${Date.now()}-${messageSeq}`,
@@ -41,7 +47,15 @@ export function createSimMessage(
       purchaseId,
       customerId: key,
       amountCents,
-      itemDescription: `Simulated Retail Order #${messageSeq}`,
+      itemDescription: options?.itemDescription || `Simulated Retail Order #${messageSeq}`,
+      metadata: {
+        ...(options?.targetFailedConsumerIds
+          ? { targetFailedConsumerIds: options.targetFailedConsumerIds }
+          : {}),
+        ...(options?.targetFailedGroupIds
+          ? { targetFailedGroupIds: options.targetFailedGroupIds }
+          : {}),
+      },
     },
     createdAtVirtualMs: virtualTimeMs,
     status: 'CREATED',

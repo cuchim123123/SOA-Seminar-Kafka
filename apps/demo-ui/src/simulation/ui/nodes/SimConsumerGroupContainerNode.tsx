@@ -53,7 +53,15 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
         }}
       >
         {/* Left: Group Identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            maxWidth: '100%',
+            overflow: 'hidden',
+          }}
+        >
           <div
             style={{
               width: '26px',
@@ -64,11 +72,12 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '0.85rem',
+              flexShrink: 0,
             }}
           >
             👥
           </div>
-          <div>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
             <div
               style={{
                 fontSize: '0.825rem',
@@ -76,15 +85,26 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
                 color: '#0f172a',
                 letterSpacing: '-0.01em',
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
+              title={`Consumer Group: ${groupId}`}
             >
-              Consumer Group: <span style={{ color: accentColor }}>{groupId}</span>
+              Group: <span style={{ color: accentColor }}>{groupId}</span>
             </div>
           </div>
         </div>
 
         {/* Right: Badges */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            flexWrap: 'wrap',
+            maxWidth: '100%',
+          }}
+        >
           {isPaused && (
             <span
               style={{
@@ -95,6 +115,7 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
                 background: '#fef3c7',
                 color: '#d97706',
                 border: '1px solid #fde68a',
+                whiteSpace: 'nowrap',
               }}
             >
               ⏸️ GROUP PAUSED
@@ -110,9 +131,10 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
               background: '#ecfdf5',
               color: '#059669',
               border: '1px solid #a7f3d0',
+              whiteSpace: 'nowrap',
             }}
           >
-            {memberCount} Active Worker{memberCount > 1 ? 's' : ''}
+            {memberCount} Worker{memberCount > 1 ? 's' : ''}
           </span>
 
           <span
@@ -124,9 +146,10 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
               background: '#f1f5f9',
               color: '#334155',
               border: '1px solid #cbd5e1',
+              whiteSpace: 'nowrap',
             }}
           >
-            Assigned: [{partitionsText}]
+            [{partitionsText}]
           </span>
 
           <span
@@ -138,9 +161,10 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
               background: '#f0f9ff',
               color: '#0284c7',
               border: '1px solid #bae6fd',
+              whiteSpace: 'nowrap',
             }}
           >
-            Assignor: {assignorStrategy}
+            {assignorStrategy}
           </span>
         </div>
       </div>
@@ -153,19 +177,23 @@ export const SimConsumerGroupContainerNode: React.FC<NodeProps> = ({ data }) => 
           alignItems: 'center',
           marginTop: 'auto',
           paddingTop: '6px',
+          overflow: 'hidden',
         }}
       >
         <span
           style={{
-            fontSize: '0.6rem',
+            fontSize: '0.575rem',
             fontWeight: 800,
             textTransform: 'uppercase',
-            letterSpacing: '0.08em',
+            letterSpacing: '0.06em',
             color: '#94a3b8',
-            opacity: 0.8,
+            opacity: 0.85,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
-          KAFKA GROUP OFFSET COMMIT DOMAIN (INDEPENDENT HIGH-WATERMARK)
+          INDEPENDENT OFFSET COMMIT DOMAIN
         </span>
       </div>
     </div>

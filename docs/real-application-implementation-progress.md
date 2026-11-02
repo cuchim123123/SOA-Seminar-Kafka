@@ -8,7 +8,7 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 - Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
 - In progress: preparing shell integration. All service streams, transactional projection/replay notifications and browser subscription/reconciliation primitives are implemented and tested. Hooks are not mounted in a page yet. Simulation build repair/commit scope question is pending.
 - Remaining: Phase1 APIs/client; Phase1b transactional notifications/SSE and one verified end-to-end flow; Phase2 sidebar; Phase3 business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 browser/runtime validation.
-- Blockers: existing unrelated simulation edits fail the frontend build (see C1). Cutover concurrency tests now pass; global review/confirmation UI is still required before exposing promotion.
+- Blockers: none currently. User approved repairing/committing the pre-existing simulation changes separately; frontend build repaired (C5). Global review/confirmation UI is still required before exposing promotion.
 
 ## Decisions and boundaries
 
@@ -29,7 +29,7 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. Resolve the pending scope question about pre-existing simulation build errors. Then implement Phase2 persistent sidebar/hash routes, preserving Simulation/Benchmark/Guide and mounting the real-workspace resource hooks. Do not repeat completed backend work.
+1. Simulation repair/commit was approved and completed (C5). Implement Phase2 persistent sidebar/hash routes, preserving Simulation/Benchmark/Guide and mounting the real-workspace resource hooks. Do not repeat completed backend work.
 2. Mount the shared subscription pool via `useLiveResource`; verify real EventSource through Vite and dependency outages in an actual browser. Backend/direct HTTP tests do not certify this yet. Implement business pages sequentially afterward.
 3. Cutover locking was approved and implemented; do not rework it. Retain global review/explicit confirmation requirements when building recovery UI.
 4. Before frontend shell integration, reconcile the pre-existing simulation build failures without reverting the user's ongoing changes. `pnpm typecheck` does not run the same referenced app configuration as `pnpm --filter @lab/demo-ui build`; run both.
@@ -84,3 +84,10 @@ Resume protocol: read plan and this document, inspect `git status`/recent commit
 - C4 commit: projection/replay push and browser reconciliation primitives (find by its descriptive commit subject in `git log`).
 
 No commits pushed. Unrelated simulation/benchmark edits remain unstaged. Existing running services were not restarted, so running app processes may still execute previous builds. Build/restart the selected services before browser acceptance testing; preserve databases and Kafka history.
+
+### C5 — separately approved simulation repair
+
+- User authorized repair and separate commit of the pre-existing Simulation Playground work. Includes its broker nodes, poison-message controls and associated simulation changes; benchmark edits remain excluded.
+- Added required broker icons to blueprint data; imported the missing broker type and explicitly typed palette initial data. Fixed palette callback dependencies so broker-ID allocation uses the current node list.
+- Frontend production build now passes. Format/lint/workspace typecheck and244 unit tests passed. Build emits non-fatal bundle-size and React Flow module-directive warnings. No browser behavior certification claimed yet.
+- This resolves the build blocker for Phase2. Simulation changes belong in their own commit, not the Real Application shell commit.

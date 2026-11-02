@@ -76,9 +76,31 @@ export class SimEngine {
       this.edges.set(edge.id, edge);
     }
 
-    // Sync Kafka Cluster Topic configuration if a cluster node is in topology
+    // Sync Kafka Broker topology and Topic configuration
     const clusterNode = nodes.find((n) => n.data.kind === 'kafka-cluster');
-    if (clusterNode) {
+    const brokerNodes = nodes.filter((n) => n.data.kind === 'kafka-broker');
+
+    if (brokerNodes.length > 0) {
+      // Ensure all broker nodes are registered in kafkaCluster.brokers
+      for (const bNode of brokerNodes) {
+        const bId = (bNode.data.brokerId as number) || 1;
+        if (!this.kafkaCluster.brokers.has(bId)) {
+          this.kafkaCluster.brokers.set(bId, {
+            id: bId,
+            host: (bNode.data.host as string) || `broker-${bId}:9092`,
+            isController: bId === 1,
+            status: bNode.data.status === 'CRASHED' ? 'CRASHED' : 'ONLINE',
+          });
+        }
+      }
+      // Topic sync with broker count
+      const topicName = 'purchases';
+      const existingTopic = this.kafkaCluster.topics.get(topicName);
+      const safeRF = Math.min(brokerNodes.length, existingTopic?.replicationFactor || 3);
+      if (!existingTopic) {
+        this.kafkaCluster.createTopic(topicName, 4, safeRF, Math.min(safeRF, 2));
+      }
+    } else if (clusterNode) {
       const topicName = (clusterNode.data.activeTopic as string) || 'purchases';
       const pCount = (clusterNode.data.partitionCount as number) || 4;
       const rf = (clusterNode.data.replicationFactor as number) || 3;
@@ -158,8 +180,22 @@ export class SimEngine {
     this.notifyStateUpdated();
   }
 
-  public dispatchProducerMessage(producerNodeId: string, customKey?: string): SimMessage | null {
-    return SimMessageDispatcher.dispatchProducerMessage(this, producerNodeId, customKey);
+  public dispatchProducerMessage(
+    producerNodeId: string,
+    customKey?: string,
+    messageOptions?: {
+      purchaseId?: string;
+      itemDescription?: string;
+      targetFailedConsumerIds?: string[];
+      targetFailedGroupIds?: string[];
+    },
+  ): SimMessage | null {
+    return SimMessageDispatcher.dispatchProducerMessage(
+      this,
+      producerNodeId,
+      customKey,
+      messageOptions,
+    );
   }
 
   public dispatchDuplicateMessage(customKey?: string): SimMessage | null {
@@ -358,6 +394,39 @@ export class SimEngine {
           node.data.brokerControllers = brokerControllers;
           node.data.partitionLeaders = partitionLeaders;
           node.data.partitionIsr = partitionIsr;
+        } else if (node.data.kind === 'kafka-broker') {
+          const bId = (node.data.brokerId as number) || 1;
+          const broker = this.kafkaCluster.brokers.get(bId);
+          if (broker) {
+            node.data.status = broker.status === 'CRASHED' ? 'CRASHED' : 'ACTIVE';
+            node.data.isController = broker.isController;
+          }
+
+          // Compute hosted partition replicas on this broker
+          const hosted: Array<{
+            topic: string;
+            partitionId: number;
+            isLeader: boolean;
+            isInIsr: boolean;
+            replicas: number[];
+            isr: number[];
+          }> = [];
+
+          for (const [tName, t] of this.kafkaCluster.topics.entries()) {
+            for (const [pId, part] of t.partitions.entries()) {
+              if (part.replicas.includes(bId)) {
+                hosted.push({
+                  topic: tName,
+                  partitionId: pId,
+                  isLeader: part.leaderBrokerId === bId,
+                  isInIsr: part.isr.includes(bId),
+                  replicas: [...part.replicas],
+                  isr: [...part.isr],
+                });
+              }
+            }
+          }
+          node.data.topicPartitions = hosted;
         }
       }
     }

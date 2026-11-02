@@ -21,26 +21,21 @@ export const COMPONENT_REGISTRY: ComponentMetadata[] = [
     },
   },
   {
-    kind: 'kafka-cluster',
-    title: 'Kafka Cluster',
+    kind: 'kafka-broker',
+    title: 'Kafka Broker Node',
     category: 'messaging',
-    icon: '📦',
+    icon: '🖥️',
     description:
-      'KRaft distributed log with multi-broker cluster, topics, and append-only partitions.',
+      'Standalone Kafka broker hosting partition leaders & ISR followers with automated failover.',
     allowedSourcePorts: ['dispatch'],
     allowedTargetPorts: ['publish'],
     defaultData: {
-      title: 'Kafka Cluster',
-      icon: '📦',
+      title: 'Kafka Broker',
+      icon: '🖥️',
       status: 'ACTIVE',
-      clusterId: 'kraft-sim',
-      brokerCount: 3,
-      brokerIds: [1, 2, 3],
-      activeTopic: 'purchases',
-      partitionCount: 4,
-      replicationFactor: 3,
-      minInsyncReplicas: 2,
-      brokerLatencyMs: 25,
+      brokerId: 1,
+      host: 'broker-1:9092',
+      isController: false,
     },
   },
   {
@@ -155,11 +150,23 @@ export const COMPONENT_REGISTRY: ComponentMetadata[] = [
  *   consumer -> dead-letter-queue (dlq-route)
  */
 export function isValidConnection(sourceKind: ComponentKind, targetKind: ComponentKind): boolean {
-  if (sourceKind === 'producer' && targetKind === 'kafka-cluster') return true;
+  if (
+    sourceKind === 'producer' &&
+    (targetKind === 'kafka-broker' || targetKind === 'kafka-cluster')
+  )
+    return true;
   if (sourceKind === 'producer' && targetKind === 'outbox-table') return true;
   if (sourceKind === 'outbox-table' && targetKind === 'cdc-relay') return true;
-  if (sourceKind === 'cdc-relay' && targetKind === 'kafka-cluster') return true;
-  if (sourceKind === 'kafka-cluster' && targetKind === 'consumer') return true;
+  if (
+    sourceKind === 'cdc-relay' &&
+    (targetKind === 'kafka-broker' || targetKind === 'kafka-cluster')
+  )
+    return true;
+  if (
+    (sourceKind === 'kafka-broker' || sourceKind === 'kafka-cluster') &&
+    targetKind === 'consumer'
+  )
+    return true;
   if (sourceKind === 'consumer' && targetKind === 'database') return true;
   if (sourceKind === 'consumer' && targetKind === 'dead-letter-queue') return true;
   if (sourceKind === 'consumer' && targetKind === 'worker-service') return true;

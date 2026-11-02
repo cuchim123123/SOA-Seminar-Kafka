@@ -4,6 +4,7 @@ export type ComponentCategory = 'messaging' | 'application' | 'storage' | 'utili
 
 export type ComponentKind =
   | 'producer'
+  | 'kafka-broker'
   | 'kafka-cluster'
   | 'consumer'
   | 'worker-service'
@@ -32,7 +33,16 @@ export interface SimBaseNodeData extends Record<string, unknown> {
   kind: ComponentKind;
   title: string;
   icon: string;
-  status: 'IDLE' | 'ACTIVE' | 'PROCESSING' | 'POLLING' | 'PAUSED' | 'ERROR' | 'OFFLINE' | 'CRASHED';
+  status:
+    | 'IDLE'
+    | 'ACTIVE'
+    | 'PROCESSING'
+    | 'POLLING'
+    | 'PAUSED'
+    | 'ERROR'
+    | 'OFFLINE'
+    | 'CRASHED'
+    | 'DEGRADED';
   statusText?: string;
 }
 
@@ -133,8 +143,24 @@ export interface SimKafkaMechanicsConfig {
 
 export type KafkaMechanicsConfig = SimKafkaMechanicsConfig;
 
+export interface SimKafkaBrokerData extends SimBaseNodeData {
+  kind: 'kafka-broker';
+  brokerId: number;
+  host: string;
+  isController: boolean;
+  topicPartitions?: Array<{
+    topic: string;
+    partitionId: number;
+    isLeader: boolean;
+    isInIsr: boolean;
+    replicas: number[];
+    isr: number[];
+  }>;
+}
+
 export type SimNodeData =
   | SimProducerData
+  | SimKafkaBrokerData
   | SimKafkaClusterData
   | SimConsumerData
   | SimConsumerGroupContainerData
@@ -164,3 +190,5 @@ export interface SimEdgeData extends Record<string, unknown> {
 }
 
 export type SimCustomEdge = Edge<SimEdgeData>;
+export type { SimMessage, SimMessagePayload } from './message';
+export type { SimEvent, SimEventType } from './events';

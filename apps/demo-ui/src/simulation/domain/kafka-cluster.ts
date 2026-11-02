@@ -155,9 +155,9 @@ export class SimKafkaClusterModel {
     return { affectedPartitions, newController };
   }
 
-  public reviveBroker(brokerId: number): void {
+  public reviveBroker(brokerId: number): boolean {
     const broker = this.brokers.get(brokerId);
-    if (!broker || broker.status === 'ONLINE') return;
+    if (!broker || broker.status === 'ONLINE') return false;
 
     broker.status = 'ONLINE';
 
@@ -181,6 +181,8 @@ export class SimKafkaClusterModel {
         }
       }
     }
+
+    return true;
   }
 
   public canWriteToPartition(

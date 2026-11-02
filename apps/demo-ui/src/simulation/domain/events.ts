@@ -13,6 +13,8 @@ export type SimEventType =
   | 'REBALANCE_GROUP'
   | 'LEADER_FAILOVER'
   | 'CRASH_BROKER'
+  | 'BROKER_CRASH'
+  | 'BROKER_REVIVE'
   | 'CRASH_CONSUMER'
   | 'REVIVE_CONSUMER'
   | 'ROUTE_DLQ'

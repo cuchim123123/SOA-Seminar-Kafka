@@ -14,6 +14,7 @@ import '@xyflow/react/dist/style.css';
 import { useSimulationStore } from '../store/useSimulationStore';
 import { SimProducerNode } from './nodes/SimProducerNode';
 import { SimKafkaNode } from './nodes/SimKafkaNode';
+import { SimKafkaBrokerNode } from './nodes/SimKafkaBrokerNode';
 import { SimConsumerNode } from './nodes/SimConsumerNode';
 import { SimDatabaseNode } from './nodes/SimDatabaseNode';
 import { SimDlqNode } from './nodes/SimDlqNode';
@@ -33,6 +34,7 @@ import { KafkaMechanicsToolbar } from './controls/KafkaMechanicsToolbar';
 import { CurrentOffsetMenu } from './controls/CurrentOffsetMenu';
 import { SimEventTimeline } from './timeline/SimEventTimeline';
 import { BlueprintSelectorModal } from './blueprints/BlueprintSelectorModal';
+import { PoisonPillModal } from './controls/PoisonPillModal';
 import type { ComponentKind, SimCustomNode } from '../domain/types';
 
 export const SimulationLab: React.FC = () => {
@@ -75,6 +77,8 @@ export const SimulationLab: React.FC = () => {
     blueprints,
     activeBlueprintId,
     setTopicPartitionCount,
+    setTopicReplicationFactor,
+    setTopicMinIsr,
     setAssignorStrategy,
     crashBroker,
     reviveBroker,
@@ -89,7 +93,10 @@ export const SimulationLab: React.FC = () => {
 
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [blueprintModalOpen, setBlueprintModalOpen] = useState(false);
+  const [poisonPillModalOpen, setPoisonPillModalOpen] = useState(false);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  const consumerNodes = useMemo(() => nodes.filter((n) => n.data.kind === 'consumer'), [nodes]);
 
   // Load blueprint and smoothly fit view onto canvas
   const handleSelectBlueprint = useCallback(
@@ -111,6 +118,7 @@ export const SimulationLab: React.FC = () => {
   const nodeTypes: NodeTypes = useMemo(
     () => ({
       producerNode: SimProducerNode,
+      kafkaBrokerNode: SimKafkaBrokerNode,
       kafkaClusterNode: SimKafkaNode,
       consumerNode: SimConsumerNode,
       databaseNode: SimDatabaseNode,
@@ -229,7 +237,7 @@ export const SimulationLab: React.FC = () => {
         onReset={reset}
         onSetSpeed={setSpeed}
         onDispatchMessage={() => dispatchMessage()}
-        onDispatchPoisonPill={dispatchPoisonPill}
+        onDispatchPoisonPill={() => setPoisonPillModalOpen(true)}
         onLoadDefaultGraph={loadDefaultGraph}
         blueprints={blueprints}
         activeBlueprintId={activeBlueprintId}
@@ -245,7 +253,7 @@ export const SimulationLab: React.FC = () => {
         onToggleIdempotency={toggleConsumerIdempotency}
         onDispatchDuplicate={dispatchDuplicateMessage}
         onDispatchOrderedBurst={dispatchOrderedBurst}
-        onDispatchPoisonPill={dispatchPoisonPill}
+        onDispatchPoisonPill={() => setPoisonPillModalOpen(true)}
         offsetMenu={
           <CurrentOffsetMenu
             engine={engine}
@@ -314,6 +322,8 @@ export const SimulationLab: React.FC = () => {
             onDuplicateNode={duplicateNode}
             onDeleteNode={deleteNode}
             onSetPartitionCount={setTopicPartitionCount}
+            onSetReplicationFactor={setTopicReplicationFactor}
+            onSetMinIsr={setTopicMinIsr}
             onSetAssignorStrategy={setAssignorStrategy}
             onCrashBroker={crashBroker}
             onReviveBroker={reviveBroker}
@@ -324,14 +334,17 @@ export const SimulationLab: React.FC = () => {
             onCreateClusterTopic={createClusterTopic}
             onSetActiveClusterTopic={setActiveClusterTopic}
             brokers={Array.from(engine.kafkaCluster.brokers.values())}
-            assignorStrategy={engine.consumerGroups.get('loyalty-v1')?.assignorStrategy || 'round-robin'}
+            minInsyncReplicas={engine.kafkaCluster.topics.get('purchases')?.minInsyncReplicas ?? 2}
+            replicationFactor={engine.kafkaCluster.topics.get('purchases')?.replicationFactor ?? 3}
+            assignorStrategy={
+              engine.consumerGroups.get('loyalty-v1')?.assignorStrategy || 'round-robin'
+            }
             partitionLogs={engine.kafkaCluster.getAllPartitions(
               (selectedNode?.data.activeTopic as string) || 'purchases',
             )}
             committedOffsets={
-              engine.consumerGroups.get(
-                (selectedNode?.data.groupId as string) || 'loyalty-v1',
-              )?.committedNextOffsets || new Map()
+              engine.consumerGroups.get((selectedNode?.data.groupId as string) || 'loyalty-v1')
+                ?.committedNextOffsets || new Map()
             }
             consumerGroups={Array.from(engine.consumerGroups.values())}
             allTopics={Array.from(engine.kafkaCluster.topics.values())}
@@ -349,6 +362,14 @@ export const SimulationLab: React.FC = () => {
         blueprints={blueprints}
         activeBlueprintId={activeBlueprintId}
         onSelectBlueprint={handleSelectBlueprint}
+      />
+
+      {/* ── TARGETED POISON PILL INJECTION MODAL ── */}
+      <PoisonPillModal
+        isOpen={poisonPillModalOpen}
+        onClose={() => setPoisonPillModalOpen(false)}
+        consumerNodes={consumerNodes}
+        onInject={(options) => dispatchPoisonPill(options)}
       />
     </div>
   );

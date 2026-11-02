@@ -6,6 +6,7 @@ import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-reg
 import { SimConsumerGroupModel } from '../domain/consumer-group';
 import type {
   SimCustomNode,
+  SimKafkaBrokerData,
   SimCustomEdge,
   ComponentKind,
   SimProducerAcks,
@@ -125,26 +126,63 @@ export function useSimulationStore() {
       const id = `node-${kind}-${nextNodeId}`;
 
       let nodeType = `${kind}Node`;
+      if (kind === 'kafka-broker') nodeType = 'kafkaBrokerNode';
       if (kind === 'kafka-cluster') nodeType = 'kafkaClusterNode';
       if (kind === 'dead-letter-queue') nodeType = 'deadLetterQueueNode';
       if (kind === 'outbox-table') nodeType = 'outboxTableNode';
       if (kind === 'cdc-relay') nodeType = 'cdcRelayNode';
 
+      let initialData: Record<string, unknown> = {
+        ...def.defaultData,
+        id,
+        kind,
+      };
+
+      if (kind === 'kafka-broker') {
+        const existingBrokers = nodes
+          .filter((n) => n.data.kind === 'kafka-broker')
+          .map((n) => (n.data as SimKafkaBrokerData).brokerId || 1);
+        const nextBrokerId = existingBrokers.length > 0 ? Math.max(...existingBrokers) + 1 : 1;
+        initialData = {
+          ...initialData,
+          brokerId: nextBrokerId,
+          host: `broker-${nextBrokerId}:9092`,
+          title: `Broker B${nextBrokerId}`,
+          isController: nextBrokerId === 1,
+        };
+
+        // Ensure broker exists in engine's broker map
+        if (!engine.kafkaCluster.brokers.has(nextBrokerId)) {
+          engine.kafkaCluster.brokers.set(nextBrokerId, {
+            id: nextBrokerId,
+            host: `broker-${nextBrokerId}:9092`,
+            isController: nextBrokerId === 1,
+            status: 'ONLINE',
+          });
+        }
+      }
+
+      if (kind === 'consumer') {
+        const uniqueGroupId = `consumer-group-${nextNodeId}`;
+        initialData = {
+          ...initialData,
+          groupId: uniqueGroupId,
+          instanceId: `consumer-${nextNodeId}`,
+          title: `Consumer (${uniqueGroupId})`,
+        };
+      }
+
       const newNode: SimCustomNode = {
         id,
         type: nodeType,
         position,
-        data: {
-          ...def.defaultData,
-          id,
-          kind,
-        } as unknown as SimCustomNode['data'],
+        data: initialData as unknown as SimCustomNode['data'],
       };
 
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(id);
     },
-    [],
+    [nodes, engine],
   );
 
   // Duplicate a node with context-aware connection replication for consumers
@@ -392,6 +430,33 @@ export function useSimulationStore() {
     [engine, syncFromEngine],
   );
 
+  const setTopicReplicationFactor = useCallback(
+    (rf: number) => {
+      const topic = engine.kafkaCluster.topics.get('purchases');
+      if (topic) {
+        topic.replicationFactor = rf;
+        // Re-distribute replicas with new RF
+        const pCount = topic.partitions.size;
+        engine.kafkaCluster.createTopic('purchases', pCount, rf, topic.minInsyncReplicas);
+      }
+      engine.notifyStateUpdated();
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
+  const setTopicMinIsr = useCallback(
+    (minIsr: number) => {
+      const topic = engine.kafkaCluster.topics.get('purchases');
+      if (topic) {
+        topic.minInsyncReplicas = minIsr;
+      }
+      engine.notifyStateUpdated();
+      syncFromEngine();
+    },
+    [engine, syncFromEngine],
+  );
+
   // Load architectural blueprint onto canvas
   const loadBlueprint = useCallback(
     (blueprintId: string) => {
@@ -581,18 +646,43 @@ export function useSimulationStore() {
     return () => window.removeEventListener('sim:toggle-pause-consumer', handleToggle);
   }, [togglePauseConsumer]);
 
-  const dispatchPoisonPill = useCallback(() => {
-    const pNode = nodes.find((n) => n.data.kind === 'producer');
-    if (!pNode) {
-      alert('Please add a Producer to the canvas first.');
-      return;
-    }
-    if (engine.clock.status === 'STOPPED') {
-      engine.clock.start();
-    }
-    engine.dispatchProducerMessage(pNode.id, 'POISON_PILL');
-    syncFromEngine();
-  }, [nodes, engine, syncFromEngine]);
+  useEffect(() => {
+    const handleToggleBroker = (e: Event) => {
+      const customEvent = e as CustomEvent<{ brokerId: number }>;
+      const bId = customEvent.detail?.brokerId;
+      if (bId !== undefined) {
+        const broker = engine.kafkaCluster.brokers.get(bId);
+        if (broker?.status === 'ONLINE') {
+          crashBroker(bId);
+        } else {
+          reviveBroker(bId);
+        }
+      }
+    };
+    window.addEventListener('sim:toggle-broker-crash', handleToggleBroker);
+    return () => window.removeEventListener('sim:toggle-broker-crash', handleToggleBroker);
+  }, [engine, crashBroker, reviveBroker]);
+
+  const dispatchPoisonPill = useCallback(
+    (options?: { targetFailedConsumerIds?: string[]; targetFailedGroupIds?: string[] }) => {
+      const pNode = nodes.find((n) => n.data.kind === 'producer');
+      if (!pNode) {
+        alert('Please add a Producer to the canvas first.');
+        return;
+      }
+      if (engine.clock.status === 'STOPPED') {
+        engine.clock.start();
+      }
+      engine.dispatchProducerMessage(pNode.id, 'POISON_PILL', {
+        purchaseId: 'POISON-ERR-999',
+        itemDescription: '☠️ Poison-Pill Record (Deserialization/Validation Hazard)',
+        targetFailedConsumerIds: options?.targetFailedConsumerIds,
+        targetFailedGroupIds: options?.targetFailedGroupIds,
+      });
+      syncFromEngine();
+    },
+    [nodes, engine, syncFromEngine],
+  );
 
   const setProducerAcks = useCallback(
     (acks: SimProducerAcks) => {
@@ -724,6 +814,8 @@ export function useSimulationStore() {
     blueprints: SYSTEM_BLUEPRINTS,
     activeBlueprintId,
     setTopicPartitionCount,
+    setTopicReplicationFactor,
+    setTopicMinIsr,
     setAssignorStrategy,
     crashBroker,
     reviveBroker,

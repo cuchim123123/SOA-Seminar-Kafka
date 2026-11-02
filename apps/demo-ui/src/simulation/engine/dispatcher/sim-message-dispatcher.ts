@@ -11,6 +11,12 @@ export class SimMessageDispatcher {
     engine: SimEngine,
     producerNodeId: string,
     customKey?: string,
+    messageOptions?: {
+      purchaseId?: string;
+      itemDescription?: string;
+      targetFailedConsumerIds?: string[];
+      targetFailedGroupIds?: string[];
+    },
   ): SimMessage | null {
     if (engine.clock.status === 'STOPPED') {
       engine.clock.start();
@@ -35,7 +41,7 @@ export class SimMessageDispatcher {
     const targetNodeId = publishEdge.target;
     const targetNode = engine.nodes.get(targetNodeId);
     const key = customKey || (producerNode.data.messageKey as string) || 'U001';
-    const message = createSimMessage(key, 4999, engine.clock.virtualTimeMs);
+    const message = createSimMessage(key, 4999, engine.clock.virtualTimeMs, messageOptions);
 
     // Save as last dispatched message for duplicate testing
     engine.lastDispatchedMessage = message;
@@ -85,7 +91,7 @@ export class SimMessageDispatcher {
       return message;
     }
 
-    // Case 2: Directly wired to Kafka Cluster
+    // Case 2: Directly wired to Kafka Broker (or Cluster)
     const topic = (producerNode.data.targetTopic as string) || 'purchases';
     const isRoundRobin = engine.mechanicsConfig.keyOrderingMode === 'ROUND_ROBIN';
     let targetPartition: number;
@@ -96,9 +102,25 @@ export class SimMessageDispatcher {
       targetPartition = engine.kafkaCluster.routeKeyToPartition(topic, key);
     }
 
+    // Resolve partition leader broker node
+    const partition = engine.kafkaCluster.getPartition(topic, targetPartition);
+    const leaderBrokerId = partition?.leaderBrokerId ?? 1;
+    const leaderBrokerNode = Array.from(engine.nodes.values()).find(
+      (n) => n.data.kind === 'kafka-broker' && n.data.brokerId === leaderBrokerId,
+    );
+
+    // If an edge directly connects to the leader broker, use that edge.
+    // Otherwise, route through the existing publishEdge but record the destination
+    const effectiveEdge =
+      Array.from(engine.edges.values()).find(
+        (e) => e.source === producerNodeId && e.target === leaderBrokerNode?.id,
+      ) || publishEdge;
+
+    const effectiveTargetNodeId = leaderBrokerNode ? leaderBrokerNode.id : targetNodeId;
+
     const routingNote = isRoundRobin
-      ? `⚠️ ROUND-ROBIN ROUTED to P${targetPartition} (Key hashing disabled! Sequential customer messages will scatter!)`
-      : `Murmur2("${key}") ➔ Target Partition P${targetPartition} strictly preserving FIFO`;
+      ? `⚠️ ROUND-ROBIN ROUTED to P${targetPartition} [Leader: B${leaderBrokerId}] (Key hashing disabled!)`
+      : `Murmur2("${key}") ➔ Target P${targetPartition} [Leader: B${leaderBrokerId}] (Strict FIFO)`;
 
     const dispatchEvent = createSimEvent(
       engine.clock.virtualTimeMs,
@@ -106,8 +128,8 @@ export class SimMessageDispatcher {
       producerNodeId,
       `Producer generated order ${message.payload.purchaseId} for key "${key}" (${routingNote})`,
       {
-        targetNodeId,
-        edgeId: publishEdge.id,
+        targetNodeId: effectiveTargetNodeId,
+        edgeId: effectiveEdge.id,
         message,
       },
     );
@@ -134,9 +156,9 @@ export class SimMessageDispatcher {
       id: engine.nextTokenId(`token-${message.id}`),
       messageId: message.id,
       messageKey: key,
-      edgeId: publishEdge.id,
+      edgeId: effectiveEdge.id,
       sourceNodeId: producerNodeId,
-      targetNodeId,
+      targetNodeId: effectiveTargetNodeId,
       startTime: engine.clock.virtualTimeMs,
       arriveTime,
       color: '#38bdf8',
@@ -146,14 +168,15 @@ export class SimMessageDispatcher {
     const appendEvent = createSimEvent(
       arriveTime,
       'APPEND_PARTITION',
-      targetNodeId,
-      `Record ${message.payload.purchaseId} stored in partition P${targetPartition}`,
+      effectiveTargetNodeId,
+      `Record ${message.payload.purchaseId} stored in partition P${targetPartition} on Leader Broker B${leaderBrokerId}`,
       {
-        edgeId: publishEdge.id,
+        edgeId: effectiveEdge.id,
         message,
         metadata: {
           partitionId: targetPartition,
           topic,
+          leaderBrokerId,
         },
       },
     );

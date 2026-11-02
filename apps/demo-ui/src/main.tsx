@@ -4,6 +4,16 @@ import './index.css';
 import { App } from './App';
 
 window.addEventListener('error', (event) => {
+  // ResizeObserver loop completed with undelivered notifications is a benign browser notification
+  // triggered when @xyflow/react canvas resizes while measuring DOM dimensions. It is not an error.
+  if (
+    event.message?.includes('ResizeObserver') ||
+    event.error?.message?.includes('ResizeObserver')
+  ) {
+    event.stopImmediatePropagation?.();
+    return;
+  }
+
   console.error('[Root Error Listener]', event.error || event.message);
   const root = document.getElementById('root');
   if (root && root.children.length === 0) {

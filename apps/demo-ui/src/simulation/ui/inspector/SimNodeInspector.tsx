@@ -3,6 +3,7 @@ import type { SimCustomNode } from '../../domain/types';
 import type { SimPartition, SimBroker } from '../../domain/kafka-cluster';
 import { ProducerInspectorSection } from './sections/ProducerInspectorSection';
 import { KafkaClusterInspectorSection } from './sections/KafkaClusterInspectorSection';
+import { KafkaBrokerInspectorSection } from './sections/KafkaBrokerInspectorSection';
 import { ConsumerInspectorSection } from './sections/ConsumerInspectorSection';
 import { OutboxCdcInspectorSection } from './sections/OutboxCdcInspectorSection';
 import { DatabaseDlqInspectorSection } from './sections/DatabaseDlqInspectorSection';
@@ -14,6 +15,8 @@ interface SimNodeInspectorProps {
   onDuplicateNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onSetPartitionCount?: (count: number) => void;
+  onSetReplicationFactor?: (rf: number) => void;
+  onSetMinIsr?: (minIsr: number) => void;
   onSetAssignorStrategy?: (strategy: 'round-robin' | 'range') => void;
   onCrashBroker?: (brokerId: number) => void;
   onReviveBroker?: (brokerId: number) => void;
@@ -38,7 +41,14 @@ interface SimNodeInspectorProps {
     members: Map<string, { id: string; assignedPartitions: number[] }>;
     committedNextOffsets: Map<string, number>;
   }[];
-  allTopics?: { name: string; partitions: Map<number, unknown>; replicationFactor: number }[];
+  allTopics?: {
+    name: string;
+    partitions: Map<number, unknown>;
+    replicationFactor: number;
+    minInsyncReplicas?: number;
+  }[];
+  minInsyncReplicas?: number;
+  replicationFactor?: number;
 }
 
 export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
@@ -48,6 +58,8 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
   onDuplicateNode,
   onDeleteNode,
   onSetPartitionCount,
+  onSetReplicationFactor,
+  onSetMinIsr,
   onSetAssignorStrategy,
   onCrashBroker,
   onReviveBroker,
@@ -63,6 +75,8 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
   committedOffsets = new Map(),
   consumerGroups = [],
   allTopics = [],
+  minInsyncReplicas = 2,
+  replicationFactor = 3,
 }) => {
   if (!selectedNode) return null;
 
@@ -182,9 +196,20 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
         </div>
 
         {kind === 'producer' && (
-          <ProducerInspectorSection
+          <ProducerInspectorSection selectedNode={selectedNode} onUpdateData={onUpdateData} />
+        )}
+
+        {kind === 'kafka-broker' && (
+          <KafkaBrokerInspectorSection
             selectedNode={selectedNode}
             onUpdateData={onUpdateData}
+            onCrashBroker={onCrashBroker}
+            onReviveBroker={onReviveBroker}
+            onSetReplicationFactor={onSetReplicationFactor}
+            onSetMinIsr={onSetMinIsr}
+            partitionLogs={partitionLogs}
+            minInsyncReplicas={minInsyncReplicas}
+            replicationFactor={replicationFactor}
           />
         )}
 
@@ -219,17 +244,11 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
         )}
 
         {(kind === 'outbox-table' || kind === 'cdc-relay') && (
-          <OutboxCdcInspectorSection
-            selectedNode={selectedNode}
-            onUpdateData={onUpdateData}
-          />
+          <OutboxCdcInspectorSection selectedNode={selectedNode} onUpdateData={onUpdateData} />
         )}
 
         {(kind === 'database' || kind === 'dead-letter-queue') && (
-          <DatabaseDlqInspectorSection
-            selectedNode={selectedNode}
-            onUpdateData={onUpdateData}
-          />
+          <DatabaseDlqInspectorSection selectedNode={selectedNode} onUpdateData={onUpdateData} />
         )}
       </div>
 

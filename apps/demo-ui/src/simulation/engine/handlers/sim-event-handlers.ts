@@ -1,5 +1,5 @@
 import type { SimEngine } from '../sim-engine';
-import type { SimEvent } from '../../domain/types';
+import type { SimConsumerData, SimEvent } from '../../domain/types';
 import { createSimEvent } from '../../domain/events';
 import { SimClusterOperations } from '../operations/sim-cluster-operations';
 
@@ -99,17 +99,16 @@ export class SimEventHandlers {
 
         const consumerNode = engine.nodes.get(sourceNodeId);
         if (consumerNode && consumerNode.data.kind === 'consumer') {
-          if (consumerNode.data.status === 'CRASHED') break;
+          const consumerData = consumerNode.data as SimConsumerData;
+          if (consumerData.status === 'CRASHED') break;
 
-          const isPaused = Boolean(
-            consumerNode.data.isPaused || consumerNode.data.status === 'PAUSED',
-          );
-          consumerNode.data.status = isPaused ? 'PAUSED' : 'POLLING';
-          consumerNode.data.currentProcessingPartition = undefined;
-          consumerNode.data.currentProcessingOffset = undefined;
+          const isPaused = Boolean(consumerData.isPaused || consumerData.status === 'PAUSED');
+          consumerData.status = isPaused ? 'PAUSED' : 'POLLING';
+          consumerData.currentProcessingPartition = undefined;
+          consumerData.currentProcessingOffset = undefined;
           engine.processedMessageCount += 1;
 
-          const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
+          const groupId = consumerData.groupId || 'loyalty-v1';
           const group = engine.consumerGroups.get(groupId);
           const instance = group?.members.get(sourceNodeId);
           if (instance) {
@@ -120,10 +119,25 @@ export class SimEventHandlers {
           const offset = Number(metadata.offset ?? 0);
           const topicName = (metadata.topic as string) || 'purchases';
 
-          const isPoisonPill =
+          const isGlobalPoisonPill =
             message.key === 'POISON_PILL' || message.payload.purchaseId.startsWith('POISON');
+          const targetFailedConsumers = message.payload.metadata?.targetFailedConsumerIds as
+            string[] | undefined;
+          const targetFailedGroups = message.payload.metadata?.targetFailedGroupIds as
+            string[] | undefined;
 
-          if (isPoisonPill) {
+          let isPoisonPillForThisConsumer = false;
+          if (isGlobalPoisonPill) {
+            if (targetFailedConsumers && targetFailedConsumers.length > 0) {
+              isPoisonPillForThisConsumer = targetFailedConsumers.includes(sourceNodeId);
+            } else if (targetFailedGroups && targetFailedGroups.length > 0) {
+              isPoisonPillForThisConsumer = targetFailedGroups.includes(groupId);
+            } else {
+              isPoisonPillForThisConsumer = true;
+            }
+          }
+
+          if (isPoisonPillForThisConsumer) {
             // Check if Dead-Letter Queue component is wired to this consumer
             const dlqEdge = Array.from(engine.edges.values()).find((e) => {
               if (e.source !== sourceNodeId) return false;
@@ -171,9 +185,7 @@ export class SimEventHandlers {
               }
 
               // Resume any pending backlog on this partition
-              const isPartitionCut = Boolean(
-                consumerNode.data.pausedPartitions?.includes(partitionId),
-              );
+              const isPartitionCut = Boolean(consumerData.pausedPartitions?.includes(partitionId));
               if (group && !isPaused && !isPartitionCut) {
                 SimClusterOperations.resumePartitionBacklog(engine, group, partitionId);
               }
@@ -276,9 +288,7 @@ export class SimEventHandlers {
             }
 
             // Strict ordering invariant: check if there are further records in partition backlog!
-            const isPartitionCut = Boolean(
-              consumerNode.data.pausedPartitions?.includes(partitionId),
-            );
+            const isPartitionCut = Boolean(consumerData.pausedPartitions?.includes(partitionId));
             if (group && !isPaused && !isPartitionCut) {
               const partition = engine.kafkaCluster.getPartition(topicName, partitionId);
               const nextCommitted = group.getCommittedNextOffset(topicName, partitionId);
@@ -388,17 +398,31 @@ export class SimEventHandlers {
           }
         }
 
-        // Find edge from CDC Relay -> Kafka Cluster
+        // Find edge from CDC Relay -> Kafka Broker (or Cluster)
         const kafkaEdge = Array.from(engine.edges.values()).find(
           (e) => e.source === event.sourceNodeId,
         );
         if (kafkaEdge) {
-          const kafkaNodeId = kafkaEdge.target;
+          const defaultKafkaNodeId = kafkaEdge.target;
           const topicName = (cdcRelayNode.data.targetTopic as string) || 'purchases';
           const targetPartition = engine.kafkaCluster.routeKeyToPartition(
             topicName,
             event.message.key,
           );
+
+          // Find partition leader broker node
+          const partition = engine.kafkaCluster.getPartition(topicName, targetPartition);
+          const leaderBrokerId = partition?.leaderBrokerId ?? 1;
+          const leaderBrokerNode = Array.from(engine.nodes.values()).find(
+            (n) => n.data.kind === 'kafka-broker' && n.data.brokerId === leaderBrokerId,
+          );
+
+          const effectiveEdge =
+            Array.from(engine.edges.values()).find(
+              (e) => e.source === event.sourceNodeId && e.target === leaderBrokerNode?.id,
+            ) || kafkaEdge;
+
+          const targetKafkaNodeId = leaderBrokerNode ? leaderBrokerNode.id : defaultKafkaNodeId;
 
           const transitMs = 300;
           const arriveTime = event.scheduledTime + transitMs;
@@ -406,9 +430,9 @@ export class SimEventHandlers {
             id: engine.nextTokenId(`token-relay-kafka-${event.message.id}`),
             messageId: event.message.id,
             messageKey: event.message.key,
-            edgeId: kafkaEdge.id,
+            edgeId: effectiveEdge.id,
             sourceNodeId: event.sourceNodeId,
-            targetNodeId: kafkaNodeId,
+            targetNodeId: targetKafkaNodeId,
             startTime: event.scheduledTime,
             arriveTime,
             color: '#38bdf8',
@@ -417,15 +441,16 @@ export class SimEventHandlers {
           const appendEvent = createSimEvent(
             arriveTime,
             'APPEND_PARTITION',
-            kafkaNodeId,
-            `Record ${event.message.payload.purchaseId} published via CDC to P${targetPartition}`,
+            targetKafkaNodeId,
+            `Record ${event.message.payload.purchaseId} published via CDC to P${targetPartition} on Leader Broker B${leaderBrokerId}`,
             {
               message: event.message,
               metadata: {
                 topic: topicName,
                 partitionId: targetPartition,
+                leaderBrokerId,
               },
-              edgeId: kafkaEdge.id,
+              edgeId: effectiveEdge.id,
             },
           );
           engine.queue.push(appendEvent);

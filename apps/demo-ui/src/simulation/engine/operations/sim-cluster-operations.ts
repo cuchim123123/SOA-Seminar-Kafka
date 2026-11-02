@@ -63,9 +63,38 @@ export class SimClusterOperations {
             group.seekNextOffset(topicName, partitionId, targetOffset + 1);
           }
 
-          const dispatchEdge = Array.from(engine.edges.values()).find((e) => e.target === memberId);
+          // In multi-broker architecture, find dispatch edge from the partition Leader broker,
+          // or fallback to any edge from a broker/cluster to this consumer
+          const partitionLeaderBrokerId = engine.kafkaCluster.getPartition(
+            topicName,
+            partitionId,
+          )?.leaderBrokerId;
+          const leaderBrokerNode = Array.from(engine.nodes.values()).find(
+            (n) => n.data.kind === 'kafka-broker' && n.data.brokerId === partitionLeaderBrokerId,
+          );
+
+          let dispatchEdge = leaderBrokerNode
+            ? Array.from(engine.edges.values()).find(
+                (e) => e.source === leaderBrokerNode.id && e.target === memberId,
+              )
+            : undefined;
+
+          if (!dispatchEdge) {
+            dispatchEdge = Array.from(engine.edges.values()).find(
+              (e) =>
+                e.target === memberId &&
+                (engine.nodes.get(e.source)?.data.kind === 'kafka-broker' ||
+                  engine.nodes.get(e.source)?.data.kind === 'kafka-cluster'),
+            );
+          }
+
           const transitMs = 350;
           const arriveTime = currentTime + transitMs;
+          const effectiveSourceId = dispatchEdge
+            ? dispatchEdge.source
+            : leaderBrokerNode
+              ? leaderBrokerNode.id
+              : 'kafka-broker';
 
           if (dispatchEdge) {
             engine.inFlightTokens.push({
@@ -84,13 +113,18 @@ export class SimClusterOperations {
           const startEvent = createSimEvent(
             arriveTime,
             'START_PROCESSING',
-            dispatchEdge ? dispatchEdge.source : 'kafka-cluster',
-            `Consumer ${memberId} polled record offset #${targetOffset} from P${partitionId}`,
+            effectiveSourceId,
+            `Consumer ${memberId} polled record offset #${targetOffset} from P${partitionId} (Leader: B${partitionLeaderBrokerId})`,
             {
               targetNodeId: memberId,
               edgeId: dispatchEdge?.id,
               message: targetMessage,
-              metadata: { partitionId, offset: targetOffset, topic: topicName },
+              metadata: {
+                partitionId,
+                offset: targetOffset,
+                topic: topicName,
+                leaderBrokerId: partitionLeaderBrokerId,
+              },
             },
           );
           engine.queue.push(startEvent);
@@ -201,31 +235,52 @@ export class SimClusterOperations {
   }
 
   /**
-   * Simulates a broker node crash
+   * Simulates a broker node crash and executes partition leader election
    */
   public static crashBroker(engine: SimEngine, brokerId: number): void {
-    const crashed = engine.kafkaCluster.crashBroker(brokerId);
-    if (!crashed) return;
+    const res = engine.kafkaCluster.crashBroker(brokerId);
+    if (!res) return;
+
+    const leaderChanges = res.affectedPartitions
+      .map((ap) =>
+        ap.newLeader !== undefined
+          ? `P${ap.partitionId}➔B${ap.newLeader}`
+          : `P${ap.partitionId}➔NO_LEADER`,
+      )
+      .join(', ');
+
+    const leaderFailoverMsg =
+      leaderChanges.length > 0
+        ? ` Partition Leader Failover triggered: [${leaderChanges}].`
+        : ' No partitions were led by this broker.';
+
+    const controllerMsg =
+      res.newController !== undefined
+        ? ` KRaft Quorum elected B${res.newController} as new Active Controller.`
+        : '';
 
     const event = createSimEvent(
       engine.clock.virtualTimeMs,
       'BROKER_CRASH',
-      'kafka-cluster',
-      `💥 Broker B${brokerId} CRASHED! KRaft metadata triggered automatic partition leader failover.`,
-      { metadata: { brokerId } },
+      `broker-${brokerId}`,
+      `💥 Broker B${brokerId} DESTROYED! Removed from In-Sync Replicas (ISR).${leaderFailoverMsg}${controllerMsg}`,
+      {
+        metadata: {
+          brokerId,
+          affectedPartitions: res.affectedPartitions,
+          newController: res.newController,
+        },
+      },
     );
     engine.recordEvent(event);
 
-    const clusterNode = Array.from(engine.nodes.values()).find(
-      (n) => n.data.kind === 'kafka-cluster',
-    );
-    if (clusterNode) {
-      const activeBrokers = Array.from(engine.kafkaCluster.brokers.values()).filter(
-        (b) => b.status === 'ONLINE',
-      ).length;
-      clusterNode.data.status =
-        activeBrokers === 0 ? 'CRASHED' : activeBrokers < 2 ? 'DEGRADED' : 'ACTIVE';
+    // Update state of individual broker node if present
+    for (const node of engine.nodes.values()) {
+      if (node.data.kind === 'kafka-broker' && node.data.brokerId === brokerId) {
+        node.data.status = 'CRASHED';
+      }
     }
+
     engine.notifyStateUpdated();
   }
 
@@ -239,17 +294,16 @@ export class SimClusterOperations {
     const event = createSimEvent(
       engine.clock.virtualTimeMs,
       'BROKER_REVIVE',
-      'kafka-cluster',
-      `🩺 Broker B${brokerId} RECOVERED and rejoined the KRaft cluster quorum (ISR synced).`,
+      `broker-${brokerId}`,
+      `🩺 Broker B${brokerId} RECOVERED and rejoined In-Sync Replicas (ISR synced).`,
       { metadata: { brokerId } },
     );
     engine.recordEvent(event);
 
-    const clusterNode = Array.from(engine.nodes.values()).find(
-      (n) => n.data.kind === 'kafka-cluster',
-    );
-    if (clusterNode) {
-      clusterNode.data.status = 'ACTIVE';
+    for (const node of engine.nodes.values()) {
+      if (node.data.kind === 'kafka-broker' && node.data.brokerId === brokerId) {
+        node.data.status = 'ACTIVE';
+      }
     }
     engine.notifyStateUpdated();
   }
