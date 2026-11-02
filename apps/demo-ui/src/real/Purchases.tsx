@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PurchaseEvidence } from './PurchaseEvidence';
 import { api } from '../api/client';
 import { ApiError } from '../api/http';
 import { businessApi } from '../api/business';
@@ -151,13 +152,29 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
               ))}
             </dl>
           )}
-          <p>
-            Source acceptance and outbox state do not prove downstream processing. Separate
-            completion/invalidation evidence and receipts are the next milestone.
-          </p>
+          <p>Source acceptance and outbox state do not prove downstream processing.</p>
           <button onClick={detail.refresh}>Refresh detail</button>
         </article>
       )}
+      {route.purchaseId &&
+        (() => {
+          const item = history.data?.items.find((row) => row.purchaseId === route.purchaseId);
+          return item ? (
+            <PurchaseEvidence
+              key={item.purchaseId}
+              item={item}
+              refresh={() => {
+                history.refresh();
+                detail.refresh();
+              }}
+            />
+          ) : (
+            <p>
+              Selected purchase event identities are not on the displayed history page. Open its
+              history page to view separate event evidence and invalidation controls.
+            </p>
+          );
+        })()}
     </>
   );
 }
