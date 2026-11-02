@@ -123,23 +123,11 @@ until their tickets are selected. Report commands actually run.
 
 
 
-## Milestone: Real Application workspace — in progress
+## Milestone: Real Application workspace — local scope delivered
 
-- [x] REAL-01: bounded purchase history, context-owned receipt queries, HTTP error evidence and live read-only integration tests.
-- [x] REAL-02 backend: transaction-aware server push and live HTTP integration verified; browser subscription primitives tested. Hooks are mounted in the read-only overview; fresh-service browser acceptance remains unfinished.
-- [ ] REAL-03: sidebar and read-only overview implemented; responsive acceptance, business pages, teaching controls and explicit global recovery review remain.
-- [ ] REAL-04: coordinated cutover locking approved and integration-tested; browser integration and presenter validation remain.
+- [x] REAL-01: bounded source history and exact purchase lookup; context-owned event receipts and HTTP error evidence.
+- [x] REAL-02: transactional server push, shared visible-page subscriptions, reconnect/resnapshot and interrupted Vite SSE regression.
+- [x] REAL-03: responsive sidebar, business/event pages, idempotency/burst exercises, observations and independent worker controls.
+- [x] REAL-04: approved coordinated cutover locking, complete global review/confirmation, isolated partial-promotion and failure acceptance; browser keyboard/layout/outage/navigation checks.
 
-See `docs/real-application-implementation-progress.md` for exact checks, blockers and resume instructions.
-
-Real UI checkpoint C7: purchase entry, retained idempotency key, paginated history and canonical detail implemented; browser acceptance and remaining business/recovery features pending. See `docs/real-application-implementation-progress.md`.
-
-Real UI checkpoint C8: separate event evidence, independent consumer receipts and confirmed invalidation implemented; browser acceptance and pagination-independent evidence lookup pending. See persistent progress documentation.
-
-Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and independent consumer controls implemented; UI purchase/idempotency/push and Analytics pause/resume verified. Recovery and final acceptance remain.
-
-Real UI C10: same-customer burst form and actual allocated sequence/evidence results verified in browser. Recovery and final acceptance remain.
-
-Real UI C11: replay lifecycle, complete all-customer staging review and explicit global confirmation implemented;95-customer browser review verified without executing global promotion. Phase6 acceptance/polish remains.
-
-Real UI C12: validated tool links/proxy origins, bounded HTTP requests and presenter walkthrough added;253 unit tests pass. Mobile and partial-outage browser acceptance remains pending.
+See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.

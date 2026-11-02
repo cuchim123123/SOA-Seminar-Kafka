@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { intentStorageKey, readPurchaseIntent } from './state/purchase-intent';
+import { useActionLifetime } from './hooks/useActionLifetime';
 import { PurchaseEvidence } from './PurchaseEvidence';
 import { PurchaseBurst } from './PurchaseBurst';
 import { api } from '../api/client';
@@ -10,8 +12,31 @@ import { routeHash } from './state/routes';
 import type { WorkspaceRoute } from './state/routes';
 
 export function Purchases({ route }: { route: WorkspaceRoute }) {
-  const [amount, setAmount] = useState('100.00');
-  const [key, setKey] = useState<string>(() => crypto.randomUUID());
+  const captureAction = useActionLifetime();
+  const [intent, setIntent] = useState(() => {
+    try {
+      return (
+        readPurchaseIntent(sessionStorage, route.customerId) ?? {
+          amount: '100.00',
+          key: crypto.randomUUID(),
+        }
+      );
+    } catch {
+      return { amount: '100.00', key: crypto.randomUUID() };
+    }
+  });
+  const { amount, key } = intent;
+  const setAmount = (value: string) => setIntent((current) => ({ ...current, amount: value }));
+  const setKey = (value: string) => setIntent((current) => ({ ...current, key: value }));
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(intentStorageKey(route.customerId), JSON.stringify(intent));
+      setSaved(true);
+    } catch {
+      setSaved(false);
+    }
+  }, [intent, route.customerId]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState('');
   const [cursor, setCursor] = useState<string | undefined>();
@@ -46,14 +71,18 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
               return;
             }
             setBusy(true);
+            const isCurrent = captureAction();
+            const submittedFrom = window.location.hash;
             try {
               const accepted = await api.createPurchase(route.customerId, amountCents, key.trim());
+              if (!isCurrent() || window.location.hash !== submittedFrom) return;
               setResult(
                 `Source accepted purchase ${accepted.purchaseId}, event ${accepted.eventId}. Downstream processing is observed separately.`,
               );
               window.location.hash = routeHash({ ...route, purchaseId: accepted.purchaseId });
               history.refresh();
             } catch (error) {
+              if (!isCurrent()) return;
               setResult(
                 error instanceof ApiError
                   ? `HTTP ${error.status}: ${error.message}`
@@ -71,12 +100,19 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
               onChange={(e) => setAmount(e.target.value)}
               disabled={busy}
               inputMode="decimal"
+              maxLength={64}
               required
             />
           </label>
           <label>
             Idempotency key{' '}
-            <input value={key} onChange={(e) => setKey(e.target.value)} disabled={busy} required />
+            <input
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              disabled={busy}
+              maxLength={256}
+              required
+            />
           </label>
           <button disabled={busy || !route.customerId || !key.trim()}>
             Submit / retry same intent
@@ -94,8 +130,10 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
         </form>
         <p>
           The key stays unchanged after submission. Same key and body returns the original purchase;
-          a changed body returns HTTP409. Start a new intent only for a new purchase. Retain the key
-          before leaving this page if an outcome is uncertain.
+          a changed body returns HTTP409. Start a new intent only for a new purchase.
+          {saved
+            ? ' The current amount and key are saved for this customer in this browser tab, including across refresh.'
+            : ' Browser session storage is unavailable. Copy the amount and key before leaving after an uncertain outcome.'}
         </p>
         <p role="status">{result}</p>
       </article>

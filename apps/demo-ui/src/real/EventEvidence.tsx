@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { businessApi } from '../api/business';
 import { useLiveResource } from './hooks/useLiveResource';
 import { PurchaseEvidence } from './PurchaseEvidence';
+import { CustomerEventSequence } from './CustomerEventSequence';
 import { routeHash } from './state/routes';
 import type { WorkspaceRoute } from './state/routes';
 
@@ -40,6 +41,13 @@ export function EventEvidence({ route }: { route: WorkspaceRoute }) {
         <PurchaseEvidence key={item.purchaseId} item={item} refresh={evidence.refresh} />
       ))}
       {route.purchaseId && evidence.data?.items.length === 0 && <p>No persisted purchase found.</p>}
+      {evidence.data?.items[0] && (
+        <CustomerEventSequence
+          key={evidence.data.items[0].customerId}
+          customerId={evidence.data.items[0].customerId}
+          route={route}
+        />
+      )}
     </>
   );
 }

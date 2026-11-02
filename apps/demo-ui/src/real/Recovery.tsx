@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useActionLifetime } from './hooks/useActionLifetime';
 import { businessApi } from '../api/business';
 import { api } from '../api/client';
 import type {
@@ -7,14 +8,20 @@ import type {
   StagingCustomerRecord,
   CutoverResult,
 } from '../api/client';
-import { request } from '../api/http';
+import { ApiError, request } from '../api/http';
 import { useLiveResource } from './hooks/useLiveResource';
 import { changeSubscriptions } from './state/change-subscriptions';
 import { expectedPromotion, mapReview } from './state/replay-review';
 import { routeHash } from './state/routes';
+import { parseRoute } from './state/routes';
 import type { WorkspaceRoute } from './state/routes';
 
 export function Recovery({ route }: { route: WorkspaceRoute }) {
+  const captureAction = useActionLifetime();
+  const stillViewingRun = (runId: string) => {
+    const current = parseRoute(window.location.hash);
+    return current.real && current.page === 'recovery' && current.runId === runId;
+  };
   const [runInput, setRunInput] = useState(route.runId);
   const [intent, setIntent] = useState<string>(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
@@ -34,7 +41,7 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
     if (!item?.invalidationEventId || !item.invalidationSequence) return false;
     const [receipts, account] = await Promise.all([
       businessApi.getReceipts('loyalty', [item.invalidationEventId], signal),
-      api.getLoyaltyAccount(item.customerId),
+      api.getLoyaltyAccount(item.customerId, signal),
     ]);
     return (
       !!account?.correctionRequired &&
@@ -125,6 +132,7 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
         <button
           disabled={busy || !!route.runId || !barrier.data || barrier.stale || barrier.loading}
           onClick={async () => {
+            const isCurrent = captureAction();
             setBusy(true);
             setMessage(
               'Replay request in progress. The server scan continues if you leave this page.',
@@ -132,14 +140,16 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
             window.location.hash = routeHash({ ...route, runId: intent });
             try {
               await api.startReplay({ runId: intent });
+              if (!isCurrent() || !stillViewingRun(intent)) return;
               setMessage('Replay request completed; read persisted run and staging.');
             } catch (error) {
+              if (!isCurrent() || !stillViewingRun(intent)) return;
               setMessage(
                 `Replay request failed or outcome unknown: ${error instanceof Error ? error.message : String(error)}. Recover the retained run ID; do not start a duplicate.`,
               );
             } finally {
               setBusy(false);
-              refresh.current();
+              if (isCurrent() && stillViewingRun(intent)) refresh.current();
             }
           }}
         >
@@ -193,6 +203,9 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
               Run {route.runId}: {review.data.run.status} · Scanned: {review.data.run.scannedCount}
             </p>
             <p>{review.data.run.errorMessage}</p>
+            {review.data.run.status === 'CUTOVER_COMPLETED' && (
+              <p>This run is already applied. No new promotion is requested.</p>
+            )}
           </>
         )}
         <button
@@ -260,6 +273,7 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
               disabled={!ack || !ready || busy}
               onClick={async () => {
                 if (!validReview.current || !ack || !ready) return;
+                const isCurrent = captureAction();
                 validReview.current = false;
                 setAck(false);
                 setBusy(true);
@@ -267,18 +281,24 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
                   const result = await request<CutoverResult>(`${base}/cutover`, {
                     method: 'POST',
                   });
+                  if (!isCurrent() || !stillViewingRun(route.runId)) return;
                   setMessage(
                     `Server returned ${result.status}; applied customers: ${result.appliedCustomersCount}. Repeated completed cutover can return zero. Refreshed comparisons are post-action observations, not a per-customer execution audit.`,
                   );
                 } catch (error) {
+                  if (!isCurrent() || !stillViewingRun(route.runId)) return;
                   setMessage(
-                    `Cutover failed or outcome unknown: ${error instanceof Error ? error.message : String(error)}. Read persisted run before retrying.`,
+                    error instanceof ApiError && error.status >= 400 && error.status < 500
+                      ? `Cutover rejected (HTTP ${error.status}): ${error.message}. Refresh the persisted run before retrying.`
+                      : `Cutover failed or outcome unknown: ${error instanceof Error ? error.message : String(error)}. Read persisted run before retrying.`,
                   );
                 } finally {
                   setBusy(false);
-                  setOpened(false);
-                  review.refresh();
-                  barrier.refresh();
+                  if (isCurrent() && stillViewingRun(route.runId)) {
+                    setOpened(false);
+                    review.refresh();
+                    barrier.refresh();
+                  }
                 }
               }}
             >

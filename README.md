@@ -410,18 +410,8 @@ pnpm monitoring:down
 Both single-broker and replicated Compose profiles use Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui` for the single-broker profile, or use `-f docker-compose.cluster.yml` for the replicated profile. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.
 
 
-## Real Application workspace implementation
+## Real Application workspace
 
-The approved workspace is being implemented incrementally. Read the [persistent progress and next steps](docs/real-application-implementation-progress.md) before resuming. The read APIs, coordinated cutover locking and server-push foundation are implemented and tested. Simulation repairs are committed separately; the sidebar and read-only real overview are implemented. Fresh-service browser push acceptance and the remaining business/recovery pages are unfinished.
+The local seminar workspace is implemented: purchases and HTTP idempotency, paginated source history, independent event receipts, Loyalty/Analytics projections and observation snapshots, consumer controls, same-customer bursts, and replay with explicit all-customer cutover review. Existing Simulation, Purchase Benchmark and Guide routes remain available.
 
-Real UI checkpoint C7: purchase entry, retained idempotency key, paginated history and canonical detail implemented; browser acceptance and remaining business/recovery features pending. See `docs/real-application-implementation-progress.md`.
-
-Real UI checkpoint C8: separate event evidence, independent consumer receipts and confirmed invalidation implemented; browser acceptance and pagination-independent evidence lookup pending. See persistent progress documentation.
-
-Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and independent consumer controls implemented; UI purchase/idempotency/push and Analytics pause/resume verified. Recovery and final acceptance remain.
-
-Real UI C10: same-customer burst form and actual allocated sequence/evidence results verified in browser. Recovery and final acceptance remain.
-
-Real UI C11: replay lifecycle, complete all-customer staging review and explicit global confirmation implemented;95-customer browser review verified without executing global promotion. Phase6 acceptance/polish remains.
-
-Real UI C12: validated tool links/proxy origins, bounded HTTP requests and presenter walkthrough added;253 unit tests pass. Mobile and partial-outage browser acceptance remains pending.
+Read the [presenter walkthrough](docs/real-application-walkthrough.md) for setup and scenarios. [Implementation evidence](docs/real-application-implementation-progress.md) records browser acceptance,257 unit tests, focused live integration checks and operational limits. Use one active Demo UI tab on the local Vite HTTP/1 workflow; production reverse-proxy deployment is not configured. Global cutover always covers every eligible staged customer, regardless of selected customer.

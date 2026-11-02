@@ -1,14 +1,14 @@
 # Real Application implementation progress
 
-Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [REAL-APPLICATION-UI-PLAN.md](../REAL-APPLICATION-UI-PLAN.md).
+Updated: 2026-11-02. **Approved local seminar UI implemented and acceptance exercised.** Source plan: [REAL-APPLICATION-UI-PLAN.md](../REAL-APPLICATION-UI-PLAN.md).
 
 ## Overall status
 
-- Current phase: Phase5 recovery workspace implemented; Phase6 presenter polish and broader acceptance remain.
-- Completed: backend history/receipts/push, approved locking, persistent navigation, purchase actions/history/evidence, projection pages, consumer pause/resume/delay, same-customer burst, replay lifecycle and complete global review/confirmation.
-- Verified: live browser purchase and pushed receipts, HTTP idempotency conflict, independent Analytics pause/resume restored, three-record burst, bounded replay and95-customer review/confirmation gating. Unit and backend concurrency integration checks pass.
-- Remaining: responsive/accessibility and partial-outage acceptance; optional before/after observations; richer tests of UI cutover failures/reconnect; presenter walkthrough. Actual global cutover was not executed on the95-customer run.
-- Blockers: none requiring a new product decision. Existing lab services/data preserved; unrelated benchmark edits remain unstaged.
+- Approved local UI phases1–6 implemented: source/history/receipts/push, coordinated cutover locking, sidebar/routes, purchases/idempotency/burst/evidence, projection pages/observations, independent controls, replay/global review/confirmation, configuration and presenter guide.
+- Browser acceptance exercised actual writes/push, duplicate/conflict responses, mobile keyboard/focus/375px overflow, desktop canvas resize/legacy routes, true partial outage/reconnect, deliberately delayed mutation navigation, Analytics independence/catch-up and isolated partial global promotion.
+- All disposable cutover fixture rows cleaned by exact owned IDs. The95-customer retained replay was not promoted. Synthetic source/outbox history remains intentionally retained.
+- Local scope delivered. Known limits: one active Demo UI tab recommended on Vite HTTP/1; static production proxy/HTTP2 deployment is not configured; no durable event timeline or exact per-customer cutover result API; non-fatal bundle warnings remain. No claim of production load or notification-queue saturation certification.
+- Unrelated benchmark edits remain unstaged. No push requested/performed.
 
 ## Decisions and boundaries
 
@@ -29,10 +29,9 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. Read C9–C11 and inspect `real/Recovery.tsx`, `real/state/replay-review.ts`, resource hooks and sidebar. Do not repeat backend foundations or change cutover eligibility/global scope.
-2. Finish Phase6: responsive/keyboard drawer and legacy routes, partial service outage/reconnect, source/projection freshness and request timeout handling. Add configured Kafbat/Grafana links through validated frontend config, then presenter walkthrough.
-3. Verify acknowledgement invalidation on actual pushed Loyalty/replay changes and cutover HTTP error/uncertain outcome using isolated owned fixtures. Existing concurrency tests already cover live/cutover races. Do not promote the retained95-customer acceptance run just to test a button.
-4. Recovery run `11c39b6c-b5e2-4393-97f5-a3af185ea6a2` is COMPLETED with297 scanned records and95 staged customers (90 expected eligible/5 skips at observation); no cutover executed. Source test customer `real-ui-browser-20261102` is retained intentionally.
+The local feature is delivered. Read `docs/real-application-walkthrough.md` to present it. Do not restart implementation from historical incomplete checkpoints below. Future work should be explicitly scoped (for example deployment, automated DOM browser regression tests or multi-tab streaming), rather than changing replay semantics.
+
+Keep the retained95-customer replay unpromoted unless intentionally reviewed for a real seminar promotion. Tests may create only owned disposable replay fixtures and clean exact IDs. Current application listeners are running; Loyalty was restored after outage testing (PID29688 at observation). Use normal `pnpm stop` when shutting down the lab.
 
 Resume protocol: read plan and this document, inspect `git status`/recent commits, reconcile code with these statements, continue first incomplete milestone. Do not mark integration complete based only on mocks.
 
@@ -153,3 +152,13 @@ No commits pushed. Unrelated simulation/benchmark edits remain unstaged. Existin
 - Added `docs/real-application-walkthrough.md`: real purchase/tier/idempotency/burst/independent-group/correction walkthrough, global scope warning, state vocabulary, uncertain outcomes and local Vite versus static deployment limits.
 - Gates: frontend production build passed; format/lint/typecheck passed;63 files/253 unit tests passed after correcting the legacy signal-identity assertion; Kafka verification passed. Existing non-fatal bundle-size/React Flow warnings persist. No business mutation or cutover during this checkpoint.
 - Exact remaining acceptance: browser mobile drawer/focus/legacy routes/canvas resize; partial-service outage/reconnect preserving stale data; pushed review acknowledgement invalidation and isolated cutover error/uncertain-response UI. Optional before/after observations remain unimplemented. Read the presenter walkthrough and C11 safety context before runtime testing. Full approved feature is implemented substantially but not yet certified complete.
+
+### C13 — consolidated final acceptance and fixes
+
+- Fixed actual Vite SSE interruption bug: upstream abort/error/incomplete close now destroys downstream stream so native EventSource reconnects. Durable regression test starts isolated real Vite/upstream HTTP servers and verifies interrupted-stream teardown. True Loyalty process outage showed disconnected +502, retained18-point stale snapshot, unaffected source history, then automatic live resnapshot after restart without manual refresh. Service restored.
+- Fixed375px horizontal overflow from grid/table intrinsic sizing; tables stay in scroll containers, long text wraps. Browser verified width fit, drawer opening focus, Shift+Tab wrap, Escape restore, route selection focus to main, desktop sidebar/canvas resize, Guide/Benchmark compatibility, and simulation stops/unmounts when leaving (return starts a fresh stopped simulation, preserving existing behavior).
+- Scoped service subscriptions to visible pages. Added action-lifetime/navigation guards and propagated read cancellation. Actual source-row lock held only owned synthetic customer while submitting a100-cent purchase; navigated away with request visibly pending; after successful commit (sequence7), browser stayed on Guide. No hidden redirect. Source history intentionally retained.
+- Session-persistent per-customer purchase amount/key with schema validation and honest storage-failure fallback; browser verified navigation+refresh retained exact key/amount. Added before/current read observation tables and explanatory overview flow/shortcuts. Header's existing Kafbat link now uses validated config. Event Evidence includes bounded paginated customer events ordered with BigInt and separate invalidation identities. Added contract check between visible policy explanation and pure backend thresholds/multipliers.
+- Isolated manual UI cutover fixture:3 random owned customers,2 eligible and1 newer-sequence skip. Full review showed3/2/1; actual pushed Loyalty NOTIFY revoked acknowledgement; changed run status caused server rejection and refreshed FAILED view; restored fixture and executed UI confirmation, server returned applied2/CUTOVER_COMPLETED. DB verified both eligible customers promoted and skip untouched. All3 accounts/run/staging removed by exact owned IDs; no source records/Kafka messages for this fixture. Existing95-customer replay untouched.
+- Independent-group test: UI paused Analytics; new owned synthetic customer purchase showed Loyalty receipt and Analytics not-yet-observed; after resume, Analytics receipt appeared through push. Restored Analytics not paused with delay0. Owned source history retained.
+- Validation: frontend production build, format/lint/typecheck and67 files/257 unit tests passed; six focused real history/cutover/push integration tests passed; Kafka verification passed with owned verification-topic cleanup. Existing bundle-size/React Flow warnings remain. Local single-tab acceptance exercised; ambiguous network outcomes remain conservatively labelled and require reconciliation, never automatic write retry.

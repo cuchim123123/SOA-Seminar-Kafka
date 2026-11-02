@@ -1,3 +1,4 @@
+import { uiConfig } from '../config/ui-config';
 import React from 'react';
 import type { ServiceHealthStatus } from '../api/client';
 
@@ -12,7 +13,15 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
 
   return (
     <header className="cyber-card" style={{ padding: '16px 24px', marginBottom: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+        }}
+      >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span
@@ -39,7 +48,8 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
             <span className="badge-mono badge-cyan">Phase 0–5 Active</span>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', marginTop: '2px' }}>
-            Interactive Kafka Architecture, Partition Ordering, Transactional Outbox &amp; Bounded Replay Studio
+            Interactive Kafka Architecture, Partition Ordering, Transactional Outbox &amp; Bounded
+            Replay Studio
           </p>
         </div>
 
@@ -62,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({ health, refreshing, onRefresh })
           </div>
 
           <a
-            href="http://localhost:8080"
+            href={uiConfig.VITE_KAFBAT_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-cyber btn-outline"

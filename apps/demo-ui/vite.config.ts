@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import { z } from 'zod';
+import { configureLiveProxy } from './live-proxy.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '../..', '');
@@ -27,21 +28,25 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api/producer': {
+          configure: configureLiveProxy,
           target: targets.UI_PRODUCER_ORIGIN,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/producer/, ''),
         },
         '/api/loyalty': {
+          configure: configureLiveProxy,
           target: targets.UI_LOYALTY_ORIGIN,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/loyalty/, ''),
         },
         '/api/analytics': {
+          configure: configureLiveProxy,
           target: targets.UI_ANALYTICS_ORIGIN,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/analytics/, ''),
         },
         '/api/replay': {
+          configure: configureLiveProxy,
           target: targets.UI_REPLAY_ORIGIN,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/replay/, ''),

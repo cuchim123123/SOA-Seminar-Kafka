@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ObservationComparison } from './ObservationComparison';
 import { Recovery } from './Recovery';
 import { ConsumerControls } from './ConsumerControls';
 import { EventEvidence } from './EventEvidence';
@@ -11,13 +12,26 @@ import type { WorkspaceRoute } from './state/routes';
 
 export function RealApplication({ route }: { route: WorkspaceRoute }) {
   const [customer, setCustomer] = useState(route.customerId);
-  const purchases = useLiveResource('producer', route.customerId, (signal) =>
-    businessApi.listPurchases({ customerId: route.customerId || undefined, limit: 25 }, signal),
+  const purchases = useLiveResource(
+    'producer',
+    route.customerId,
+    (signal) =>
+      businessApi.listPurchases({ customerId: route.customerId || undefined, limit: 25 }, signal),
+    route.page === 'overview' || route.page === 'loyalty',
   );
-  const account = useLiveResource('loyalty', route.customerId, () =>
-    route.customerId ? api.getLoyaltyAccount(route.customerId) : Promise.resolve(null),
+  const account = useLiveResource(
+    'loyalty',
+    route.customerId,
+    (signal) =>
+      route.customerId ? api.getLoyaltyAccount(route.customerId, signal) : Promise.resolve(null),
+    route.page === 'overview' || route.page === 'loyalty',
   );
-  const analytics = useLiveResource('analytics', 'summary', () => api.getAnalyticsSummary());
+  const analytics = useLiveResource(
+    'analytics',
+    'summary',
+    (signal) => api.getAnalyticsSummary(signal),
+    route.page === 'overview' || route.page === 'analytics',
+  );
   return (
     <section className="real-workspace">
       <header>
@@ -58,6 +72,28 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
         <EventEvidence key={route.purchaseId} route={route} />
       ) : (
         <>
+          {route.page === 'overview' && (
+            <article>
+              <h2>How source and projection evidence relate</h2>
+              <ol
+                className="evidence-explanation"
+                aria-label="Pipeline architecture, explanatory rather than live event status"
+              >
+                <li>Source transaction: purchase, sequence and outbox commit together.</li>
+                <li>Debezium publishes the outbox event to Kafka using the customer key.</li>
+                <li>
+                  Independent Loyalty and Analytics groups apply their own database transactions.
+                </li>
+              </ol>
+              <p>
+                This is an architecture explanation. Open a purchase’s event evidence for actual
+                consumer receipts; source acceptance alone does not prove delivery or handling.
+              </p>
+              <a href={routeHash({ ...route, page: 'purchases', real: true })}>
+                Create or inspect a purchase
+              </a>
+            </article>
+          )}
           <div className="real-columns">
             {route.page !== 'analytics' && (
               <article>
@@ -76,10 +112,17 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
                     <p>Eligible spend: {account.data.totalEligibleSpendCents} cents</p>
                     <p>Applied sequence: {account.data.lastCustomerSequence ?? 'Unknown'}</p>
                     <p>
-                      {account.data.correctionRequired
-                        ? 'Correction required'
-                        : 'No correction flag'}
+                      {account.data.correctionRequired === undefined
+                        ? 'Correction status unknown'
+                        : account.data.correctionRequired
+                          ? 'Correction required'
+                          : 'No correction flag'}
                     </p>
+                    {account.data.correctionRequired && (
+                      <a href={routeHash({ ...route, page: 'purchases', real: true })}>
+                        Select an invalidated purchase for correction
+                      </a>
+                    )}
                   </>
                 ) : (
                   !account.error && <p>Account not created yet.</p>
@@ -106,6 +149,19 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
                   </>
                 )}
                 <button onClick={account.refresh}>Refresh account</button>
+                {route.page === 'loyalty' && account.data && (
+                  <ObservationComparison
+                    key={route.customerId}
+                    values={{
+                      points: account.data.pointsBalance,
+                      tier: account.data.tier,
+                      eligibleSpendCents: account.data.totalEligibleSpendCents,
+                      sequence: account.data.lastCustomerSequence ?? null,
+                    }}
+                    observedAt={account.observedAt}
+                    unavailable={account.stale || account.loading}
+                  />
+                )}
               </article>
             )}
             {route.page !== 'loyalty' && (
@@ -130,6 +186,17 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
                   Open consumer controls
                 </a>
                 <button onClick={analytics.refresh}>Refresh analytics</button>
+                {route.page === 'analytics' && analytics.data && (
+                  <ObservationComparison
+                    values={{
+                      grossRevenueCents: analytics.data.totalRevenueCents,
+                      completedPurchases: analytics.data.totalPurchasesCount,
+                      uniqueCustomers: analytics.data.uniqueCustomerCount ?? null,
+                    }}
+                    observedAt={analytics.observedAt}
+                    unavailable={analytics.stale || analytics.loading}
+                  />
+                )}
               </article>
             )}
           </div>

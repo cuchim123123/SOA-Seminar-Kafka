@@ -432,10 +432,14 @@ export const api = {
   },
 
   // 2. Loyalty API
-  getLoyaltyAccount: async (customerId: string): Promise<LoyaltyAccountDto | null> => {
+  getLoyaltyAccount: async (
+    customerId: string,
+    signal?: AbortSignal,
+  ): Promise<LoyaltyAccountDto | null> => {
     try {
       return await request<LoyaltyAccountDto>(
         `/api/loyalty/api/v1/loyalty/${encodeURIComponent(customerId)}`,
+        { signal },
       );
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) return null;
@@ -538,13 +542,13 @@ export const api = {
   },
 
   // 3. Analytics API
-  getAnalyticsSummary: async (): Promise<SalesSummaryDto> => {
+  getAnalyticsSummary: async (signal?: AbortSignal): Promise<SalesSummaryDto> => {
     const raw = await request<{
       totalRevenueCents: number;
       purchaseCount: number;
       uniqueCustomerCount: number;
       lastProcessedAt: string | null;
-    }>('/api/analytics/api/v1/analytics/summary');
+    }>('/api/analytics/api/v1/analytics/summary', { signal });
 
     return {
       totalRevenueCents: raw.totalRevenueCents,

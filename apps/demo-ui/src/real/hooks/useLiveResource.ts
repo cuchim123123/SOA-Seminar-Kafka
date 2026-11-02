@@ -8,6 +8,7 @@ export function useLiveResource<T>(
   service: LiveService,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
+  enabled = true,
 ) {
   const identity = `${service}:${key}`;
   const [state, setState] = useState<ResourceState<T> & { identity: string }>({
@@ -22,6 +23,10 @@ export function useLiveResource<T>(
   loader.current = load;
   const refresh = useRef<() => void>(() => undefined);
   useEffect(() => {
+    if (!enabled) {
+      refresh.current = () => undefined;
+      return;
+    }
     const resourceIdentity = `${service}:${key}`;
     setState({
       identity: resourceIdentity,
@@ -48,7 +53,7 @@ export function useLiveResource<T>(
       unsubscribe();
       refresh.current = () => undefined;
     };
-  }, [service, key]);
+  }, [service, key, enabled]);
   return {
     ...state,
     // A new selection must never render the previous customer's snapshot, even
