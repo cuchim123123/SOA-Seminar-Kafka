@@ -19,7 +19,8 @@ import { SYSTEM_BLUEPRINTS } from '../blueprints/systemBlueprints';
 let nextNodeId = 1;
 
 export function useSimulationStore() {
-  const engineRef = useRef<SimEngine>(new SimEngine());
+  const engineRef = useRef<SimEngine | null>(null);
+  if (!engineRef.current) engineRef.current = new SimEngine();
   const engine = engineRef.current;
 
   const [nodes, setNodes] = useState<SimCustomNode[]>([]);
@@ -434,10 +435,9 @@ export function useSimulationStore() {
     (rf: number) => {
       const topic = engine.kafkaCluster.topics.get('purchases');
       if (topic) {
-        topic.replicationFactor = rf;
-        // Re-distribute replicas with new RF
-        const pCount = topic.partitions.size;
-        engine.kafkaCluster.createTopic('purchases', pCount, rf, topic.minInsyncReplicas);
+        // Re-distribute replicas without replacing partition logs.
+        engine.clock.pause();
+        engine.kafkaCluster.reassignReplicas('purchases', rf);
       }
       engine.notifyStateUpdated();
       syncFromEngine();
@@ -472,7 +472,7 @@ export function useSimulationStore() {
       setSelectedNodeId(null);
       setActiveBlueprintId(blueprintId);
 
-      engine.reset();
+      engine.reset(false);
       engine.setTopology(clonedNodes, clonedEdges);
       syncFromEngine();
     },

@@ -8,6 +8,7 @@ export interface SimConsumerInstance {
   processingDelayMs: number;
   currentProcessingPartition?: number;
   currentProcessingOffset?: number;
+  deliveryId?: string;
 }
 
 export class SimConsumerGroupModel {
@@ -130,6 +131,7 @@ export class SimConsumerGroupModel {
         this.unlockPartition(p);
       }
       member.status = 'CRASHED';
+      member.deliveryId = undefined;
       member.assignedPartitions = [];
       member.currentProcessingPartition = undefined;
       member.currentProcessingOffset = undefined;

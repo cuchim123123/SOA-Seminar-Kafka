@@ -1,6 +1,6 @@
 # Simulation Playground enhancement — finalized scope plan
 
-Status: product decisions settled; implementation-ready plan awaiting implementation approval. Source review and browser inspection performed2026-11-02. Existing simulation suite:5 files/35 tests passed. No measured FPS or performance attribution is claimed yet.
+Status: implementation approved; first correctness slice implemented, enhancement still in progress. Source review and browser inspection performed2026-11-02. Existing simulation suite:5 files/35 tests passed. No measured FPS or performance attribution is claimed yet.
 
 ## Agreed product direction
 
@@ -10,7 +10,7 @@ Status: product decisions settled; implementation-ready plan awaiting implementa
 - Support multiple database projections through independent consumer groups, each writing to one database sink. Replicas within a group share that logical sink; they do not create independent copies of the projection. One consumer writing to multiple database sinks and distributed partial-write/retry behavior are deferred.
 - Preserve Kafka teaching as the central purpose. Synthetic business operations stay minimal. Simulation must remain isolated from real services and the Purchase pipeline.
 
-All requested product decisions are resolved. The finalized scope below is ready for review; answering these scope questions does not itself authorize implementation.
+All requested product decisions are resolved and the user explicitly approved implementation.
 
 Approved persistence contract: autosave versioned diagram, component settings, edges, scenario selection and viewport locally. Navigation away pauses the clock and rendering work but retains the current runtime in memory, including messages, logs, offsets, counters, deduplication state and scheduled work; return displays that same paused run. After browser refresh, restore the saved diagram/settings into a fresh paused runtime with an explicit banner. Runtime state is not serialized to persistent storage, and no elapsed wall-clock time is caught up while away. Do not label a fresh runtime as a resumed run. Engine/session ownership must outlive the route component, while animation/subscription lifetimes remain scoped to the visible playground.
 
@@ -150,7 +150,7 @@ Exit: observed defects fixed or explicitly unsupported with clear UI validation;
 
 ## Implementation boundaries
 
-No real application, CDC pipeline, official benchmark runner, Prometheus/Grafana or infrastructure change is required. Preserve unrelated working-tree edits. Do not remove freeform design to simplify the presenter UI. Do not promise arbitrary new component types until their execution semantics exist. Keep code/tests and short progress notes aligned with approved decisions; begin implementation only after this plan is approved.
+No real application, CDC pipeline, official benchmark runner, Prometheus/Grafana or infrastructure change is required. Preserve unrelated working-tree edits. Do not remove freeform design to simplify the presenter UI. Do not promise arbitrary new component types until their execution semantics exist. Keep code/tests and short progress notes aligned with approved decisions; follow the approved scoped sequence.
 
 ## Concrete control placement proposal
 
@@ -211,3 +211,16 @@ Resolved choices:
 After implementation approval, begin with Phase1 baseline/reproductions and Phase2 correctness. First coherent change: establish explicit configuration/runtime/geometry boundaries and reproduce/fix database-write-before-offset-commit, reset-after-failure and geometry-triggered rebalance defects. Preserve the existing UI until these contracts are tested; then improve timing/rendering and replace the control layout incrementally. Do not combine an untested engine rewrite with the entire visual redesign.
 
 Deliver implementation commits by coherent verified slice. Keep one concise progress/status section rather than repeatedly appending broad planning reports. Record actual checks and meaningful limitations, preserve unrelated benchmark edits, and do not push without instruction.
+
+
+## Implementation status — concise handoff
+
+S1 correctness foundation implemented (2026-11-02): normal database persistence/dedup precedes explicit COMMIT_OFFSET; DLQ persistence precedes its commit; delivery identities reject stale callbacks after crash/redelivery; worker reservations prevent concurrent queued deliveries beyond the current single-slot model. Missing/multiple database sinks withhold commit. Configured database write delay is effective. Broker write rejection becomes an event rather than breaking the frame loop.
+
+Geometry-only topology synchronization now bypasses rebalancing. Reset rebuilds clean group membership, clears runtime, retains topic/mechanics settings and returns paused; restoring a blueprint resets configuration defaults separately. RF reassignment preserves partition logs/offsets and validates before mutation. Engine construction is lazy. New regression file `apps/demo-ui/test/simulation/persistence-boundaries.spec.ts` covers persistence/commit crash boundaries, geometry, reset, RF, rejection and sink cardinality; existing tests updated to assert commit after persistence rather than the old incorrect timing.
+
+Validation:45 simulation tests passed; production UI build passed. Full format/lint/typecheck and264 unit tests passed before the final focused default-reset/sink regressions; final complete gate results recorded at commit. Kafka verification passed and cleaned its owned verification topic. No real business mutation or infrastructure configuration change. No FPS improvement claim or browser interaction acceptance yet.
+
+Next: finish topology validation/reconciliation (group-wide sink/topic consistency, unique broker/member cloning, deleted-node pending work, paused structural scaling and complete topic scoping). Then profile the UI and implement snapshot/virtual-clock rendering before the presenter layout. Current shared mutable node/view state and broad frame copies still need the approved rendering work. Session retention and diagram persistence remain unimplemented. Do not describe the enhancement as complete or start a cosmetic-only rewrite over these pending contracts.
+
+S1 final gates: format/lint/typecheck passed,68 files/267 unit tests passed,45 simulation tests passed, production frontend build passed; existing non-fatal bundle warnings remain.

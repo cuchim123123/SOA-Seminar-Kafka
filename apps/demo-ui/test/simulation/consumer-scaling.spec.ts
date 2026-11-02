@@ -137,6 +137,30 @@ describe('Milestone 2 — Kafka Semantics, Ordering & Consumer Scaling', () => {
         },
       ];
 
+      testNodes.push({
+        id: 'database-1',
+        type: 'databaseNode',
+        position: { x: 600, y: 0 },
+        data: {
+          id: 'database-1',
+          kind: 'database',
+          title: 'DB',
+          icon: 'DB',
+          status: 'IDLE',
+          engine: 'PostgreSQL',
+          databaseName: 'projection',
+          schemaTables: [],
+          writeDelayMs: 20,
+          committedRecordCount: 0,
+        },
+      });
+      testEdges.push({
+        id: 'edge-c-db',
+        source: 'consumer-1',
+        target: 'database-1',
+        type: 'simFlowEdge',
+        data: { portType: 'handler-action' },
+      });
       engine.setTopology(testNodes, testEdges);
       engine.clock.start();
     });
@@ -178,6 +202,10 @@ describe('Milestone 2 — Kafka Semantics, Ordering & Consumer Scaling', () => {
       const ev4 = engine.step();
       expect(ev4?.type).toBe('COMPLETE_PROCESSING');
       expect(ev4?.metadata?.offset).toBe(0);
+      expect(group?.getCommittedNextOffset('purchases', 0)).toBe(0);
+      expect(engine.step()?.type).toBe('WRITE_DATABASE');
+      expect(group?.getCommittedNextOffset('purchases', 0)).toBe(0);
+      expect(engine.step()?.type).toBe('COMMIT_OFFSET');
       expect(group?.getCommittedNextOffset('purchases', 0)).toBe(1);
 
       // Step 5: Record #1 is now immediately scheduled and begins processing
@@ -189,6 +217,8 @@ describe('Milestone 2 — Kafka Semantics, Ordering & Consumer Scaling', () => {
       const ev6 = engine.step();
       expect(ev6?.type).toBe('COMPLETE_PROCESSING');
       expect(ev6?.metadata?.offset).toBe(1);
+      expect(engine.step()?.type).toBe('WRITE_DATABASE');
+      expect(engine.step()?.type).toBe('COMMIT_OFFSET');
       expect(group?.getCommittedNextOffset('purchases', 0)).toBe(2);
 
       // Lag on P0 is now 0 (LEO 2 - Committed 2)

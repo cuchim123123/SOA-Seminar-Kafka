@@ -331,6 +331,8 @@ describe('Milestone 1 — Simulation Engine & Mechanics', () => {
 
       const dbNode = engine.nodes.get('database-1');
       expect(dbNode?.data.committedRecordCount).toBe(1);
+      expect(group?.calculateLag('purchases', targetP, 1)).toBe(1);
+      expect(engine.step()?.type).toBe('COMMIT_OFFSET');
       expect(group?.calculateLag('purchases', targetP, 1)).toBe(0);
     });
 

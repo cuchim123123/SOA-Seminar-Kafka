@@ -1,10 +1,12 @@
 import type { SimEngine } from '../sim-engine';
 import type { SimConsumerData, SimEvent } from '../../domain/types';
 import { createSimEvent } from '../../domain/events';
+import { activeDelivery, finishDelivery, scheduleCommit } from './consumer-delivery';
 import { SimClusterOperations } from '../operations/sim-cluster-operations';
 
 export class SimEventHandlers {
   public static executeEvent(engine: SimEngine, event: SimEvent): void {
+    if (event.metadata?.deliveryId && !activeDelivery(engine, event)) return;
     engine.recordEvent(event);
 
     switch (event.type) {
@@ -16,12 +18,27 @@ export class SimEventHandlers {
         const topicName = (metadata.topic as string) || 'purchases';
 
         // Append to broker partition log
-        const { offset } = engine.kafkaCluster.appendRecord(
-          topicName,
-          partitionId,
-          message,
-          event.scheduledTime,
-        );
+        let offset: number;
+        try {
+          ({ offset } = engine.kafkaCluster.appendRecord(
+            topicName,
+            partitionId,
+            message,
+            event.scheduledTime,
+          ));
+        } catch (error) {
+          message.status = 'FAILED';
+          engine.recordEvent(
+            createSimEvent(
+              event.scheduledTime,
+              'PRODUCE_REJECTED',
+              event.sourceNodeId,
+              error instanceof Error ? error.message : String(error),
+              { message, metadata },
+            ),
+          );
+          break;
+        }
 
         // Record ACK confirmation into timeline
         const effectiveAcks = engine.mechanicsConfig.producerAcks;
@@ -61,6 +78,7 @@ export class SimEventHandlers {
         const { message, targetNodeId, metadata } = event;
         if (!targetNodeId || !message) break;
 
+        if (!activeDelivery(engine, { ...event, sourceNodeId: targetNodeId })) break;
         const consumerNode = engine.nodes.get(targetNodeId);
         if (consumerNode && consumerNode.data.kind === 'consumer') {
           if (consumerNode.data.status === 'CRASHED') break;
@@ -79,7 +97,7 @@ export class SimEventHandlers {
             instance.currentProcessingOffset = off;
           }
 
-          const delay = (consumerNode.data.processingDelayMs as number) || 120;
+          const delay = Number(consumerNode.data.processingDelayMs ?? 120);
 
           const completeEvent = createSimEvent(
             event.scheduledTime + delay,
@@ -102,22 +120,9 @@ export class SimEventHandlers {
           const consumerData = consumerNode.data as SimConsumerData;
           if (consumerData.status === 'CRASHED') break;
 
-          const isPaused = Boolean(consumerData.isPaused || consumerData.status === 'PAUSED');
-          consumerData.status = isPaused ? 'PAUSED' : 'POLLING';
-          consumerData.currentProcessingPartition = undefined;
-          consumerData.currentProcessingOffset = undefined;
-          engine.processedMessageCount += 1;
-
+          if (!activeDelivery(engine, event)) break;
           const groupId = consumerData.groupId || 'loyalty-v1';
-          const group = engine.consumerGroups.get(groupId);
-          const instance = group?.members.get(sourceNodeId);
-          if (instance) {
-            instance.currentProcessingPartition = undefined;
-            instance.currentProcessingOffset = undefined;
-          }
           const partitionId = Number(metadata.partitionId ?? 0);
-          const offset = Number(metadata.offset ?? 0);
-          const topicName = (metadata.topic as string) || 'purchases';
 
           const isGlobalPoisonPill =
             message.key === 'POISON_PILL' || message.payload.purchaseId.startsWith('POISON');
@@ -146,11 +151,6 @@ export class SimEventHandlers {
             });
 
             if (dlqEdge) {
-              // DLQ Component is wired: Commit offset to avoid head-of-line blocking, and route to DLQ node!
-              if (group) {
-                group.commitOffset(topicName, partitionId, offset);
-              }
-
               const dlqNodeId = dlqEdge.target;
               const dlqTransitMs = 350;
               const arriveTime = event.scheduledTime + dlqTransitMs;
@@ -171,24 +171,14 @@ export class SimEventHandlers {
                 arriveTime,
                 'ROUTE_DLQ',
                 dlqNodeId,
-                `🛡️ [DLQ ROUTING] Consumer ${sourceNodeId} isolated poison-pill ${message.payload.purchaseId} to Dead-Letter Queue! Partition P${partitionId} unblocked.`,
+                `DLQ persisted poison-pill ${message.payload.purchaseId}; partition P${partitionId} commit pending for ${sourceNodeId}.`,
                 {
                   message,
                   edgeId: dlqEdge.id,
+                  metadata: event.metadata,
                 },
               );
               engine.queue.push(dlqEvent);
-
-              // Release in-flight partition lock
-              if (group) {
-                group.unlockPartition(partitionId);
-              }
-
-              // Resume any pending backlog on this partition
-              const isPartitionCut = Boolean(consumerData.pausedPartitions?.includes(partitionId));
-              if (group && !isPaused && !isPartitionCut) {
-                SimClusterOperations.resumePartitionBacklog(engine, group, partitionId);
-              }
             } else {
               // DLQ Component NOT wired -> Head-of-Line Blocking!
               consumerNode.data.status = 'ERROR';
@@ -210,122 +200,105 @@ export class SimEventHandlers {
             const isDuplicate = engine.processedEvents.has(dedupKey);
 
             if (isDuplicate && engine.mechanicsConfig.consumerIdempotency) {
-              // Idempotency ON: Duplicate detected! Commit offset, but skip DB mutation!
-              if (group) {
-                group.commitOffset(topicName, partitionId, offset);
-              }
-
-              consumerNode.data.statusText = '⚠️ Duplicate Skipped (Idempotent)';
-              const skipEvent = createSimEvent(
-                event.scheduledTime,
-                'IDEMPOTENCY_SKIP',
-                sourceNodeId,
-                `⚠️ [IDEMPOTENCY ACTIVE] Consumer ${sourceNodeId} identified DUPLICATE event ID ${message.id} (${message.payload.purchaseId}). Processed_events idempotency check skipped DB mutation to preserve exact-once business state!`,
-                { message, metadata: event.metadata },
-              );
-              engine.recordEvent(skipEvent);
-            } else {
-              // Not duplicate, OR Idempotency OFF (Duplicate Hazard)
-              if (isDuplicate && !engine.mechanicsConfig.consumerIdempotency) {
-                const hazardEvent = createSimEvent(
+              consumerNode.data.statusText = 'Duplicate skipped; existing database receipt';
+              engine.recordEvent(
+                createSimEvent(
                   event.scheduledTime,
-                  'IDEMPOTENCY_DISABLED_HAZARD',
+                  'IDEMPOTENCY_SKIP',
                   sourceNodeId,
-                  `🚨 [IDEMPOTENCY DISABLED] Consumer ${sourceNodeId} processed DUPLICATE event ID ${message.id} (${message.payload.purchaseId}) and executed DUPLICATE DB mutation! Phantom points/revenue added to read-model!`,
-                  { message, metadata: event.metadata },
+                  `Duplicate ${message.id} skipped for group ${groupId}`,
+                  { message, metadata },
+                ),
+              );
+              scheduleCommit(engine, event);
+            } else {
+              const sinkEdges = Array.from(engine.edges.values()).filter(
+                (edge) =>
+                  edge.source === sourceNodeId &&
+                  engine.nodes.get(edge.target)?.data.kind === 'database',
+              );
+              if (sinkEdges.length !== 1) {
+                consumerData.status = 'ERROR';
+                consumerData.statusText =
+                  'Exactly one database sink is required; offset not committed';
+                engine.recordEvent(
+                  createSimEvent(
+                    event.scheduledTime,
+                    'CONSUMER_ERROR',
+                    sourceNodeId,
+                    consumerData.statusText,
+                    { message, metadata },
+                  ),
                 );
-                engine.recordEvent(hazardEvent);
-              } else {
-                engine.processedEvents.add(dedupKey);
+                break;
               }
-
-              // Commit Kafka offset
-              if (group) {
-                group.commitOffset(topicName, partitionId, offset);
-              }
-
-              // Route mutation to database
-              const dbEdge = Array.from(engine.edges.values()).find((e) => {
-                if (e.source !== sourceNodeId) return false;
-                const targetNode = engine.nodes.get(e.target);
-                return targetNode?.data.kind === 'database';
+              const dbEdge = sinkEdges[0];
+              const dbNode = engine.nodes.get(dbEdge.target)!;
+              const arriveTime = event.scheduledTime + Number(dbNode.data.writeDelayMs ?? 20);
+              engine.inFlightTokens.push({
+                id: engine.nextTokenId(`token-db-${message.id}`),
+                messageId: message.id,
+                messageKey: message.key,
+                edgeId: dbEdge.id,
+                sourceNodeId,
+                targetNodeId: dbEdge.target,
+                startTime: event.scheduledTime,
+                arriveTime,
+                color: isDuplicate ? '#ef4444' : '#10b981',
               });
-
-              if (dbEdge) {
-                const dbNodeId = dbEdge.target;
-                const dbTransitMs = 350;
-                const arriveTime = event.scheduledTime + dbTransitMs;
-
-                engine.inFlightTokens.push({
-                  id: engine.nextTokenId(`token-db-${message.id}`),
-                  messageId: message.id,
-                  messageKey: message.key,
-                  edgeId: dbEdge.id,
-                  sourceNodeId,
-                  targetNodeId: dbNodeId,
-                  startTime: event.scheduledTime,
-                  arriveTime,
-                  color: isDuplicate ? '#ef4444' : '#10b981',
-                });
-
-                const dbWriteEvent = createSimEvent(
+              engine.queue.push(
+                createSimEvent(
                   arriveTime,
                   'WRITE_DATABASE',
-                  dbNodeId,
-                  `Database committed read-model update for order ${message.payload.purchaseId} ($${(message.payload.amountCents / 100).toFixed(2)})${isDuplicate ? ' 🚨 [DUPLICATE PHANTOM WRITE]' : ''}`,
+                  dbEdge.target,
+                  `Persist read-model and dedup receipt for ${message.payload.purchaseId}`,
                   {
                     message,
                     edgeId: dbEdge.id,
+                    metadata: { ...metadata, consumerId: sourceNodeId, groupId },
                   },
-                );
-                engine.queue.push(dbWriteEvent);
-              }
-            }
-
-            // Release in-flight partition lock so next backlog record can be polled!
-            if (group) {
-              group.unlockPartition(partitionId);
-            }
-
-            // Strict ordering invariant: check if there are further records in partition backlog!
-            const isPartitionCut = Boolean(consumerData.pausedPartitions?.includes(partitionId));
-            if (group && !isPaused && !isPartitionCut) {
-              const partition = engine.kafkaCluster.getPartition(topicName, partitionId);
-              const nextCommitted = group.getCommittedNextOffset(topicName, partitionId);
-              if (partition && nextCommitted < partition.logEndOffset) {
-                const nextRecord = partition.records.find((r) => r.offset === nextCommitted);
-                if (nextRecord) {
-                  SimClusterOperations.scheduleConsumerPoll(
-                    engine,
-                    topicName,
-                    partitionId,
-                    nextRecord.offset,
-                    nextRecord.message,
-                    event.scheduledTime,
-                  );
-                }
-              }
+                ),
+              );
             }
           }
         }
         break;
       }
-
       case 'WRITE_DATABASE': {
+        const delivery = activeDelivery(engine, event);
         const dbNode = engine.nodes.get(event.sourceNodeId);
-        if (dbNode && dbNode.data.kind === 'database') {
-          dbNode.data.committedRecordCount = (Number(dbNode.data.committedRecordCount) || 0) + 1;
+        if (!delivery || !event.message || dbNode?.data.kind !== 'database') break;
+        const dedupKey = `${delivery.group.groupId}:${event.message.id}`;
+        const duplicate = engine.processedEvents.has(dedupKey);
+        if (!duplicate || !engine.mechanicsConfig.consumerIdempotency) {
+          dbNode.data.committedRecordCount = Number(dbNode.data.committedRecordCount ?? 0) + 1;
           dbNode.data.status = 'ACTIVE';
+          engine.processedEvents.add(dedupKey);
+          if (duplicate)
+            engine.recordEvent(
+              createSimEvent(
+                event.scheduledTime,
+                'IDEMPOTENCY_DISABLED_HAZARD',
+                delivery.consumerId,
+                'Duplicate database mutation (idempotency disabled)',
+                { message: event.message, metadata: event.metadata },
+              ),
+            );
         }
+        scheduleCommit(engine, event);
         break;
       }
-
       case 'ROUTE_DLQ': {
+        if (!activeDelivery(engine, event)) break;
         const dlqNode = engine.nodes.get(event.sourceNodeId);
-        if (dlqNode && dlqNode.data.kind === 'dead-letter-queue') {
-          dlqNode.data.deadLetterCount = (Number(dlqNode.data.deadLetterCount) || 0) + 1;
-          dlqNode.data.status = 'ACTIVE';
-        }
+        if (dlqNode?.data.kind !== 'dead-letter-queue') break;
+        dlqNode.data.deadLetterCount = Number(dlqNode.data.deadLetterCount ?? 0) + 1;
+        dlqNode.data.status = 'ACTIVE';
+        scheduleCommit(engine, event);
+        break;
+      }
+      case 'COMMIT_OFFSET': {
+        finishDelivery(engine, event);
         break;
       }
 

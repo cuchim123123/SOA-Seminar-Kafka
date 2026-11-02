@@ -14,6 +14,15 @@ import { SimMessageDispatcher } from './dispatcher/sim-message-dispatcher';
 import { SimClusterOperations } from './operations/sim-cluster-operations';
 import { SimEventHandlers } from './handlers/sim-event-handlers';
 
+const DEFAULT_MECHANICS_CONFIG: SimKafkaMechanicsConfig = {
+  commitMode: 'manual',
+  autoOffsetReset: 'latest',
+  consumerIdempotency: true,
+  keyOrderingMode: 'MURMUR2_KEYED',
+  partitioningStrategy: 'murmur2-key',
+  producerAcks: 'all',
+};
+
 export type SimEngineListener = (() => void) | { onStateUpdated?: () => void };
 
 export class SimEngine {
@@ -29,18 +38,13 @@ export class SimEngine {
   public inFlightTokens: SimInFlightToken[] = [];
   public processedMessageCount: number = 0;
 
-  public mechanicsConfig: SimKafkaMechanicsConfig = {
-    commitMode: 'manual',
-    autoOffsetReset: 'latest',
-    consumerIdempotency: true,
-    keyOrderingMode: 'MURMUR2_KEYED',
-    producerAcks: 'all',
-  };
+  public mechanicsConfig: SimKafkaMechanicsConfig = { ...DEFAULT_MECHANICS_CONFIG };
 
   public processedEvents: Set<string> = new Set();
   public roundRobinIndex: number = 0;
   public lastDispatchedMessage: SimMessage | null = null;
   private tokenSequence: number = 0;
+  private topologySignature = '';
 
   private listeners: SimEngineListener[] = [];
 
@@ -75,6 +79,34 @@ export class SimEngine {
     for (const edge of edges) {
       this.edges.set(edge.id, edge);
     }
+
+    // Geometry/selection/React Flow measurements never change execution semantics.
+    const signature = JSON.stringify({
+      nodes: nodes
+        .map((node) => ({
+          id: node.id,
+          kind: node.data.kind,
+          brokerId: node.data.brokerId,
+          groupId: node.data.groupId,
+          subscribedTopic: node.data.subscribedTopic,
+          activeTopic: node.data.activeTopic,
+          partitionCount: node.data.partitionCount,
+          replicationFactor: node.data.replicationFactor,
+          minInsyncReplicas: node.data.minInsyncReplicas,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      edges: edges
+        .map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    });
+    if (signature === this.topologySignature) return;
+    this.topologySignature = signature;
 
     // Sync Kafka Broker topology and Topic configuration
     const clusterNode = nodes.find((n) => n.data.kind === 'kafka-cluster');
@@ -244,7 +276,7 @@ export class SimEngine {
     return nextEvent;
   }
 
-  public reset(): void {
+  public reset(preserveConfiguration = true): void {
     this.clock.reset();
     this.queue.clear();
     this.eventLog = [];
@@ -255,13 +287,37 @@ export class SimEngine {
     this.lastDispatchedMessage = null;
     this.tokenSequence = 0;
 
-    this.kafkaCluster = new SimKafkaClusterModel('kraft-sim', 3);
-    this.kafkaCluster.createTopic('purchases', 4, 3, 2);
-
-    for (const group of this.consumerGroups.values()) {
-      group.committedNextOffsets.clear();
-      group.unlockAllPartitions();
+    const defaults = new SimKafkaClusterModel('kraft-sim', 3);
+    const configuration = preserveConfiguration ? this.kafkaCluster : defaults;
+    const topics = Array.from(configuration.topics.values()).map((topic) => ({
+      name: topic.name,
+      partitionCount: topic.partitions.size,
+      rf: topic.replicationFactor,
+      minIsr: topic.minInsyncReplicas,
+    }));
+    const brokers = Array.from(configuration.brokers.values());
+    const strategies = new Map(
+      Array.from(this.consumerGroups.values()).map((group) => [
+        group.groupId,
+        group.assignorStrategy,
+      ]),
+    );
+    if (!preserveConfiguration) {
+      strategies.clear();
+      this.mechanicsConfig = { ...DEFAULT_MECHANICS_CONFIG };
     }
+    this.kafkaCluster = new SimKafkaClusterModel('kraft-sim', 3);
+    this.kafkaCluster.brokers = new Map(
+      brokers.map((broker, index) => [
+        broker.id,
+        { ...broker, status: 'ONLINE' as const, isController: index === 0 },
+      ]),
+    );
+    this.kafkaCluster.topics.clear();
+    for (const topic of topics)
+      this.kafkaCluster.createTopic(topic.name, topic.partitionCount, topic.rf, topic.minIsr);
+    this.consumerGroups.clear();
+    this.topologySignature = '';
 
     for (const node of this.nodes.values()) {
       if (node.data.kind === 'consumer') {
@@ -271,6 +327,13 @@ export class SimEngine {
         node.data.statusText = undefined;
         node.data.isPaused = false;
         node.data.pausedPartitions = [];
+      } else if (node.data.kind === 'kafka-cluster') {
+        const topic = this.kafkaCluster.topics.get(String(node.data.activeTopic ?? 'purchases'));
+        if (topic) {
+          node.data.partitionCount = topic.partitions.size;
+          node.data.replicationFactor = topic.replicationFactor;
+          node.data.minInsyncReplicas = topic.minInsyncReplicas;
+        }
       } else if (node.data.kind === 'producer') {
         node.data.status = 'IDLE';
       } else if (node.data.kind === 'database') {
@@ -289,6 +352,17 @@ export class SimEngine {
       }
     }
 
+    this.setTopology(Array.from(this.nodes.values()), Array.from(this.edges.values()));
+    for (const [id, strategy] of strategies) {
+      const group = this.consumerGroups.get(id);
+      group?.setAssignorStrategy(strategy);
+      group?.rebalance(this.kafkaCluster.topics.get('purchases')?.partitions.size ?? 0);
+      group?.members.forEach((member) => {
+        const node = this.nodes.get(member.id);
+        if (node) node.data.assignedPartitions = [...member.assignedPartitions];
+      });
+    }
+    this.clock.pause();
     this.notifyStateUpdated();
   }
 

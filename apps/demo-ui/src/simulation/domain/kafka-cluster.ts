@@ -107,6 +107,29 @@ export class SimKafkaClusterModel {
     return calculateKafkaPartition(key, pCount);
   }
 
+  public reassignReplicas(topicName: string, replicationFactor: number): void {
+    const topic = this.topics.get(topicName);
+    if (!topic) throw new Error(`Topic ${topicName} not found`);
+    const ids = Array.from(this.brokers.keys());
+    if (
+      !Number.isInteger(replicationFactor) ||
+      replicationFactor < 1 ||
+      replicationFactor > ids.length
+    )
+      throw new Error('Replication factor must fit the broker membership');
+    for (const partition of topic.partitions.values()) {
+      const replicas = Array.from(
+        { length: replicationFactor },
+        (_, index) => ids[(partition.partitionId + index) % ids.length],
+      );
+      partition.replicas = replicas;
+      partition.isr = replicas.filter((id) => this.brokers.get(id)?.status === 'ONLINE');
+      if (!partition.isr.includes(partition.leaderBrokerId))
+        partition.leaderBrokerId = partition.isr[0] ?? -1;
+    }
+    topic.replicationFactor = replicationFactor;
+  }
+
   public crashBroker(brokerId: number): {
     affectedPartitions: Array<{ partitionId: number; newLeader?: number }>;
     newController?: number;

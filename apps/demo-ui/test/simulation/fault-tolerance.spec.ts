@@ -283,7 +283,7 @@ describe('Milestone 3 — Failures, KRaft Quorum & Rebalancing', () => {
 
       // Offset for partition 2 must be committed to prevent partition stall
       const group = engine.consumerGroups.get('loyalty-v1');
-      expect(group?.getCommittedNextOffset('purchases', 2)).toBe(1);
+      expect(group?.getCommittedNextOffset('purchases', 2)).toBe(0);
 
       // Step 4: ROUTE_DLQ arrives at dlq-1 node
       const ev4 = engine.step();
@@ -293,6 +293,8 @@ describe('Milestone 3 — Failures, KRaft Quorum & Rebalancing', () => {
       const dlqNode = engine.nodes.get('dlq-1');
       expect(dlqNode?.data.deadLetterCount).toBe(1);
       expect(dlqNode?.data.status).toBe('ACTIVE');
+      expect(engine.step()?.type).toBe('COMMIT_OFFSET');
+      expect(group?.getCommittedNextOffset('purchases', 2)).toBe(1);
 
       // Verify Database received 0 writes (poison pill was not saved to DB)
       const dbNode = engine.nodes.get('database-1');

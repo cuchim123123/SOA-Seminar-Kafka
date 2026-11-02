@@ -131,3 +131,5 @@ until their tickets are selected. Report commands actually run.
 - [x] REAL-04: approved coordinated cutover locking, complete global review/confirmation, isolated partial-promotion and failure acceptance; browser keyboard/layout/outage/navigation checks.
 
 See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.
+
+Simulation Playground enhancement: implementation approved; first correctness slice fixes persistence-before-offset commit, stale crash callbacks, reset membership, geometry-triggered rebalancing and RF log preservation. UI/performance/persistence phases remain in progress. See SIMULATION-PLAYGROUND-ENHANCEMENT-PLAN.md.

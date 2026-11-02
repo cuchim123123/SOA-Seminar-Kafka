@@ -127,6 +127,16 @@ export class SimClusterOperations {
               },
             },
           );
+          startEvent.metadata = {
+            ...startEvent.metadata,
+            consumerId: memberId,
+            groupId: group.groupId,
+            deliveryId: startEvent.id,
+            commitMode: engine.mechanicsConfig.commitMode,
+          };
+          instance.deliveryId = startEvent.id;
+          instance.currentProcessingPartition = partitionId;
+          instance.currentProcessingOffset = targetOffset;
           engine.queue.push(startEvent);
           break;
         }
