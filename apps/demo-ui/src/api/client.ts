@@ -1,3 +1,5 @@
+import { ApiError, request } from './http';
+
 export interface PartitionInfo {
   partition: number;
   leader: number;
@@ -238,29 +240,6 @@ export interface ProcessedEventsDto {
   events: ProcessedEventDto[];
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-  if (!res.ok) {
-    let errorMsg = `Request failed: ${res.status} ${res.statusText}`;
-    try {
-      const errObj = await res.json();
-      errorMsg = errObj.message || errObj.error || errorMsg;
-    } catch {
-      // Ignore json parse error
-    }
-    throw new Error(errorMsg);
-  }
-
-  return res.json() as Promise<T>;
-}
-
 export interface BrokerMessageRecord {
   topic: string;
   partition: number;
@@ -455,9 +434,12 @@ export const api = {
   // 2. Loyalty API
   getLoyaltyAccount: async (customerId: string): Promise<LoyaltyAccountDto | null> => {
     try {
-      return await request<LoyaltyAccountDto>(`/api/loyalty/api/v1/loyalty/${customerId}`);
-    } catch {
-      return null;
+      return await request<LoyaltyAccountDto>(
+        `/api/loyalty/api/v1/loyalty/${encodeURIComponent(customerId)}`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
     }
   },
 

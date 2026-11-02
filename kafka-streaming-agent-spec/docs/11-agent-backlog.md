@@ -121,3 +121,13 @@ until their tickets are selected. Report commands actually run.
 - [x] **ING-06 Shared Monitoring Integration**: Prometheus target (`job_name: ingress-benchmark` on port 3006) and Grafana dashboard (`ingress-benchmark.json`).
 - [x] **ING-07 Matrix Execution & Reasonableness Analysis**: 3 repetitions per cell across concurrencies 1, 16, 64 with 1 KiB payload. Complete Little's Law, RTT, and mechanical bottleneck analysis.
 
+
+
+## Milestone: Real Application workspace — in progress
+
+- [x] REAL-01: bounded purchase history, context-owned receipt queries, HTTP error evidence and live read-only integration tests.
+- [ ] REAL-02: transaction-aware server push and verified end-to-end subscription.
+- [ ] REAL-03: sidebar, business pages, teaching controls and explicit global recovery review.
+- [ ] REAL-04: cutover concurrency decision, browser integration and presenter validation.
+
+See `docs/real-application-implementation-progress.md` for exact checks, blockers and resume instructions.

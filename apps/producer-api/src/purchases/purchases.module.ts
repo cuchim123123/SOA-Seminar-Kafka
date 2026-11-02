@@ -1,3 +1,7 @@
+import { PURCHASE_HISTORY_PORT } from './application/ports/purchase-history.port';
+import { ListPurchasesHandler } from './application/queries/list-purchases.handler';
+import { PostgresPurchaseHistoryAdapter } from './infrastructure/adapters/postgres-purchase-history.adapter';
+import { PurchaseHistoryController } from './interfaces/http/purchase-history.controller';
 import { Module } from '@nestjs/common';
 import { CreatePurchaseBatchHandler } from './application/commands/create-purchase-batch/create-purchase-batch.handler';
 import { CreatePurchaseHandler } from './application/commands/create-purchase/create-purchase.handler';
@@ -18,8 +22,10 @@ import { PostgresUnitOfWorkAdapter } from './infrastructure/adapters/postgres-un
 import { PurchasesController } from './interfaces/http/purchases.controller';
 
 @Module({
-  controllers: [PurchasesController],
+  controllers: [PurchaseHistoryController, PurchasesController],
   providers: [
+    ListPurchasesHandler,
+    { provide: PURCHASE_HISTORY_PORT, useClass: PostgresPurchaseHistoryAdapter },
     CreatePurchaseHandler,
     CreatePurchaseBatchHandler,
     InvalidateSyntheticPurchaseHandler,

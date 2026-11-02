@@ -1,3 +1,7 @@
+import { EVENT_RECEIPT_READ_PORT } from './application/ports/event-receipt-read.port';
+import { GetEventReceiptsHandler } from './application/queries/get-event-receipts.handler';
+import { PostgresEventReceiptReadAdapter } from './infrastructure/adapters/postgres-event-receipt-read.adapter';
+import { EventReceiptsController } from './interfaces/http/event-receipts.controller';
 import { Module } from '@nestjs/common';
 import { ApplySalesEventHandler } from './application/commands/apply-sales-event';
 import { PauseAnalyticsConsumerHandler } from './application/commands/pause-analytics-consumer';
@@ -16,8 +20,10 @@ import { AnalyticsConsumerControlController } from './interfaces/http/analytics-
 import { AnalyticsController } from './interfaces/http/analytics.controller';
 
 @Module({
-  controllers: [AnalyticsController, AnalyticsConsumerControlController],
+  controllers: [EventReceiptsController, AnalyticsController, AnalyticsConsumerControlController],
   providers: [
+    GetEventReceiptsHandler,
+    { provide: EVENT_RECEIPT_READ_PORT, useClass: PostgresEventReceiptReadAdapter },
     ApplySalesEventHandler,
     GetSalesSummaryHandler,
     PauseAnalyticsConsumerHandler,

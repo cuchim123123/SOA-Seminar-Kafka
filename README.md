@@ -408,3 +408,8 @@ pnpm monitoring:down
 ### Kafbat UI migration (2026-11-01)
 
 Both single-broker and replicated Compose profiles use Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui` for the single-broker profile, or use `-f docker-compose.cluster.yml` for the replicated profile. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.
+
+
+## Real Application workspace implementation
+
+The approved workspace is being implemented incrementally. Read the [persistent progress and next steps](docs/real-application-implementation-progress.md) before resuming. The read API foundation is implemented; server push and the new workspace UI remain in progress.

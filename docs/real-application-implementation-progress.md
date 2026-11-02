@@ -4,11 +4,11 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Overall status
 
-- Current phase: Phase1, read contracts and HTTP evidence foundation.
-- Completed: repository/plan reconciliation and initial persistent checkpoint.
-- In progress: inspecting existing read adapters, DTOs and tests before implementing bounded history and receipts.
+- Current phase: Phase1 read foundation complete; next is Phase1b server push.
+- Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
+- In progress: cutover safety approval pending; server-push implementation not started.
 - Remaining: Phase1 APIs/client; Phase1b transactional notifications/SSE and one verified end-to-end flow; Phase2 sidebar; Phase3 business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 browser/runtime validation.
-- Blockers: no implementation blocker yet. Cutover concurrency requires investigation before enabling promotion; do not change its semantics without discussing findings with the user.
+- Blockers: existing cutover reads then unconditionally upserts, allowing a concurrent live update between the operations. Coordinated locking approval was requested; do not change semantics or enable promotion pending resolution. Existing unrelated simulation edits fail the frontend build (see C1); backend milestone checks pass.
 
 ## Decisions and boundaries
 
@@ -29,9 +29,21 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. Implement status-preserving HTTP errors and canonical purchase GET in `apps/demo-ui/src/api/`; distinguish account404 from outages. Add focused tests.
-2. Implement bounded source-owned purchase history with stable cursor and separate invalidation identity, and bounded context-filtered receipt APIs. Follow controller → handler → port → adapter. Inspect existing Prisma generated-client setup before changing types.
-3. Run focused tests, format/lint/typecheck/unit gates, update this document with exact results and commit the coherent milestone.
-4. Proceed to Phase1b only after foundation checks pass. Validate transactional rollback silence and a real notification-to-browser/read flow before expanding push integration.
+1. Begin Phase1b with one producer-owned transactional notification → SSE → authoritative history-read flow. Existing `pg`/types dependencies are already present in the services. Inspect source unit-of-work and configuration modules before changes; do not introduce polling or a new service.
+2. Test commit visibility, rollback silence, listener reconnect/resync and bounded stream behavior before adding worker/replay notifications.
+3. Resolve the cutover-locking question before changing transaction behavior; it does not block the independent read/push work.
+4. Before frontend shell integration, reconcile the pre-existing simulation build failures without reverting the user's ongoing changes. `pnpm typecheck` does not run the same referenced app configuration as `pnpm --filter @lab/demo-ui build`; run both.
 
 Resume protocol: read plan and this document, inspect `git status`/recent commits, reconcile code with these statements, continue first incomplete milestone. Do not mark integration complete based only on mocks.
+
+### C1 — real read evidence foundation
+
+- Producer: `GET /api/v1/purchases?customerId=&cursor=&limit=`; optional customer filter, default25/max100, stable descending creation-time/ID order, stored-row cursor, invalid/mismatched cursor400. Separate completion/invalidation IDs and sequences; integer values in this new DTO are strings. Existing GET-by-ID remains compatible.
+- Loyalty/Analytics: `GET /api/v1/{context}/event-receipts?eventIds=...`, 1–100 validated IDs. Context-specific persistence identity filter (`loyalty-v1`/`analytics-v1`) matches current handlers. Missing receipt is absence of evidence, not failure. No cross-context queries or new tables.
+- Controller → handler → port → adapter, registered in existing modules. Shared receipt wire-input parser in contracts; no shared mutable domain model.
+- UI: `api/http.ts` retains HTTP status/details and never retries mutations; account404 alone returns null. `api/business.ts` supplies canonical purchase/history/receipt reads with cancellation and encoded IDs. No UI page integration yet.
+- Tests: format check, lint, workspace typecheck passed; unit suite **55 files /236 tests passed**. Three new read-only HTTP/PostgreSQL integration tests passed, using ephemeral local HTTP listeners and existing database rows; no consumer loops or database mutations started.
+- `pnpm kafka:verify` passed on active app infrastructure, including creation/deletion of its own `p002.verification.test` topic and Kafbat health.
+- `pnpm --filter @lab/demo-ui build` failed exclusively in pre-existing simulation edits: missing broker `icon` fields across blueprints; missing `SimKafkaBrokerData` import and too-narrow inferred data type in `useSimulationStore.ts`. These files were not modified by C1. Do not report full frontend build success.
+- Live integration first attempt lacked ConfigModule in two isolated test harnesses; corrected harness imports, rerun all3 passed. No application wiring change needed.
+- No migrations, business mutation, live cutover or schema changes. Full feature remains incomplete.

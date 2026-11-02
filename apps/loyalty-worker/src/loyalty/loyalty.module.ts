@@ -1,3 +1,7 @@
+import { EVENT_RECEIPT_READ_PORT } from './application/ports/event-receipt-read.port';
+import { GetEventReceiptsHandler } from './application/queries/get-event-receipts.handler';
+import { PostgresEventReceiptReadAdapter } from './infrastructure/adapters/postgres-event-receipt-read.adapter';
+import { EventReceiptsController } from './interfaces/http/event-receipts.controller';
 import { Module } from '@nestjs/common';
 import { ApplyPurchaseEventHandler } from './application/commands/apply-purchase-event/apply-purchase-event.handler';
 import { ApplyPurchaseInvalidationHandler } from './application/commands/apply-purchase-invalidation/apply-purchase-invalidation.handler';
@@ -14,8 +18,10 @@ import { LoyaltyConsumerControlController } from './interfaces/http/loyalty-cons
 import { LoyaltyController } from './interfaces/http/loyalty.controller';
 
 @Module({
-  controllers: [LoyaltyController, LoyaltyConsumerControlController],
+  controllers: [EventReceiptsController, LoyaltyController, LoyaltyConsumerControlController],
   providers: [
+    GetEventReceiptsHandler,
+    { provide: EVENT_RECEIPT_READ_PORT, useClass: PostgresEventReceiptReadAdapter },
     ApplyPurchaseEventHandler,
     ApplyPurchaseInvalidationHandler,
     GetLoyaltyAccountHandler,
