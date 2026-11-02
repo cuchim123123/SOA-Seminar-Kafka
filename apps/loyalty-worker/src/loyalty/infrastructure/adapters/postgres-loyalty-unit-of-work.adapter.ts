@@ -17,8 +17,17 @@ export class PostgresLoyaltyUnitOfWorkAdapter implements LoyaltyUnitOfWorkPort {
   async execute<T>(work: (context: LoyaltyUnitOfWorkContext) => Promise<T>): Promise<T> {
     return await this.prisma.$transaction(
       async (tx) => {
+        const repository = new PostgresLoyaltyAccountRepositoryAdapter(tx);
         const context: LoyaltyUnitOfWorkContext = {
-          loyaltyRepository: new PostgresLoyaltyAccountRepositoryAdapter(tx),
+          loyaltyRepository: {
+            findByCustomerId: async (customerId) => {
+              // Shared protocol with replay cutover. Unlike a row lock, this also
+              // serializes first-account creation. Held through commit/rollback.
+              await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'loyalty-account:' + customerId}, 0))`;
+              return repository.findByCustomerId(customerId);
+            },
+            save: (account) => repository.save(account),
+          },
           idempotencyRepository: new PostgresConsumerIdempotencyRepositoryAdapter(tx),
         };
         return await work(context);

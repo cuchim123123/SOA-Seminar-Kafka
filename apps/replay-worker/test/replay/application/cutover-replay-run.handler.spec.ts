@@ -4,6 +4,21 @@ import { CutoverReplayRunCommand } from '../../../src/replay/application/command
 import { CutoverReplayRunHandler } from '../../../src/replay/application/commands/cutover-replay-run/cutover-replay-run.handler';
 import { PrismaService } from '../../../src/database/prisma.service';
 
+function transactional(prisma: PrismaService): PrismaService {
+  const original = prisma.$transaction?.bind(prisma);
+  const enrich = (tx: object) => ({
+    ...tx,
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    replayRun: { ...prisma.replayRun, ...(tx as { replayRun?: object }).replayRun },
+    replayStagingRecord: prisma.replayStagingRecord,
+  });
+  return {
+    ...prisma,
+    $transaction: (work: (tx: object) => Promise<unknown>) =>
+      original ? original((tx) => work(enrich(tx))) : work(enrich(prisma)),
+  } as unknown as PrismaService;
+}
+
 describe('CutoverReplayRunHandler', () => {
   it('throws NotFoundException if run does not exist', async () => {
     const mockPrisma = {
@@ -12,7 +27,7 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(mockPrisma);
+    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
     await expect(handler.execute(new CutoverReplayRunCommand('non-existent'))).rejects.toThrow(
       NotFoundException,
     );
@@ -29,7 +44,7 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(mockPrisma);
+    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
     const result = await handler.execute(new CutoverReplayRunCommand('run-1'));
 
     expect(result.status).toBe('CUTOVER_COMPLETED');
@@ -46,7 +61,7 @@ describe('CutoverReplayRunHandler', () => {
       },
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(mockPrisma);
+    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
     await expect(handler.execute(new CutoverReplayRunCommand('run-1'))).rejects.toThrow(
       BadRequestException,
     );
@@ -89,7 +104,7 @@ describe('CutoverReplayRunHandler', () => {
       }),
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(mockPrisma);
+    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
     await expect(handler.execute(new CutoverReplayRunCommand('run-1'))).rejects.toThrow(
       BadRequestException,
     );
@@ -135,7 +150,7 @@ describe('CutoverReplayRunHandler', () => {
       }),
     } as unknown as PrismaService;
 
-    const handler = new CutoverReplayRunHandler(mockPrisma);
+    const handler = new CutoverReplayRunHandler(transactional(mockPrisma));
     const result = await handler.execute(new CutoverReplayRunCommand('run-1'));
 
     expect(result.status).toBe('CUTOVER_COMPLETED');

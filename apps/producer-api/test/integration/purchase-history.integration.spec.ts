@@ -1,3 +1,4 @@
+import { PurchaseHistoryPage } from '../../src/purchases/application/ports/purchase-history.port';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
@@ -15,7 +16,7 @@ describe('read-only purchase history HTTP integration', () => {
       const base = await app.getUrl();
       const response = await fetch(`${base}/api/v1/purchases?limit=1`);
       expect(response.status).toBe(200);
-      const page = await response.json();
+      const page = (await response.json()) as PurchaseHistoryPage;
       expect(Array.isArray(page.items)).toBe(true);
       if (page.items.length) {
         const item = page.items[0];
@@ -24,13 +25,13 @@ describe('read-only purchase history HTTP integration', () => {
           `${base}/api/v1/purchases/${encodeURIComponent(item.purchaseId)}`,
         );
         expect(detail.status).toBe(200);
-        expect((await detail.json()).purchaseId).toBe(item.purchaseId);
+        expect(((await detail.json()) as { purchaseId: string }).purchaseId).toBe(item.purchaseId);
         if (page.nextCursor) {
-          const next = await (
+          const next = (await (
             await fetch(
               `${base}/api/v1/purchases?limit=1&cursor=${encodeURIComponent(page.nextCursor)}`,
             )
-          ).json();
+          ).json()) as PurchaseHistoryPage;
           expect(
             next.items.every((row: { purchaseId: string }) => row.purchaseId !== item.purchaseId),
           ).toBe(true);
