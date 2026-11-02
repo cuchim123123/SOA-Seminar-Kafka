@@ -5,4 +5,6 @@ export interface GetLoyaltyAccountResult {
   readonly tier: Tier;
   readonly totalEligibleSpendCents: number;
   readonly pointsBalance: number;
+  readonly lastCustomerSequence?: string;
+  readonly correctionRequired?: boolean;
 }

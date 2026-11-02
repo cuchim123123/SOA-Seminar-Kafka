@@ -37,7 +37,7 @@ export interface LoyaltyAccountDto {
   pointsBalance: number;
   tier: 'BRONZE' | 'SILVER' | 'GOLD' | string;
   totalEligibleSpendCents: number;
-  lastCustomerSequence?: number;
+  lastCustomerSequence?: number | string;
   correctionRequired?: boolean;
 }
 
@@ -149,14 +149,14 @@ export interface CustomerComparisonDto {
     points: number;
     tier: string;
     eligibleSpendCents: number;
-    lastCustomerSequence?: number;
+    lastCustomerSequence?: number | string;
     correctionRequired: boolean;
   } | null;
   staged: {
     points: number;
     tier: string;
     eligibleSpendCents: number;
-    lastCustomerSequence?: number;
+    lastCustomerSequence?: number | string;
     scannedEventCount: number;
   } | null;
   discrepancy: {
@@ -667,7 +667,7 @@ export const api = {
       if (
         account &&
         account.lastCustomerSequence !== undefined &&
-        account.lastCustomerSequence >= minLastSequence &&
+        BigInt(account.lastCustomerSequence) >= BigInt(minLastSequence) &&
         account.correctionRequired === true
       ) {
         return account;

@@ -12,6 +12,7 @@ export interface PurchaseHistoryItem {
 }
 
 export interface PurchaseHistoryQuery {
+  purchaseId?: string;
   customerId?: string;
   cursor?: string;
   limit: number;

@@ -417,3 +417,5 @@ The approved workspace is being implemented incrementally. Read the [persistent 
 Real UI checkpoint C7: purchase entry, retained idempotency key, paginated history and canonical detail implemented; browser acceptance and remaining business/recovery features pending. See `docs/real-application-implementation-progress.md`.
 
 Real UI checkpoint C8: separate event evidence, independent consumer receipts and confirmed invalidation implemented; browser acceptance and pagination-independent evidence lookup pending. See persistent progress documentation.
+
+Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and independent consumer controls implemented; UI purchase/idempotency/push and Analytics pause/resume verified. Recovery and final acceptance remain.

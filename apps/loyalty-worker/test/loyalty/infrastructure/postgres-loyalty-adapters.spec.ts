@@ -117,6 +117,8 @@ describe('Postgres Loyalty Adapters', () => {
             tier: 'GOLD',
             eligibleSpendCents: 45_000n,
             points: 90n,
+            lastCustomerSequence: 9007199254740993n,
+            correctionRequired: true,
           })),
         },
       } as unknown as PrismaService;
@@ -129,6 +131,8 @@ describe('Postgres Loyalty Adapters', () => {
         tier: 'GOLD',
         totalEligibleSpendCents: 45_000,
         pointsBalance: 90,
+        lastCustomerSequence: '9007199254740993',
+        correctionRequired: true,
       });
     });
   });

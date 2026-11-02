@@ -30,5 +30,7 @@ describe('GetLoyaltyAccountHandler', () => {
     expect(result?.tier).toBe('SILVER');
     expect(result?.totalEligibleSpendCents).toBe(12_000);
     expect(result?.pointsBalance).toBe(12);
+    expect(result?.lastCustomerSequence).toBe('0');
+    expect(result?.correctionRequired).toBe(false);
   });
 });

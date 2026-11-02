@@ -84,6 +84,10 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
         <h2 className="sidebar-label">Real Application</h2>
         {link('overview', 'Overview', true)}
         {link('purchases', 'Purchases', true)}
+        {link('loyalty', 'Loyalty Accounts', true)}
+        {link('analytics', 'Sales Analytics', true)}
+        {link('events', 'Event Evidence', true)}
+        {link('consumers', 'Consumer Controls', true)}
         {link('benchmark', 'Purchase Benchmark')}
         {link('guide', 'Architecture Guide')}
       </nav>

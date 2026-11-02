@@ -25,6 +25,8 @@ export class PostgresLoyaltyAccountReadDaoAdapter implements LoyaltyAccountReadD
       tier: record.tier as Tier,
       totalEligibleSpendCents: Number(record.eligibleSpendCents),
       pointsBalance: Number(record.points),
+      lastCustomerSequence: record.lastCustomerSequence.toString(),
+      correctionRequired: record.correctionRequired,
     };
   }
 }

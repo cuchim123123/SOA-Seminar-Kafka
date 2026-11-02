@@ -25,7 +25,10 @@ export class PostgresPurchaseHistoryAdapter implements PurchaseHistoryPort {
     // Prisma resolves the cursor using the stored row timestamp, avoiding precision
     // loss from converting PostgreSQL timestamps to a browser timestamp cursor.
     const rows = await this.prisma.purchase.findMany({
-      where: query.customerId ? { customerId: query.customerId } : {},
+      where: {
+        ...(query.customerId ? { customerId: query.customerId } : {}),
+        ...(query.purchaseId ? { purchaseId: query.purchaseId } : {}),
+      },
       orderBy: [{ createdAt: 'desc' }, { purchaseId: 'desc' }],
       take: query.limit + 1,
       ...(query.cursor ? { cursor: { purchaseId: query.cursor }, skip: 1 } : {}),

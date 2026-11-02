@@ -33,7 +33,7 @@ export const businessApi = {
     );
   },
   listPurchases(
-    query: { customerId?: string; cursor?: string; limit?: number },
+    query: { purchaseId?: string; customerId?: string; cursor?: string; limit?: number },
     signal?: AbortSignal,
   ) {
     const params = new URLSearchParams();

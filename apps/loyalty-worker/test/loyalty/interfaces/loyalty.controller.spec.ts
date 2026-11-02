@@ -29,6 +29,8 @@ describe('LoyaltyController', () => {
       tier: 'SILVER',
       totalEligibleSpendCents: 12_000,
       pointsBalance: 12,
+      lastCustomerSequence: '0',
+      correctionRequired: false,
     });
   });
 });

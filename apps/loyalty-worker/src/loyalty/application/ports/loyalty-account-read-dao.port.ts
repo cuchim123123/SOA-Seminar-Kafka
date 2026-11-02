@@ -5,6 +5,8 @@ export interface LoyaltyAccountReadModel {
   readonly tier: Tier;
   readonly totalEligibleSpendCents: number;
   readonly pointsBalance: number;
+  readonly lastCustomerSequence?: string;
+  readonly correctionRequired?: boolean;
 }
 
 export const LOYALTY_ACCOUNT_READ_DAO_PORT = Symbol('LOYALTY_ACCOUNT_READ_DAO_PORT');

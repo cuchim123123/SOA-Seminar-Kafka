@@ -8,6 +8,18 @@ import {
 import { ListPurchasesHandler } from '../../src/purchases/application/queries/list-purchases.handler';
 
 describe('purchase history', () => {
+  it('filters an exact purchase independently of the history page', async () => {
+    const prisma = {
+      purchase: { findMany: vi.fn().mockResolvedValue([]) },
+      outboxEvent: { findMany: vi.fn() },
+    };
+    const adapter = new PostgresPurchaseHistoryAdapter(prisma as unknown as PrismaService);
+    await adapter.list(purchaseHistoryQuerySchema.parse({ purchaseId: 'p1', customerId: 'c' }));
+    expect(prisma.purchase.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { purchaseId: 'p1', customerId: 'c' } }),
+    );
+    expect(purchaseHistoryQuerySchema.safeParse({ purchaseId: '' }).success).toBe(false);
+  });
   it('validates bounded pagination and rejects unexpected query fields', () => {
     expect(purchaseHistoryQuerySchema.parse({})).toEqual({ limit: 25 });
     for (const query of [

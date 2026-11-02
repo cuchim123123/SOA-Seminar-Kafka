@@ -24,6 +24,8 @@ export class GetLoyaltyAccountHandler {
       tier: account.tier,
       totalEligibleSpendCents: account.totalEligibleSpendCents,
       pointsBalance: account.pointsBalance,
+      lastCustomerSequence: account.lastCustomerSequence,
+      correctionRequired: account.correctionRequired,
     };
   }
 }

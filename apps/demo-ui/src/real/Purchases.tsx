@@ -23,6 +23,11 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
   const detail = useLiveResource('producer', `purchase:${route.purchaseId}`, (signal) =>
     route.purchaseId ? businessApi.getPurchase(route.purchaseId, signal) : Promise.resolve(null),
   );
+  const evidence = useLiveResource('producer', `evidence:${route.purchaseId}`, (signal) =>
+    route.purchaseId
+      ? businessApi.listPurchases({ purchaseId: route.purchaseId, limit: 1 }, signal)
+      : Promise.resolve({ items: [], nextCursor: null }),
+  );
   return (
     <>
       <article>
@@ -158,7 +163,7 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
       )}
       {route.purchaseId &&
         (() => {
-          const item = history.data?.items.find((row) => row.purchaseId === route.purchaseId);
+          const item = evidence.data?.items.find((row) => row.purchaseId === route.purchaseId);
           return item ? (
             <PurchaseEvidence
               key={item.purchaseId}
@@ -166,12 +171,16 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
               refresh={() => {
                 history.refresh();
                 detail.refresh();
+                evidence.refresh();
               }}
             />
           ) : (
             <p>
-              Selected purchase event identities are not on the displayed history page. Open its
-              history page to view separate event evidence and invalidation controls.
+              {evidence.error
+                ? `Evidence unavailable: ${evidence.error}`
+                : evidence.loading
+                  ? 'Loading event evidence…'
+                  : 'No persisted evidence found for this purchase.'}
             </p>
           );
         })()}
