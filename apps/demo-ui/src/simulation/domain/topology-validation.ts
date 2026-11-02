@@ -1,4 +1,5 @@
 import type { SimCustomNode, SimCustomEdge } from './types';
+import { SIMULATION_LIMITS } from './limits';
 import { isValidConnection } from '../registry/component-registry';
 
 export function validateTopology(
@@ -7,6 +8,10 @@ export function validateTopology(
   topics?: Set<string>,
 ): string[] {
   const issues: string[] = [];
+  if (nodes.length > SIMULATION_LIMITS.components || edges.length > SIMULATION_LIMITS.wires)
+    issues.push(
+      `Use at most ${SIMULATION_LIMITS.components} components and ${SIMULATION_LIMITS.wires} wires in this teaching model.`,
+    );
   const byId = new Map(nodes.map((node) => [node.id, node]));
   if (byId.size !== nodes.length) issues.push('Component IDs must be unique.');
   if (!nodes.some((node) => ['kafka-broker', 'kafka-cluster'].includes(node.data.kind)))
@@ -34,6 +39,14 @@ export function validateTopology(
     else if (!isValidConnection(source.data.kind, target.data.kind))
       issues.push(`Unsupported connection ${source.data.title} → ${target.data.title}.`);
   }
+  const groupCounts = new Map<string, number>();
+  for (const node of nodes.filter((node) => node.data.kind === 'consumer')) {
+    const groupId = String(node.data.groupId);
+    groupCounts.set(groupId, (groupCounts.get(groupId) ?? 0) + 1);
+  }
+  for (const [id, count] of groupCounts)
+    if (count > SIMULATION_LIMITS.replicasPerGroup)
+      issues.push(`Group ${id}: use at most ${SIMULATION_LIMITS.replicasPerGroup} replicas.`);
   const groups = new Map<string, { topic: string; sink: string }>();
   for (const node of nodes) {
     for (const key of ['processingDelayMs', 'writeDelayMs'])

@@ -1,7 +1,8 @@
 import React from 'react';
 import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react';
 import type { SimEdgeData } from '../../domain/types';
-import { useVirtualTime } from './SimulationClockContext';
+import { useEdgeFrame } from './SimulationClockContext';
+import { SIMULATION_LIMITS } from '../../domain/limits';
 import { tokenProgress } from '../../store/virtual-clock-store';
 
 interface SimFlowEdgeProps extends EdgeProps {
@@ -9,6 +10,7 @@ interface SimFlowEdgeProps extends EdgeProps {
 }
 
 export const SimFlowEdge = React.memo(function SimFlowEdge({
+  id,
   sourceX,
   sourceY,
   targetX,
@@ -28,12 +30,11 @@ export const SimFlowEdge = React.memo(function SimFlowEdge({
     targetPosition,
   });
 
-  const tokens = data?.inFlightTokens || [];
-  const now = useVirtualTime(tokens.length > 0);
+  const { tokens, now } = useEdgeFrame(id);
   const active = tokens
     .map((token) => ({ token, progress: tokenProgress(token.startTime, token.arriveTime, now) }))
     .filter((item) => item.progress !== null);
-  const visible = active.slice(0, 6);
+  const visible = active.slice(0, SIMULATION_LIMITS.particlesPerWire);
   const portType = data?.portType || 'publish';
 
   const strokeColor =

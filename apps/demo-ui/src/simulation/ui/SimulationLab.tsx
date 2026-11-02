@@ -43,7 +43,6 @@ export const SimulationLab: React.FC = () => {
     edges,
     selectedNode,
     eventLog,
-    inFlightTokens,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -81,6 +80,9 @@ export const SimulationLab: React.FC = () => {
     SimCustomEdge
   > | null>(null);
 
+  const inspectionTopic = String(
+    selectedNode?.data.subscribedTopic ?? selectedNode?.data.activeTopic ?? 'purchases',
+  );
   const consumerNodes = useMemo(() => nodes.filter((n) => n.data.kind === 'consumer'), [nodes]);
 
   // Load blueprint and smoothly fit view onto canvas
@@ -116,29 +118,6 @@ export const SimulationLab: React.FC = () => {
     }),
     [],
   );
-
-  // Attach in-flight tokens to edges for visual particle animation
-  const animatedEdges = useMemo(() => {
-    const tokensByEdge = new Map<string, typeof inFlightTokens>();
-    for (const token of inFlightTokens) {
-      const group = tokensByEdge.get(token.edgeId) ?? [];
-      group.push(token);
-      tokensByEdge.set(token.edgeId, group);
-    }
-    return edges.map((edge) => {
-      const tokens = tokensByEdge.get(edge.id);
-      return tokens
-        ? {
-            ...edge,
-            data: {
-              ...edge.data,
-              portType: edge.data?.portType ?? 'publish',
-              inFlightTokens: tokens,
-            },
-          }
-        : edge;
-    });
-  }, [edges, inFlightTokens]);
 
   // View-only wrapper rectangles grouping consumers of the same consumer group
   const canvasNodes = useMemo(
@@ -214,21 +193,23 @@ export const SimulationLab: React.FC = () => {
         background: '#ffffff',
         borderRadius: '12px',
         border: '1px solid #cbd5e1',
-        overflow: 'hidden',
+        overflow: 'auto',
         boxShadow: 'var(--shadow-card)',
         position: 'relative',
       }}
     >
-      <SimulationControls
-        store={store}
-        builderOpen={paletteOpen}
-        onToggleBuilder={() => setPaletteOpen((open) => !open)}
-        onSelectScenario={handleSelectBlueprint}
-        onPoison={(producerId) => {
-          setPoisonProducerId(producerId);
-          setPoisonPillModalOpen(true);
-        }}
-      />
+      <div className="sim-control-panel">
+        <SimulationControls
+          store={store}
+          builderOpen={paletteOpen}
+          onToggleBuilder={() => setPaletteOpen((open) => !open)}
+          onSelectScenario={handleSelectBlueprint}
+          onPoison={(producerId) => {
+            setPoisonProducerId(producerId);
+            setPoisonPillModalOpen(true);
+          }}
+        />
+      </div>
       <div className="sim-session-notice" role="status">
         {store.sessionNotice} {store.storageMessage}
         {store.storageMessage && !store.storageBlocked && (
@@ -280,7 +261,15 @@ export const SimulationLab: React.FC = () => {
         </section>
       )}
       {/* ── CENTER WORKSPACE: PALETTE + CANVAS + INSPECTOR ── */}
-      <div style={{ display: 'flex', flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          minHeight: 180,
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
         {/* Left Palette */}
         <ComponentPalette
           isOpen={paletteOpen}
@@ -305,7 +294,7 @@ export const SimulationLab: React.FC = () => {
           <SimulationClockContext.Provider value={frameClock}>
             <ReactFlow<SimCustomNode, SimCustomEdge>
               nodes={canvasNodes}
-              edges={animatedEdges}
+              edges={edges}
               onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
@@ -355,9 +344,9 @@ export const SimulationLab: React.FC = () => {
             onUpdateData={updateNodeData}
             onDuplicateNode={duplicateNode}
             onDeleteNode={deleteNode}
-            onSetPartitionCount={setTopicPartitionCount}
-            onSetReplicationFactor={setTopicReplicationFactor}
-            onSetMinIsr={setTopicMinIsr}
+            onSetPartitionCount={(count) => setTopicPartitionCount(count, inspectionTopic)}
+            onSetReplicationFactor={(rf) => setTopicReplicationFactor(rf, inspectionTopic)}
+            onSetMinIsr={(minIsr) => setTopicMinIsr(minIsr, inspectionTopic)}
             onSetAssignorStrategy={(strategy) =>
               setAssignorStrategy(strategy, String(selectedNode?.data.groupId))
             }
@@ -374,8 +363,12 @@ export const SimulationLab: React.FC = () => {
             onCreateClusterTopic={createClusterTopic}
             onSetActiveClusterTopic={setActiveClusterTopic}
             brokers={Array.from(engine.kafkaCluster.brokers.values())}
-            minInsyncReplicas={engine.kafkaCluster.topics.get('purchases')?.minInsyncReplicas ?? 2}
-            replicationFactor={engine.kafkaCluster.topics.get('purchases')?.replicationFactor ?? 3}
+            minInsyncReplicas={
+              engine.kafkaCluster.topics.get(inspectionTopic)?.minInsyncReplicas ?? 2
+            }
+            replicationFactor={
+              engine.kafkaCluster.topics.get(inspectionTopic)?.replicationFactor ?? 3
+            }
             assignorStrategy={
               engine.consumerGroups.get(String(selectedNode?.data.groupId))?.assignorStrategy ||
               'round-robin'

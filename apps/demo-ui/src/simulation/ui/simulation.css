@@ -2,6 +2,12 @@
   color: #172438;
   font-size: 13px;
 }
+.sim-control-panel {
+  flex-shrink: 0;
+  max-height: 40%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .simulation-workspace button,
 .simulation-workspace input,
 .simulation-workspace select,
@@ -160,6 +166,22 @@
   flex-basis: 100%;
   margin: 0;
 }
+.sim-topic-settings {
+  flex-basis: 100%;
+}
+.sim-topic-list,
+.sim-topic-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+}
+.sim-topic-form input[type='number'] {
+  width: 65px;
+}
+.sim-topic-form input:not([type='number']) {
+  width: 150px;
+}
 .sim-checkbox {
   padding: 7px 0;
 }
@@ -259,9 +281,19 @@
   justify-content: flex-end;
 }
 .sim-evidence {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  max-height: 35%;
   border-top: 1px solid #cbd5e1;
   background: #f8fafc;
   z-index: 15;
+}
+.sim-evidence-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 .simulation-workspace .sim-evidence-toggle {
   display: flex;
@@ -293,6 +325,8 @@
   min-width: 180px;
 }
 .sim-evidence-columns {
+  flex: 1;
+  min-height: 100px;
   display: grid;
   grid-template-columns: 3fr 2fr;
   height: 240px;
@@ -332,6 +366,9 @@
   font-size: 11px;
 }
 @media (max-width: 900px) {
+  .simulation-workspace .react-flow__minimap {
+    display: none;
+  }
   .sim-header-actions {
     width: 100%;
   }

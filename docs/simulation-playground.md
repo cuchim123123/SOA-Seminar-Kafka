@@ -6,12 +6,14 @@ Choose a scenario, enter a customer key in the message composer, and send an eve
 
 For the Minimal scenario, step through append, poll/start, processing completion, database persistence and N+1 commit. Open **Evidence** to inspect the record offset, group, partition and message journey. Only the latest 100 events are retained; the panel also reports the total recorded count. Filters never claim to cover evicted evidence.
 
+Use **Kafka mechanics & offsets → Topics & replication** to create a topic or apply partition/RF/minISR settings. Topic creation rejects overwrite, and configuration changes validate before mutation. Select producer/relay targets and group subscriptions in the inspector to route independent synthetic flows.
+
 Use **Build system** to click or drag new components onto the canvas. Connect supported handles and use the inspector to configure the selected component. Invalid drafts remain editable; execution is blocked until their listed issues are repaired.
 
 - **Add replica** adds a consumer to the same group, sharing its subscribed topic, offsets and database sink. Replicas beyond the partition count are idle. Scaling pauses, applies membership changes, reconciles old deliveries and stays paused.
 - **Add independent projection** adds a separate consumer group and its own database. It uses the selected consumer, or the first consumer, as a template. New groups follow the configured initial-offset policy; use a group-specific earliest reset to read older records.
 - Moving, selecting, zooming or fitting the canvas does not rebalance or pause. Structural edits and mechanics changes pause the run. Fault actions remain available while running.
-- Pausing consumer polling stops new deliveries; already accepted handler work can finish. Crash/recover models membership failure without deleting a component.
+- A group-specific seek/reset also pauses before reconciling deliveries. New fetches require an online leader; broker recovery resumes compatible backlog. Pausing consumer polling stops new deliveries; already accepted handler work can finish. Crash/recover models membership failure without deleting a component.
 - **Message exercises** contains a duplicate retry and targeted poison injection. Duplicate retries the previous event ID through its original producer. Poison without a DLQ blocks that consumer; a DLQ result persists before manual commit.
 
 | Action | Preserved | Cleared | Playback |
@@ -26,6 +28,10 @@ Diagram autosave is debounced and writes only when its serialized configuration 
 
 Effective controls include topic partitions/replication/minISR, acknowledgments, keyed or round-robin routing, manual/early-auto commit, initial-offset policy, database idempotency, group assignment, subscriptions, membership, consumer processing delay and database write delay. Global mechanics controls are authoritative over scenario/node labels. Acks=all applies minISR; acks=1/0 still require an online leader but do not enforce minISR. This is simplified replication, not real disk/consensus timing.
 
-Database engine/schema labels do not change the storage implementation. Consumer concurrencySlots/failureRate, producer messageRate/clientDelayMs, brokerLatencyMs, outbox retentionCount and CDC pollIntervalMs/batchSize do not control execution. The UI does not expose them as working capacity/timing controls. The current model has one processing slot per consumer and deterministic poison exercises. It has no automatic CDC broker retry or DLQ replay service. Use the independent official benchmark tools for throughput comparisons.
+Database engine/schema labels do not change the storage implementation. Consumer concurrencySlots/failureRate, producer messageRate/clientDelayMs, brokerLatencyMs, outbox retentionCount and CDC pollIntervalMs/batchSize do not control execution. The UI does not expose them as working capacity/timing controls. Run bounds: 10,000 admitted events (including duplicate retries), 100 per burst, 100 components, 400 wires, 24 topics, 12 partitions per topic and 12 replicas per group. Six particles per wire and six replica rows per broker card are drawn; overflow remains visible as a count or in the inspector. Reaching the admission limit rejects the entire new request/burst without discarding pending work or records. Reset run starts a new allowance. Records are retained for the run rather than pruned; the model is not a broker capacity test.
+
+The current model has one processing slot per consumer and deterministic poison exercises. It has no automatic CDC broker retry or DLQ replay service. Use the independent official benchmark tools for throughput comparisons.
 
 Verification commands: `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm --filter @lab/demo-ui build`. The frontend typecheck now checks its actual project references with strict mode enabled. Simulation regressions live under `apps/demo-ui/test/simulation`.
+
+Acceptance coverage includes database/commit crash boundaries, sink rewiring with database-scoped receipts, paused replica scaling, independent subscriptions, early/manual commits, acknowledgment/minISR combinations, atomic topic edits, broker fetch recovery, poison paths, corrupt storage and a 1,000-message stress workload. UI snapshots reuse unchanged node references; 600 idle ticks produce zero model-version/node-snapshot changes. A separate development-build browser comparison is documented in [simulation-performance.md](simulation-performance.md), including the full sample set and remaining outliers.

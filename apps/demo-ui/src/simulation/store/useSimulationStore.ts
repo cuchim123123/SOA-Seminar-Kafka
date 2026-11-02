@@ -6,6 +6,12 @@ import { applyDiagram, captureNodeData, projectNodeViews } from './diagram-state
 import { VirtualClockStore } from './virtual-clock-store';
 import { loadScenario } from './load-scenario';
 import {
+  createTopic as createEngineTopic,
+  configureTopic as configureEngineTopic,
+  type TopicConfiguration,
+} from '../engine/operations/topic-configuration';
+import { SIMULATION_LIMITS } from '../domain/limits';
+import {
   createDiagramDocument,
   readSavedDiagram,
   restoreDiagramDocument,
@@ -85,7 +91,6 @@ export function useSimulationState(active: boolean) {
   const [virtualTimeMs, setVirtualTimeMs] = useState<number>(0);
   const [playbackStatus, setPlaybackStatus] = useState<'STOPPED' | 'RUNNING' | 'PAUSED'>('PAUSED');
   const [speedMultiplier, setSpeedMultiplier] = useState<number>(engine.clock.speedMultiplier);
-  const [inFlightTokens, setInFlightTokens] = useState(engine.inFlightTokens);
   const [mechanicsConfig, setMechanicsConfig] = useState({ ...engine.mechanicsConfig });
 
   // Sync engine state to React
@@ -93,7 +98,7 @@ export function useSimulationState(active: boolean) {
     setVirtualTimeMs(engine.clock.virtualTimeMs);
     setPlaybackStatus(engine.clock.status);
     setSpeedMultiplier(engine.clock.speedMultiplier);
-    frameClock.publish(engine.clock.virtualTimeMs);
+    frameClock.publish(engine.clock.virtualTimeMs, engine.inFlightTokens);
     if (snapshotVersion.current === engine.stateVersion) return;
     snapshotVersion.current = engine.stateVersion;
     setRuntimeData((previous) => captureNodeData(engine, previous));
@@ -102,12 +107,6 @@ export function useSimulationState(active: boolean) {
       previous.every((event, index) => event === engine.eventLog[index])
         ? previous
         : [...engine.eventLog],
-    );
-    setInFlightTokens((previous) =>
-      previous.length === engine.inFlightTokens.length &&
-      previous.every((token, index) => token === engine.inFlightTokens[index])
-        ? previous
-        : [...engine.inFlightTokens],
     );
     setMechanicsConfig((previous) =>
       JSON.stringify(previous) === JSON.stringify(engine.mechanicsConfig)
@@ -152,7 +151,7 @@ export function useSimulationState(active: boolean) {
       if (engine.clock.status !== 'RUNNING') return;
       engine.tick(Math.min(100, Math.max(0, now - lastRealTime)));
       lastRealTime = now;
-      frameClock.publish(engine.clock.virtualTimeMs);
+      frameClock.publish(engine.clock.virtualTimeMs, engine.inFlightTokens);
       if (now - lastPanelTime >= 100) {
         syncFromEngine();
         lastPanelTime = now;
@@ -482,73 +481,67 @@ export function useSimulationState(active: boolean) {
       }
 
       engine.dispatchProducerMessage(pNode.id, customKey);
+      if (engine.lastCommandError) setValidationMessage(engine.lastCommandError);
       syncFromEngine();
     },
     [nodes, engine, syncFromEngine, readyToExecute],
   );
 
-  const setTopicPartitionCount = useCallback(
-    (count: number) => {
+  const configureTopic = useCallback(
+    (name: string, config: TopicConfiguration) => {
       pauseForEdit();
-      const topic = engine.kafkaCluster.topics.get('purchases');
-      if (
-        !Number.isInteger(count) ||
-        count < 1 ||
-        count > 12 ||
-        (topic && count < topic.partitions.size)
-      ) {
-        setValidationMessage(
-          'Kafka partitions can only increase (up to 12 in this simulator). Restore a scenario to start over.',
+      try {
+        configureEngineTopic(engine, name, config);
+        setNodes((previous) =>
+          previous.map((node) =>
+            node.data.kind === 'kafka-cluster' && (node.data.activeTopic ?? 'purchases') === name
+              ? { ...node, data: { ...node.data, ...config } }
+              : node,
+          ),
         );
-        return;
+        setValidationMessage('');
+        syncFromEngine();
+        return true;
+      } catch (error) {
+        setValidationMessage((error as Error).message);
+        return false;
       }
-      for (const group of engine.consumerGroups.values())
-        if (group.topicName === 'purchases') engine.invalidateConsumerWork(group.groupId);
-      engine.kafkaCluster.setPartitionCount('purchases', count);
-      // Rebalance all consumer groups
-      for (const group of engine.consumerGroups.values()) {
-        if (group.topicName !== 'purchases') continue;
-        group.rebalance(count);
-        for (const member of group.members.values())
-          for (const part of member.assignedPartitions) engine.resumePartitionBacklog(group, part);
-      }
-      // Sync to nodes
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.data.kind === 'kafka-cluster') {
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                partitionCount: count,
-              },
-            };
-          }
-          if (n.data.kind === 'consumer') {
-            const groupId = (n.data.groupId as string) || 'loyalty-v1';
-            const group = engine.consumerGroups.get(groupId);
-            const member = group?.members.get(n.id);
-            const partitions = member?.assignedPartitions || [];
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                assignedPartitions: [...partitions],
-                status:
-                  n.data.status === 'CRASHED' || n.data.isPaused
-                    ? n.data.status
-                    : partitions.length > 0
-                      ? 'POLLING'
-                      : 'IDLE',
-              },
-            };
-          }
-          return n;
-        }),
-      );
-      syncFromEngine();
     },
-    [engine, syncFromEngine, pauseForEdit],
+    [engine, pauseForEdit, syncFromEngine],
+  );
+
+  const addTopic = useCallback(
+    (name: string, config: TopicConfiguration) => {
+      pauseForEdit();
+      try {
+        createEngineTopic(engine, name, config);
+        setValidationMessage('');
+        syncFromEngine();
+        return true;
+      } catch (error) {
+        setValidationMessage((error as Error).message);
+        return false;
+      }
+    },
+    [engine, pauseForEdit, syncFromEngine],
+  );
+
+  const updateTopic = useCallback(
+    (name: string, partial: Partial<TopicConfiguration>) => {
+      const topic = engine.kafkaCluster.topics.get(name);
+      if (!topic) return;
+      configureTopic(name, {
+        partitionCount: topic.partitions.size,
+        replicationFactor: topic.replicationFactor,
+        minInsyncReplicas: topic.minInsyncReplicas,
+        ...partial,
+      });
+    },
+    [engine, configureTopic],
+  );
+  const setTopicPartitionCount = useCallback(
+    (count: number, name = 'purchases') => updateTopic(name, { partitionCount: count }),
+    [updateTopic],
   );
 
   const setAssignorStrategy = useCallback(
@@ -594,36 +587,12 @@ export function useSimulationState(active: boolean) {
   );
 
   const setTopicReplicationFactor = useCallback(
-    (rf: number) => {
-      pauseForEdit();
-      const topic = engine.kafkaCluster.topics.get('purchases');
-      if (topic) {
-        // Re-distribute replicas without replacing partition logs.
-        engine.clock.pause();
-        try {
-          engine.kafkaCluster.reassignReplicas('purchases', rf);
-        } catch (error) {
-          setValidationMessage((error as Error).message);
-          return;
-        }
-      }
-      engine.notifyStateUpdated();
-      syncFromEngine();
-    },
-    [engine, syncFromEngine],
+    (replicationFactor: number, name = 'purchases') => updateTopic(name, { replicationFactor }),
+    [updateTopic],
   );
-
   const setTopicMinIsr = useCallback(
-    (minIsr: number) => {
-      pauseForEdit();
-      const topic = engine.kafkaCluster.topics.get('purchases');
-      if (topic) {
-        topic.minInsyncReplicas = minIsr;
-      }
-      engine.notifyStateUpdated();
-      syncFromEngine();
-    },
-    [engine, syncFromEngine],
+    (minInsyncReplicas: number, name = 'purchases') => updateTopic(name, { minInsyncReplicas }),
+    [updateTopic],
   );
 
   // Load architectural blueprint onto canvas
@@ -773,49 +742,20 @@ export function useSimulationState(active: boolean) {
   );
 
   const createClusterTopic = useCallback(
-    (
-      clusterNodeId: string,
-      topicName: string,
-      partitionCount: number = 4,
-      replicationFactor: number = 3,
-    ) => {
-      pauseForEdit();
-      if (!topicName.trim() || engine.kafkaCluster.topics.has(topicName)) {
-        setValidationMessage(
-          'Choose a new, non-empty topic name. Existing topic records are preserved.',
-        );
-        return;
-      }
-      if (
-        !Number.isInteger(partitionCount) ||
-        partitionCount < 1 ||
-        partitionCount > 12 ||
-        !Number.isInteger(replicationFactor) ||
-        replicationFactor < 1 ||
-        replicationFactor > engine.kafkaCluster.brokers.size
-      ) {
-        setValidationMessage(
-          'Use 1–12 partitions and a replication factor within the broker count.',
-        );
-        return;
-      }
-      engine.kafkaCluster.createTopic(
-        topicName,
-        partitionCount,
-        replicationFactor,
-        Math.min(2, replicationFactor),
-      );
-      const allTopics = Array.from(engine.kafkaCluster.topics.keys());
-      updateNodeData(clusterNodeId, {
-        topicsList: allTopics,
-        activeTopic: topicName,
+    (clusterNodeId: string, topicName: string, partitionCount = 4, replicationFactor = 3) => {
+      const config = {
         partitionCount,
         replicationFactor,
         minInsyncReplicas: Math.min(2, replicationFactor),
-      });
-      syncFromEngine();
+      };
+      if (addTopic(topicName, config))
+        updateNodeData(clusterNodeId, {
+          topicsList: [...engine.kafkaCluster.topics.keys()],
+          activeTopic: topicName,
+          ...config,
+        });
     },
-    [engine, updateNodeData, syncFromEngine, pauseForEdit],
+    [engine, addTopic, updateNodeData],
   );
 
   const setActiveClusterTopic = useCallback(
@@ -882,6 +822,7 @@ export function useSimulationState(active: boolean) {
         targetFailedConsumerIds: options?.targetFailedConsumerIds,
         targetFailedGroupIds: options?.targetFailedGroupIds,
       });
+      if (engine.lastCommandError) setValidationMessage(engine.lastCommandError);
       syncFromEngine();
     },
     [nodes, engine, syncFromEngine, readyToExecute],
@@ -937,6 +878,7 @@ export function useSimulationState(active: boolean) {
 
   const seekPartitionOffset = useCallback(
     (groupId: string, partitionId: number, nextOffset: number) => {
+      engine.clock.pause();
       const ok = engine.seekPartitionOffset(groupId, partitionId, nextOffset);
       syncFromEngine();
       return ok;
@@ -946,6 +888,7 @@ export function useSimulationState(active: boolean) {
 
   const resetGroupOffsets = useCallback(
     (groupId: string, policy: SimOffsetResetPolicy) => {
+      engine.clock.pause();
       engine.resetGroupOffsets(groupId, policy);
       syncFromEngine();
     },
@@ -961,17 +904,19 @@ export function useSimulationState(active: boolean) {
       return;
     }
     engine.dispatchDuplicateMessage();
+    if (engine.lastCommandError) setValidationMessage(engine.lastCommandError);
     syncFromEngine();
   }, [engine, syncFromEngine, readyToExecute]);
 
   const dispatchOrderedBurst = useCallback(
     (count = 5, customerId = 'U001', producerId?: string) => {
       if (!readyToExecute()) return;
-      if (!Number.isInteger(count) || count < 1 || count > 100) {
+      if (!Number.isInteger(count) || count < 1 || count > SIMULATION_LIMITS.messagesPerBurst) {
         setValidationMessage('Choose a burst of 1–100 messages.');
         return;
       }
       engine.dispatchOrderedBurst(customerId, count, producerId);
+      if (engine.lastCommandError) setValidationMessage(engine.lastCommandError);
       syncFromEngine();
     },
     [engine, syncFromEngine, readyToExecute],
@@ -1165,7 +1110,6 @@ export function useSimulationState(active: boolean) {
     virtualTimeMs,
     playbackStatus,
     speedMultiplier,
-    inFlightTokens,
     mechanicsConfig,
     onNodesChange,
     onEdgesChange,
@@ -1195,6 +1139,8 @@ export function useSimulationState(active: boolean) {
     loadBlueprint,
     blueprints: SYSTEM_BLUEPRINTS,
     activeBlueprintId,
+    addTopic,
+    configureTopic,
     setTopicPartitionCount,
     setTopicReplicationFactor,
     setTopicMinIsr,

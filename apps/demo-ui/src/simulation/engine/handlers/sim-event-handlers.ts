@@ -1,12 +1,15 @@
 import type { SimEngine } from '../sim-engine';
 import type { SimConsumerData, SimEvent, SimProducerAcks } from '../../domain/types';
 import { createSimEvent } from '../../domain/events';
-import { activeDelivery, finishDelivery, scheduleCommit } from './consumer-delivery';
+import { activeDelivery, finishDelivery, scheduleCommit, receiptKey } from './consumer-delivery';
 import { SimClusterOperations } from '../operations/sim-cluster-operations';
 
 export class SimEventHandlers {
   public static executeEvent(engine: SimEngine, event: SimEvent): void {
     if (event.metadata?.deliveryId && !activeDelivery(engine, event)) return;
+    if (event.type === 'APPEND_PARTITION')
+      event.description =
+        'Broker append attempt; inspect acknowledgment or rejection evidence for its outcome.';
     engine.recordEvent(event);
 
     switch (event.type) {
@@ -23,13 +26,17 @@ export class SimEventHandlers {
         // Append to broker partition log
         let offset: number;
         try {
-          ({ offset } = engine.kafkaCluster.appendRecord(
+          const result = engine.kafkaCluster.appendRecord(
             topicName,
             partitionId,
             message,
             event.scheduledTime,
             effectiveAcks,
-          ));
+          );
+          offset = result.offset;
+          metadata.offset = offset;
+          metadata.leaderBrokerId = result.partition.leaderBrokerId;
+          event.description = `Appended ${message.payload.purchaseId} to ${topicName}:P${partitionId} at offset ${offset} on leader B${result.partition.leaderBrokerId}.`;
         } catch (error) {
           message.status = 'FAILED';
           engine.recordEvent(
@@ -199,7 +206,29 @@ export class SimEventHandlers {
             }
           } else {
             // Normal Record: Check Idempotency Deduplication
-            const dedupKey = `${groupId}:${message.id}`;
+            const sinkEdges = Array.from(engine.edges.values()).filter(
+              (edge) =>
+                edge.source === sourceNodeId &&
+                engine.nodes.get(edge.target)?.data.kind === 'database',
+            );
+            if (sinkEdges.length !== 1) {
+              consumerData.status = 'ERROR';
+              consumerData.statusText =
+                'Exactly one database sink is required; offset not committed';
+              engine.recordEvent(
+                createSimEvent(
+                  event.scheduledTime,
+                  'CONSUMER_ERROR',
+                  sourceNodeId,
+                  consumerData.statusText,
+                  { message, metadata },
+                ),
+              );
+              break;
+            }
+            const dbEdge = sinkEdges[0];
+            const dbNode = engine.nodes.get(dbEdge.target)!;
+            const dedupKey = receiptKey(dbNode.id, groupId, message.id);
             const isDuplicate = engine.processedEvents.has(dedupKey);
 
             if (isDuplicate && engine.mechanicsConfig.consumerIdempotency) {
@@ -215,28 +244,6 @@ export class SimEventHandlers {
               );
               scheduleCommit(engine, event);
             } else {
-              const sinkEdges = Array.from(engine.edges.values()).filter(
-                (edge) =>
-                  edge.source === sourceNodeId &&
-                  engine.nodes.get(edge.target)?.data.kind === 'database',
-              );
-              if (sinkEdges.length !== 1) {
-                consumerData.status = 'ERROR';
-                consumerData.statusText =
-                  'Exactly one database sink is required; offset not committed';
-                engine.recordEvent(
-                  createSimEvent(
-                    event.scheduledTime,
-                    'CONSUMER_ERROR',
-                    sourceNodeId,
-                    consumerData.statusText,
-                    { message, metadata },
-                  ),
-                );
-                break;
-              }
-              const dbEdge = sinkEdges[0];
-              const dbNode = engine.nodes.get(dbEdge.target)!;
               const arriveTime = event.scheduledTime + Number(dbNode.data.writeDelayMs ?? 20);
               engine.inFlightTokens.push({
                 id: engine.nextTokenId(`token-db-${message.id}`),
@@ -271,7 +278,7 @@ export class SimEventHandlers {
         const delivery = activeDelivery(engine, event);
         const dbNode = engine.nodes.get(event.sourceNodeId);
         if (!delivery || !event.message || dbNode?.data.kind !== 'database') break;
-        const dedupKey = `${delivery.group.groupId}:${event.message.id}`;
+        const dedupKey = receiptKey(dbNode.id, delivery.group.groupId, event.message.id);
         const duplicate = engine.processedEvents.has(dedupKey);
         if (!duplicate || !engine.mechanicsConfig.consumerIdempotency) {
           dbNode.data.committedRecordCount = Number(dbNode.data.committedRecordCount ?? 0) + 1;
@@ -423,6 +430,7 @@ export class SimEventHandlers {
               message: event.message,
               metadata: {
                 topic: topicName,
+                producerAcks: engine.mechanicsConfig.producerAcks,
                 partitionId: targetPartition,
                 leaderBrokerId,
               },

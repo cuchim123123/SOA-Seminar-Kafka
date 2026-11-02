@@ -1,5 +1,6 @@
 import React from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { SIMULATION_LIMITS } from '../../domain/limits';
 import type { SimKafkaBrokerData } from '../../domain/types';
 
 interface SimKafkaBrokerNodeProps extends NodeProps {
@@ -11,6 +12,8 @@ export const SimKafkaBrokerNode: React.FC<SimKafkaBrokerNodeProps> = ({ data, se
   const isCrashed = data.status === 'CRASHED';
   const isController = Boolean(data.isController);
   const topicPartitions = data.topicPartitions || [];
+  const shown = topicPartitions.slice(0, SIMULATION_LIMITS.partitionRowsPerNode);
+  const multipleTopics = new Set(topicPartitions.map((partition) => partition.topic)).size > 1;
 
   const handleToggleCrash = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -153,7 +156,7 @@ export const SimKafkaBrokerNode: React.FC<SimKafkaBrokerNodeProps> = ({ data, se
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {topicPartitions.map((tp) => (
+            {shown.map((tp) => (
               <div
                 key={`${tp.topic}-${tp.partitionId}`}
                 style={{
@@ -175,7 +178,7 @@ export const SimKafkaBrokerNode: React.FC<SimKafkaBrokerNodeProps> = ({ data, se
                       color: tp.isLeader ? '#1d4ed8' : '#334155',
                     }}
                   >
-                    P{tp.partitionId}
+                    {multipleTopics ? `${tp.topic}:P${tp.partitionId}` : `P${tp.partitionId}`}
                   </span>
                   <span
                     style={{
@@ -205,6 +208,11 @@ export const SimKafkaBrokerNode: React.FC<SimKafkaBrokerNodeProps> = ({ data, se
                 </div>
               </div>
             ))}
+            {topicPartitions.length > shown.length && (
+              <small>
+                +{topicPartitions.length - shown.length} replicas · select broker to inspect all
+              </small>
+            )}
           </div>
         )}
       </div>
@@ -232,7 +240,7 @@ export const SimKafkaBrokerNode: React.FC<SimKafkaBrokerNodeProps> = ({ data, se
           boxShadow: isCrashed ? '0 1px 3px rgba(16, 185, 129, 0.2)' : 'none',
         }}
       >
-        <span>{isCrashed ? '🩺 Revive Broker' : '💥 Destroy (Failover Test)'}</span>
+        <span>{isCrashed ? '🩺 Revive Broker' : 'Crash broker'}</span>
       </button>
 
       {/* Output Port on Right (Dispatch to Consumers) */}

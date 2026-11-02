@@ -2,6 +2,7 @@ import type { SimEngine } from '../sim-engine';
 import type { SimMessage } from '../../domain/types';
 import { createSimMessage } from '../../domain/message';
 import { createSimEvent } from '../../domain/events';
+import { SIMULATION_LIMITS } from '../../domain/limits';
 
 export class SimMessageDispatcher {
   /**
@@ -34,6 +35,7 @@ export class SimMessageDispatcher {
       return null;
     }
 
+    if (!engine.reserveMessages(1)) return null;
     const targetNodeId = publishEdge.target;
     const targetNode = engine.nodes.get(targetNodeId);
     const key = customKey || (producerNode.data.messageKey as string) || 'U001';
@@ -202,6 +204,7 @@ export class SimMessageDispatcher {
     const publishEdge = Array.from(engine.edges.values()).find((e) => e.source === producerNode.id);
     if (!publishEdge) return null;
 
+    if (!engine.reserveMessages(1)) return null;
     const targetNodeId = publishEdge.target;
     const targetNode = engine.nodes.get(targetNodeId);
 
@@ -311,7 +314,7 @@ export class SimMessageDispatcher {
     count: number = 3,
     producerId?: string,
   ): void {
-    if (!Number.isInteger(count) || count < 1 || count > 100) return;
+    if (!Number.isInteger(count) || count < 1 || count > SIMULATION_LIMITS.messagesPerBurst) return;
     const producerNode = producerId
       ? engine.nodes.get(producerId)
       : Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
@@ -320,6 +323,15 @@ export class SimMessageDispatcher {
     const publishEdge = Array.from(engine.edges.values()).find((e) => e.source === producerNode.id);
     if (!publishEdge) return;
 
+    if (!engine.reserveMessages(count)) return;
+    engine.recordEvent(
+      createSimEvent(
+        engine.clock.virtualTimeMs,
+        'DISPATCH_MESSAGE',
+        producerNode.id,
+        `Scheduled ${count} synthetic events for key ${customerKey}; use Run or Step while paused.`,
+      ),
+    );
     const targetNodeId = publishEdge.target;
     const targetNode = engine.nodes.get(targetNodeId);
     const topic = (producerNode.data.targetTopic as string) || 'purchases';
@@ -346,7 +358,7 @@ export class SimMessageDispatcher {
           `⚡ [BURST #${i + 1}/${count}] Producer committed order ${message.payload.purchaseId} to Outbox Table`,
           { targetNodeId, edgeId: publishEdge.id, message },
         );
-        engine.recordEvent(dispatchEvent);
+        engine.queue.push(dispatchEvent);
 
         engine.inFlightTokens.push({
           id: engine.nextTokenId(`token-burst-outbox-${message.id}`),
@@ -394,7 +406,7 @@ export class SimMessageDispatcher {
         `⚡ [BURST #${i + 1}/${count}] Order ${message.payload.purchaseId} (${routingNote})`,
         { targetNodeId, edgeId: publishEdge.id, message },
       );
-      engine.recordEvent(dispatchEvent);
+      engine.queue.push(dispatchEvent);
 
       engine.inFlightTokens.push({
         id: engine.nextTokenId(`token-burst-${message.id}`),

@@ -1,15 +1,12 @@
 import { createContext, useContext, useSyncExternalStore } from 'react';
-import { VirtualClockStore } from '../../store/virtual-clock-store';
-
+import { VirtualClockStore, EMPTY_EDGE_FRAME } from '../../store/virtual-clock-store';
 const fallback = new VirtualClockStore();
 export const SimulationClockContext = createContext(fallback);
-const noSubscription = () => () => {};
-const zero = () => 0;
-export function useVirtualTime(active = true) {
+export function useEdgeFrame(id: string) {
   const clock = useContext(SimulationClockContext);
   return useSyncExternalStore(
-    active ? clock.subscribe : noSubscription,
-    active ? clock.getSnapshot : zero,
-    zero,
+    clock.subscribe,
+    () => clock.getEdgeSnapshot(id),
+    () => EMPTY_EDGE_FRAME,
   );
 }

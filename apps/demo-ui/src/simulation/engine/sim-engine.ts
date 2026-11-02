@@ -13,6 +13,8 @@ import type {
 import { SimMessageDispatcher } from './dispatcher/sim-message-dispatcher';
 import { SimClusterOperations } from './operations/sim-cluster-operations';
 import { SimEventHandlers } from './handlers/sim-event-handlers';
+import { SIMULATION_LIMITS } from '../domain/limits';
+import { createSimEvent } from '../domain/events';
 
 const DEFAULT_MECHANICS_CONFIG: SimKafkaMechanicsConfig = {
   commitMode: 'manual',
@@ -38,6 +40,8 @@ export class SimEngine {
   public totalEventsRecorded = 0;
   public inFlightTokens: SimInFlightToken[] = [];
   public processedMessageCount: number = 0;
+  public acceptedMessageCount = 0;
+  public lastCommandError = '';
 
   public mechanicsConfig: SimKafkaMechanicsConfig = { ...DEFAULT_MECHANICS_CONFIG };
 
@@ -57,6 +61,29 @@ export class SimEngine {
 
   public nextTokenId(prefix: string): string {
     return `${prefix}-${++this.tokenSequence}`;
+  }
+
+  public reserveMessages(count: number): boolean {
+    this.lastCommandError = '';
+    if (!Number.isSafeInteger(count) || count < 1) {
+      this.lastCommandError = 'Choose a positive whole number of messages.';
+      return false;
+    }
+    if (this.acceptedMessageCount + count > SIMULATION_LIMITS.messagesPerRun) {
+      this.lastCommandError = `This run reached its ${SIMULATION_LIMITS.messagesPerRun.toLocaleString()}-message limit. Reset the run to send more. Existing work is preserved.`;
+      this.recordEvent(
+        createSimEvent(
+          this.clock.virtualTimeMs,
+          'DISPATCH_MESSAGE',
+          'simulation',
+          this.lastCommandError,
+        ),
+      );
+      this.notifyStateUpdated();
+      return false;
+    }
+    this.acceptedMessageCount += count;
+    return true;
   }
 
   public setMechanicsConfig(config: Partial<SimKafkaMechanicsConfig>): void {
@@ -411,6 +438,8 @@ export class SimEngine {
     this.totalEventsRecorded = 0;
     this.inFlightTokens = [];
     this.processedMessageCount = 0;
+    this.acceptedMessageCount = 0;
+    this.lastCommandError = '';
     this.processedEvents.clear();
     this.roundRobinIndex = 0;
     this.lastDispatchedMessage = null;
@@ -532,7 +561,7 @@ export class SimEngine {
   public recordEvent(event: SimEvent): void {
     this.totalEventsRecorded += 1;
     this.eventLog.unshift(event);
-    if (this.eventLog.length > 100) {
+    if (this.eventLog.length > SIMULATION_LIMITS.retainedEvents) {
       this.eventLog.pop();
     }
   }

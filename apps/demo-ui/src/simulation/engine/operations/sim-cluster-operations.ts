@@ -16,6 +16,12 @@ export class SimClusterOperations {
     _message: SimMessage,
     currentTime: number,
   ): void {
+    const partition = engine.kafkaCluster.getPartition(topicName, partitionId);
+    if (
+      !partition ||
+      engine.kafkaCluster.brokers.get(partition.leaderBrokerId)?.status !== 'ONLINE'
+    )
+      return;
     for (const group of engine.consumerGroups.values()) {
       if (group.topicName !== topicName) continue;
       if (group.isPartitionInFlight(partitionId)) {
@@ -322,6 +328,10 @@ export class SimClusterOperations {
         node.data.status = 'ACTIVE';
       }
     }
+    for (const group of engine.consumerGroups.values())
+      for (const member of group.members.values())
+        for (const partition of member.assignedPartitions)
+          this.resumePartitionBacklog(engine, group, partition, group.topicName);
     engine.notifyStateUpdated();
   }
 

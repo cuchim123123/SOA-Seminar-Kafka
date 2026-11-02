@@ -1,4 +1,5 @@
 import type { SimCustomNode, SimCustomEdge } from './types';
+import { SIMULATION_LIMITS } from './limits';
 
 export function scaleConsumers(
   nodes: SimCustomNode[],
@@ -7,7 +8,7 @@ export function scaleConsumers(
   count: number,
   allocateId: () => string,
 ) {
-  if (!Number.isInteger(count) || count < 1 || count > 12)
+  if (!Number.isInteger(count) || count < 1 || count > SIMULATION_LIMITS.replicasPerGroup)
     throw new Error('Choose 1–12 consumer instances.');
   const members = nodes.filter(
     (node) => node.data.kind === 'consumer' && node.data.groupId === groupId,

@@ -37,6 +37,11 @@
     <div id="root"></div>
     <script>
       window.addEventListener('error', function(e) {
+        // React Flow measurements may trigger this browser notice during layout changes.
+        if (e.message === 'ResizeObserver loop completed with undelivered notifications.' || e.message === 'ResizeObserver loop limit exceeded') {
+          e.stopImmediatePropagation();
+          return;
+        }
         var el = document.createElement('div');
         el.style.cssText = 'background:#ef4444;color:#fff;padding:20px;font-family:monospace;white-space:pre-wrap;position:fixed;top:0;left:0;right:0;z-index:999999;';
         el.textContent = 'Early Script Error: ' + (e.message || e.error) + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '\n' + (e.error ? e.error.stack : '');

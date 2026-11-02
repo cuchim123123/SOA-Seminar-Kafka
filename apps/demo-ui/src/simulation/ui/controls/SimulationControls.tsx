@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { useSimulationStore } from '../../store/SimulationSession';
+import { SIMULATION_LIMITS } from '../../domain/limits';
 import { producerTopic } from '../../domain/producer-route';
 import { CurrentOffsetMenu } from './CurrentOffsetMenu';
+import { TopicSettings } from './TopicSettings';
 
 type Store = ReturnType<typeof useSimulationStore>;
 type Confirmation = { title: string; description: string; action: () => void };
@@ -48,7 +50,8 @@ export function SimulationControls({
         : engine.kafkaCluster.routeKeyToPartition(topicName, customerKey)
       : null;
   const invalid = store.topologyIssues.length > 0;
-  const canSend = !!producer && !!customerKey.trim() && !!topic && !invalid;
+  const remaining = SIMULATION_LIMITS.messagesPerRun - engine.acceptedMessageCount;
+  const canSend = !!producer && !!customerKey.trim() && !!topic && !invalid && remaining > 0;
   const scenario = blueprints.find((item) => item.id === activeBlueprintId);
   const replaceScenario = (id: string) => {
     const action = () => onSelectScenario(id);
@@ -161,6 +164,10 @@ export function SimulationControls({
         <span className="sim-muted">
           {engine.queue.size()} queued events · {engine.processedMessageCount} completed deliveries
         </span>
+        <span className="sim-muted">
+          {engine.acceptedMessageCount.toLocaleString()} /{' '}
+          {SIMULATION_LIMITS.messagesPerRun.toLocaleString()} submitted events
+        </span>
       </div>
       <form
         className="sim-composer"
@@ -208,14 +215,20 @@ export function SimulationControls({
             type="number"
             aria-label="Burst size"
             min={1}
-            max={100}
+            max={SIMULATION_LIMITS.messagesPerBurst}
             value={Number.isNaN(count) ? '' : count}
             onChange={(event) => setCount(event.target.valueAsNumber)}
           />
         </label>
         <button
           type="button"
-          disabled={!canSend || !Number.isInteger(count) || count < 1 || count > 100}
+          disabled={
+            !canSend ||
+            !Number.isInteger(count) ||
+            count < 1 ||
+            count > SIMULATION_LIMITS.messagesPerBurst ||
+            count > remaining
+          }
           onClick={() => store.dispatchOrderedBurst(count, customerKey, producer!.id)}
         >
           Send burst
@@ -226,6 +239,7 @@ export function SimulationControls({
             <button
               type="button"
               disabled={
+                remaining < 1 ||
                 !engine.lastDispatchedMessage ||
                 !engine.nodes.has(engine.lastDispatchedProducerId ?? '') ||
                 invalid
@@ -249,6 +263,8 @@ export function SimulationControls({
           </div>
         </details>
         <p className="sim-routing">
+          {remaining === 0 &&
+            'Run limit reached; Reset run to send more. Existing records and pending work are preserved. '}
           {!producer
             ? 'Choose a source to send events.'
             : topic && partition !== null
@@ -304,6 +320,7 @@ export function SimulationControls({
             onSeek={store.seekPartitionOffset}
             onResetGroup={store.resetGroupOffsets}
           />
+          <TopicSettings store={store} />
           <p className="sim-muted">
             Model controls are global unless a group is named. Manual mode persists the handler
             result before committing N+1. This is an educational model, not a real broker

@@ -115,3 +115,28 @@ it('particles use pause, speed and Step on the same virtual clock and ignore fut
   view.publish(100);
   expect(updates).toBe(2);
 });
+
+it('publishes particle membership immediately and keeps inactive edge snapshots stable', () => {
+  const view = new VirtualClockStore();
+  const inactive = view.getEdgeSnapshot('idle');
+  const token = {
+    id: 'token',
+    messageId: 'message',
+    messageKey: 'key',
+    edgeId: 'wire',
+    sourceNodeId: 'source',
+    targetNodeId: 'sink',
+    startTime: 0,
+    arriveTime: 100,
+  };
+  view.publish(0, [token]);
+  const first = view.getEdgeSnapshot('wire');
+  expect(first.tokens).toHaveLength(1);
+  view.publish(16, [token]);
+  expect(view.getEdgeSnapshot('wire').now).toBe(16);
+  expect(view.getEdgeSnapshot('wire').tokens).toBe(first.tokens);
+  expect(view.getEdgeSnapshot('idle')).toBe(inactive);
+  view.publish(16, []);
+  expect(view.getEdgeSnapshot('wire').tokens).toHaveLength(0);
+  expect(first.tokens).toHaveLength(1);
+});

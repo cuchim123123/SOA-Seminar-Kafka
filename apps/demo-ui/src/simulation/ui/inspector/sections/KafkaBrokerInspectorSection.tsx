@@ -121,7 +121,7 @@ export const KafkaBrokerInspectorSection: React.FC<KafkaBrokerInspectorSectionPr
         >
           {isCrashed
             ? '🩺 Revive Broker (Re-sync to ISR)'
-            : '💥 Destroy Broker (Trigger Leader Election)'}
+            : 'Crash broker (trigger leader election)'}
         </button>
       </div>
 
@@ -147,7 +147,7 @@ export const KafkaBrokerInspectorSection: React.FC<KafkaBrokerInspectorSectionPr
             justifyContent: 'space-between',
           }}
         >
-          <span>🛡️ Replication Factor & ISR Controls:</span>
+          <span>purchases topic · Replication & ISR:</span>
         </div>
 
         {/* Replication Factor Control */}

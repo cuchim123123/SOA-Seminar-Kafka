@@ -4,6 +4,10 @@ import type { SimEvent } from '../../domain/events';
 import { createSimEvent } from '../../domain/events';
 import { SimClusterOperations } from '../operations/sim-cluster-operations';
 
+export function receiptKey(sinkId: string, groupId: string, messageId: string): string {
+  return JSON.stringify([sinkId, groupId, messageId]);
+}
+
 export function activeDelivery(engine: SimEngine, event: SimEvent) {
   const consumerId = String(event.metadata?.consumerId ?? event.sourceNodeId);
   const node = engine.nodes.get(consumerId);

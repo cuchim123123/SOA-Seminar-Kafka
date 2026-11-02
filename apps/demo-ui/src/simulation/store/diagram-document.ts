@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SIMULATION_LIMITS } from '../domain/limits';
 import type { SimEngine } from '../engine/sim-engine';
 import type { SimCustomNode, SimCustomEdge, SimNodeData } from '../domain/types';
 import { configurationData, applyDiagram } from './diagram-state';
@@ -107,8 +108,8 @@ const documentSchema = z
     scenarioId: z.string().min(1).max(100),
     customized: z.boolean(),
     composer: composerSchema.default(DEFAULT_COMPOSER),
-    nodes: z.array(nodeSchema).max(100),
-    edges: z.array(edgeSchema).max(400),
+    nodes: z.array(nodeSchema).max(SIMULATION_LIMITS.components),
+    edges: z.array(edgeSchema).max(SIMULATION_LIMITS.wires),
     viewport: viewportSchema.nullable(),
     topics: z
       .array(

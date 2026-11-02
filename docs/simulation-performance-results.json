@@ -1,0 +1,131 @@
+{
+  "dateLocal": "2026-11-03",
+  "timezone": "Asia/Bangkok",
+  "baselineCommit": "dc97333",
+  "candidate": "S6 working tree based on 1072fe3",
+  "mode": "Vite development build, React StrictMode and root React Profiler",
+  "browser": "Codex in-app browser",
+  "viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "scenario": "full-enterprise-production",
+  "workload": {
+    "events": 100,
+    "key": "U001",
+    "speed": 1,
+    "warmupMs": 1000,
+    "sampleMs": 5000,
+    "builder": "closed",
+    "evidence": "collapsed"
+  },
+  "notes": [
+    "Metrics rounded to 0.1 ms / FPS. Medians are computed independently per metric.",
+    "Unmatched calibration and zero-Profiler samples were discarded before these repeats.",
+    "Third current repeat was recollected after reconnecting browser automation.",
+    "Background host load was not controlled; Docker lab remained running.",
+    "Measures the complete UI revision; does not isolate each optimization or measure broker throughput."
+  ],
+  "baseline": [
+    {
+      "frames": 482,
+      "fps": 96.4,
+      "frameP50Ms": 7,
+      "frameP95Ms": 20.7,
+      "frameMaxMs": 41.9,
+      "longFrames": 1,
+      "reactCommits": 925,
+      "reactTotalMs": 3392.5,
+      "reactP50Ms": 3.8,
+      "reactP95Ms": 5.8
+    },
+    {
+      "frames": 479,
+      "fps": 95.8,
+      "frameP50Ms": 7,
+      "frameP95Ms": 20.8,
+      "frameMaxMs": 28,
+      "longFrames": 0,
+      "reactCommits": 936,
+      "reactTotalMs": 3346.5,
+      "reactP50Ms": 3.7,
+      "reactP95Ms": 6
+    },
+    {
+      "frames": 469,
+      "fps": 93.8,
+      "frameP50Ms": 7,
+      "frameP95Ms": 20.8,
+      "frameMaxMs": 29.1,
+      "longFrames": 0,
+      "reactCommits": 904,
+      "reactTotalMs": 3311.5,
+      "reactP50Ms": 3.7,
+      "reactP95Ms": 6.3
+    }
+  ],
+  "current": [
+    {
+      "frames": 616,
+      "fps": 123.2,
+      "frameP50Ms": 7,
+      "frameP95Ms": 13.9,
+      "frameMaxMs": 27.8,
+      "longFrames": 0,
+      "reactCommits": 809,
+      "reactTotalMs": 1412.4,
+      "reactP50Ms": 0.7,
+      "reactP95Ms": 7.2
+    },
+    {
+      "frames": 638,
+      "fps": 127.6,
+      "frameP50Ms": 7,
+      "frameP95Ms": 13.9,
+      "frameMaxMs": 20.9,
+      "longFrames": 0,
+      "reactCommits": 826,
+      "reactTotalMs": 1246,
+      "reactP50Ms": 0.7,
+      "reactP95Ms": 5.9
+    },
+    {
+      "frames": 644,
+      "fps": 128.8,
+      "frameP50Ms": 7,
+      "frameP95Ms": 13.9,
+      "frameMaxMs": 62.5,
+      "longFrames": 1,
+      "reactCommits": 836,
+      "reactTotalMs": 1338.1,
+      "reactP50Ms": 0.7,
+      "reactP95Ms": 6.3
+    }
+  ],
+  "independentMedians": {
+    "baseline": {
+      "frames": 479,
+      "fps": 95.8,
+      "frameP50Ms": 7,
+      "frameP95Ms": 20.8,
+      "frameMaxMs": 29.1,
+      "longFrames": 0,
+      "reactCommits": 925,
+      "reactTotalMs": 3346.5,
+      "reactP50Ms": 3.7,
+      "reactP95Ms": 6
+    },
+    "current": {
+      "frames": 638,
+      "fps": 127.6,
+      "frameP50Ms": 7,
+      "frameP95Ms": 13.9,
+      "frameMaxMs": 27.8,
+      "longFrames": 0,
+      "reactCommits": 826,
+      "reactTotalMs": 1338.1,
+      "reactP50Ms": 0.7,
+      "reactP95Ms": 6.3
+    }
+  }
+}

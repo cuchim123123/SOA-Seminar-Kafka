@@ -186,6 +186,7 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
             type="text"
             value={(data.title as string) || ''}
             onChange={(e) => onUpdateData(id, { title: e.target.value })}
+            aria-label="Component title"
             placeholder="Give this component a custom name..."
             style={{
               width: '100%',
@@ -271,27 +272,29 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
           gap: '8px',
         }}
       >
-        <button
-          onClick={() => onDuplicateNode(id)}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid #0284c7',
-            background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-            color: '#ffffff',
-            fontWeight: 700,
-            fontSize: '0.75rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-          }}
-        >
-          <span>➕</span>
-          <span>Duplicate Node (Rebalance Group)</span>
-        </button>
+        {kind !== 'consumer' && (
+          <button
+            onClick={() => onDuplicateNode(id)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid #0284c7',
+              background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+              color: '#ffffff',
+              fontWeight: 700,
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <span>➕</span>
+            <span>Duplicate component</span>
+          </button>
+        )}
 
         <button
           onClick={() => onDeleteNode(id)}
