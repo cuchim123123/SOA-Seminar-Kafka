@@ -419,3 +419,5 @@ Real UI checkpoint C7: purchase entry, retained idempotency key, paginated histo
 Real UI checkpoint C8: separate event evidence, independent consumer receipts and confirmed invalidation implemented; browser acceptance and pagination-independent evidence lookup pending. See persistent progress documentation.
 
 Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and independent consumer controls implemented; UI purchase/idempotency/push and Analytics pause/resume verified. Recovery and final acceptance remain.
+
+Real UI C10: same-customer burst form and actual allocated sequence/evidence results verified in browser. Recovery and final acceptance remain.

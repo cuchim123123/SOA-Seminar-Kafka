@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PurchaseEvidence } from './PurchaseEvidence';
+import { PurchaseBurst } from './PurchaseBurst';
 import { api } from '../api/client';
 import { ApiError } from '../api/http';
 import { businessApi } from '../api/business';
@@ -98,6 +99,7 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
         </p>
         <p role="status">{result}</p>
       </article>
+      <PurchaseBurst route={route} refresh={history.refresh} />
       <article>
         <h2>Persisted purchase history</h2>
         <p>
