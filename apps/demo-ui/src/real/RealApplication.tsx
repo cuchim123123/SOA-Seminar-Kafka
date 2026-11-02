@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Recovery } from './Recovery';
 import { ConsumerControls } from './ConsumerControls';
 import { EventEvidence } from './EventEvidence';
 import { Purchases } from './Purchases';
@@ -49,6 +50,8 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
       </form>
       {route.page === 'purchases' ? (
         <Purchases route={route} />
+      ) : route.page === 'recovery' ? (
+        <Recovery route={route} />
       ) : route.page === 'consumers' ? (
         <ConsumerControls />
       ) : route.page === 'events' ? (

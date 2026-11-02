@@ -421,3 +421,5 @@ Real UI checkpoint C8: separate event evidence, independent consumer receipts an
 Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and independent consumer controls implemented; UI purchase/idempotency/push and Analytics pause/resume verified. Recovery and final acceptance remain.
 
 Real UI C10: same-customer burst form and actual allocated sequence/evidence results verified in browser. Recovery and final acceptance remain.
+
+Real UI C11: replay lifecycle, complete all-customer staging review and explicit global confirmation implemented;95-customer browser review verified without executing global promotion. Phase6 acceptance/polish remains.

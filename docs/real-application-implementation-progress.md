@@ -4,11 +4,11 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Overall status
 
-- Current phase: Phase2 shell and read-only overview implemented; browser/live-service acceptance remains in progress.
-- Completed: bounded purchase history, context-filtered receipts, status-aware HTTP client and canonical read wrappers; unit and live read-only HTTP integration checks.
-- In progress: persistent sidebar and real overview mount the resource hooks. Browser confirms honest unavailable/stale states against old running backends; fresh-service push acceptance is still required. Simulation repair was approved and committed separately as c55ea47.
-- Remaining: browser push flow through Vite against fresh service builds; Phase2 responsive/navigation acceptance; Phase3 purchase mutations/history pagination/receipts and business pages; Phase4 teaching controls; Phase5 global recovery review; Phase6 presenter validation.
-- Blockers: none currently. User approved repairing/committing the pre-existing simulation changes separately; frontend build repaired (C5). Global review/confirmation UI is still required before exposing promotion.
+- Current phase: Phase5 recovery workspace implemented; Phase6 presenter polish and broader acceptance remain.
+- Completed: backend history/receipts/push, approved locking, persistent navigation, purchase actions/history/evidence, projection pages, consumer pause/resume/delay, same-customer burst, replay lifecycle and complete global review/confirmation.
+- Verified: live browser purchase and pushed receipts, HTTP idempotency conflict, independent Analytics pause/resume restored, three-record burst, bounded replay and95-customer review/confirmation gating. Unit and backend concurrency integration checks pass.
+- Remaining: responsive/accessibility and partial-outage acceptance; before/after observations; configured external tool links; request timeouts; richer tests of UI cutover failures/reconnect; presenter walkthrough. Actual global cutover was not executed on the95-customer run.
+- Blockers: none requiring a new product decision. Existing lab services/data preserved; unrelated benchmark edits remain unstaged.
 
 ## Decisions and boundaries
 
@@ -29,10 +29,10 @@ Updated: 2026-11-02. **Implementation authorized; incomplete.** Source plan: [RE
 
 ## Current work and exact next steps
 
-1. C5 is committed as `c55ea47`. C6 implements sidebar/routes/read-only overview. Inspect `App.tsx`, `components/WorkspaceSidebar.tsx`, `real/RealApplication.tsx`, `real/state/routes.ts` and `real/workspace.css` before continuing.
-2. Running backend processes predate new endpoints: browser at `http://localhost:5173/#real/overview` returned `Cannot GET /api/v1/purchases?limit=25`; Analytics existing summary works, streams show disconnected. Build/restart verified workspace-owned services without resetting data, then verify a real EventSource invalidation updates the page through Vite. Do not claim push integration complete based on backend tests alone.
-3. Verify desktop collapse, mobile drawer/focus and legacy Simulation/Benchmark/Guide navigation. Overview and Purchases are supported real routes now. Then implement the next approved business page, including mutations and durable receipts, sequentially.
-4. Cutover locking is approved and tested; retain all-customer review and explicit confirmation. Do not rework eligibility rules. Run frontend production build in addition to workspace typecheck.
+1. Read C9–C11 and inspect `real/Recovery.tsx`, `real/state/replay-review.ts`, resource hooks and sidebar. Do not repeat backend foundations or change cutover eligibility/global scope.
+2. Finish Phase6: responsive/keyboard drawer and legacy routes, partial service outage/reconnect, source/projection freshness and request timeout handling. Add configured Kafbat/Grafana links through validated frontend config, then presenter walkthrough.
+3. Verify acknowledgement invalidation on actual pushed Loyalty/replay changes and cutover HTTP error/uncertain outcome using isolated owned fixtures. Existing concurrency tests already cover live/cutover races. Do not promote the retained95-customer acceptance run just to test a button.
+4. Recovery run `11c39b6c-b5e2-4393-97f5-a3af185ea6a2` is COMPLETED with297 scanned records and95 staged customers (90 expected eligible/5 skips at observation); no cutover executed. Source test customer `real-ui-browser-20261102` is retained intentionally.
 
 Resume protocol: read plan and this document, inspect `git status`/recent commits, reconcile code with these statements, continue first incomplete milestone. Do not mark integration complete based only on mocks.
 
@@ -135,3 +135,12 @@ No commits pushed. Unrelated simulation/benchmark edits remain unstaged. Existin
 - Added `real/PurchaseBurst.tsx` to Purchases. Fixed selected customer and exact fixed amount;1–500 records,100–10,000,000 cents. Uses existing batch API. Results show actual allocated sequences/event IDs and evidence links. Batch outcome ambiguity and lack of idempotency are explicit; no automatic retry.
 - Browser submitted exactly3 records for owned synthetic customer, returned sequences4/5/6, and source history updated. Source fixtures retained. Frontend build, format/lint/typecheck and248 unit tests passed; active Kafka verification passed in C9 immediately before this frontend-only slice.
 - Remaining: recovery/global review, before/after observation, responsive/accessibility and partial-outage acceptance, configured links. Next phase is replay lifecycle/barrier and global all-customer review, retaining approved locking and unchanged cutover semantics.
+
+### C11 — replay lifecycle and complete global confirmation
+
+- Added Recovery route with observed invalidation receipt + actual account correction/sequence barrier before launching replay. Run ID generated/retained before POST, preserved in URL, recover-by-ID GET, explicit uncertain outcome/startup404 explanation, persisted run state without fabricated progress. Browser abort/navigation does not claim server cancellation.
+- Complete staging review fetches every comparison with at most4 concurrent reads; no selected-customer scope restriction/truncation. Exact existing eligibility (absent/equal/older live eligible, newer skipped), unchanged eligible writes included. Missing/failed comparisons and unsafe numeric read precision block confirmation. Separate selected-customer preview and all-customer tables show points/tier/spend/sequence/correction changes.
+- Opening global confirmation refreshes the whole review. Explicit acknowledgement plus separate POST button required; loading/errors/disconnected feeds invalidate readiness, pushed Loyalty/replay reads revoke acknowledgement. Preview is observational; backend rechecks eligibility. Result displays actual applied count only, then rereads state; no invented per-customer execution outcomes.
+- Browser launched bounded replay `11c39b6c-b5e2-4393-97f5-a3af185ea6a2`: COMPLETED,297 scanned,95 staged,90 eligible/5 skips at observation. Verified opening confirmation disables controls during refresh, explicit acknowledgement enables final button, refreshing revokes acknowledgement and disables it again. Did NOT execute global cutover because run includes existing lab customers; acknowledgement was revoked before leaving.
+- Frontend build, format/lint/typecheck and250 unit tests passed. Pure tests cover equality/newer/missing/unsafe sequence eligibility, full37-customer bounded reads and failure rejection. Seven focused tests passed including four live PostgreSQL cutover concurrency cases and cross-process replay notification. No backend replay semantics changed; owned integration fixtures cleaned by tests.
+- Remaining Phase6 items are listed at top. Existing bundle-size and React Flow directive warnings remain non-fatal. Full plan is not yet certified complete.

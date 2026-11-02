@@ -5,6 +5,7 @@ export const realPages = [
   'analytics',
   'events',
   'consumers',
+  'recovery',
 ] as const;
 export type RealPage = (typeof realPages)[number];
 export interface WorkspaceRoute {

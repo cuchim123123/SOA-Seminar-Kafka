@@ -88,6 +88,7 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
         {link('analytics', 'Sales Analytics', true)}
         {link('events', 'Event Evidence', true)}
         {link('consumers', 'Consumer Controls', true)}
+        {link('recovery', 'Replay & Correction', true)}
         {link('benchmark', 'Purchase Benchmark')}
         {link('guide', 'Architecture Guide')}
       </nav>
