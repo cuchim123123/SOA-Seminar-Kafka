@@ -1,12 +1,6 @@
 import React, { useState } from 'react';
 import type { SimEngine } from '../../engine/sim-engine';
-import type {
-  KafkaMechanicsConfig,
-  SimCommitMode,
-  SimOffsetResetPolicy,
-} from '../../domain/types';
-
-const TOPIC = 'purchases';
+import type { KafkaMechanicsConfig, SimCommitMode, SimOffsetResetPolicy } from '../../domain/types';
 
 interface CurrentOffsetMenuProps {
   engine: SimEngine;
@@ -65,10 +59,11 @@ export const CurrentOffsetMenu: React.FC<CurrentOffsetMenuProps> = ({
   const [selectedGroup, setSelectedGroup] = useState<string>(groupIds[0] ?? 'loyalty-v1');
   const groupId = groupIds.includes(selectedGroup) ? selectedGroup : (groupIds[0] ?? selectedGroup);
   const group = engine.consumerGroups.get(groupId);
-  const partitions = engine.kafkaCluster.getAllPartitions(TOPIC);
+  const topicName = group?.topicName ?? 'purchases';
+  const partitions = engine.kafkaCluster.getAllPartitions(topicName);
 
   const rows = partitions.map((p) => {
-    const committed = group?.getCommittedNextOffset(TOPIC, p.partitionId) ?? 0;
+    const committed = group?.getCommittedNextOffset(topicName, p.partitionId) ?? 0;
     return {
       id: p.partitionId,
       leo: p.logEndOffset,
@@ -119,7 +114,7 @@ export const CurrentOffsetMenu: React.FC<CurrentOffsetMenuProps> = ({
           }}
         >
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, color: '#475569' }}>Group:</span>
+            <span style={{ fontWeight: 700, color: '#475569' }}>Group (topic {topicName}):</span>
             <select
               value={groupId}
               onChange={(e) => setSelectedGroup(e.target.value)}

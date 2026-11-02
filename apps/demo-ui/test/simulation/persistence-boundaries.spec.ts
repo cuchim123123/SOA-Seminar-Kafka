@@ -82,6 +82,7 @@ it('replica reassignment preserves partition records and offsets', () => {
 
 it('records a broker rejection instead of terminating the animation loop', () => {
   const { engine, database } = fixture();
+  engine.kafkaCluster.topics.get('purchases')!.minInsyncReplicas = 2;
   engine.kafkaCluster.reassignReplicas('purchases', 1);
   expect(() => engine.step()).not.toThrow();
   expect(engine.eventLog.some((event) => event.type === 'PRODUCE_REJECTED')).toBe(true);

@@ -13,6 +13,7 @@ export interface SimConsumerInstance {
 
 export class SimConsumerGroupModel {
   public groupId: string;
+  public topicName = 'purchases';
   public members: Map<string, SimConsumerInstance> = new Map();
   public assignorStrategy: PartitionAssignorStrategy = 'round-robin';
 

@@ -11,7 +11,13 @@ export function activeDelivery(engine: SimEngine, event: SimEvent) {
   const group = engine.consumerGroups.get(String(event.metadata?.groupId ?? node.data.groupId));
   const member = group?.members.get(consumerId);
   const partition = Number(event.metadata?.partitionId ?? 0);
-  if (!group || !member || !member.assignedPartitions.includes(partition)) return null;
+  if (
+    !group ||
+    !member ||
+    !member.assignedPartitions.includes(partition) ||
+    group.topicName !== String(event.metadata?.topic ?? 'purchases')
+  )
+    return null;
   if (event.metadata?.deliveryId && member.deliveryId !== event.metadata.deliveryId) return null;
   return {
     consumerId,

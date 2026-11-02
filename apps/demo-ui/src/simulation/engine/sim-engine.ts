@@ -70,6 +70,11 @@ export class SimEngine {
   }
 
   public setTopology(nodes: SimCustomNode[], edges: SimCustomEdge[]): void {
+    const oldConsumers = new Set(
+      Array.from(this.nodes.values())
+        .filter((node) => node.data.kind === 'consumer')
+        .map((node) => node.id),
+    );
     this.nodes.clear();
     for (const node of nodes) {
       this.nodes.set(node.id, node);
@@ -106,13 +111,56 @@ export class SimEngine {
         .sort((a, b) => a.id.localeCompare(b.id)),
     });
     if (signature === this.topologySignature) return;
+    const wasInitialized = !!this.topologySignature;
     this.topologySignature = signature;
+    if (wasInitialized) {
+      this.clock.pause();
+      const consumerIds = new Set([
+        ...oldConsumers,
+        ...nodes.filter((node) => node.data.kind === 'consumer').map((node) => node.id),
+      ]);
+      this.queue.removeWhere(
+        (event) =>
+          !!event.metadata?.deliveryId ||
+          !this.nodes.has(event.sourceNodeId) ||
+          (!!event.targetNodeId && !this.nodes.has(event.targetNodeId)) ||
+          (!!event.edgeId && !this.edges.has(event.edgeId)),
+      );
+      this.inFlightTokens = this.inFlightTokens.filter(
+        (token) =>
+          !consumerIds.has(token.sourceNodeId) &&
+          !consumerIds.has(token.targetNodeId) &&
+          this.edges.has(token.edgeId),
+      );
+      for (const group of this.consumerGroups.values()) {
+        group.unlockAllPartitions();
+        for (const member of group.members.values()) {
+          member.deliveryId = undefined;
+          member.currentProcessingPartition = undefined;
+          member.currentProcessingOffset = undefined;
+        }
+      }
+      for (const node of nodes)
+        if (node.data.kind === 'consumer') {
+          node.data.currentProcessingPartition = undefined;
+          node.data.currentProcessingOffset = undefined;
+          node.data.statusText = undefined;
+          if (node.data.status !== 'CRASHED')
+            node.data.status = node.data.isPaused ? 'PAUSED' : 'POLLING';
+        }
+    }
 
     // Sync Kafka Broker topology and Topic configuration
     const clusterNode = nodes.find((n) => n.data.kind === 'kafka-cluster');
     const brokerNodes = nodes.filter((n) => n.data.kind === 'kafka-broker');
 
     if (brokerNodes.length > 0) {
+      const visibleIds = new Set(brokerNodes.map((node) => Number(node.data.brokerId)));
+      for (const id of this.kafkaCluster.brokers.keys())
+        if (!visibleIds.has(id)) {
+          this.kafkaCluster.crashBroker(id);
+          this.kafkaCluster.brokers.delete(id);
+        }
       // Ensure all broker nodes are registered in kafkaCluster.brokers
       for (const bNode of brokerNodes) {
         const bId = (bNode.data.brokerId as number) || 1;
@@ -125,6 +173,22 @@ export class SimEngine {
           });
         }
       }
+      for (const topic of this.kafkaCluster.topics.values()) {
+        if (
+          !wasInitialized &&
+          topic.replicationFactor > brokerNodes.length &&
+          Array.from(topic.partitions.values()).every((part) => part.records.length === 0)
+        ) {
+          this.kafkaCluster.reassignReplicas(topic.name, brokerNodes.length);
+          topic.minInsyncReplicas = Math.min(topic.minInsyncReplicas, brokerNodes.length);
+        } else if (
+          topic.replicationFactor <= brokerNodes.length &&
+          Array.from(topic.partitions.values()).some((part) =>
+            part.replicas.some((id) => !visibleIds.has(id)),
+          )
+        )
+          this.kafkaCluster.reassignReplicas(topic.name, topic.replicationFactor);
+      }
       // Topic sync with broker count
       const topicName = 'purchases';
       const existingTopic = this.kafkaCluster.topics.get(topicName);
@@ -133,18 +197,25 @@ export class SimEngine {
         this.kafkaCluster.createTopic(topicName, 4, safeRF, Math.min(safeRF, 2));
       }
     } else if (clusterNode) {
-      const topicName = (clusterNode.data.activeTopic as string) || 'purchases';
-      const pCount = (clusterNode.data.partitionCount as number) || 4;
-      const rf = (clusterNode.data.replicationFactor as number) || 3;
-      const minIsr = (clusterNode.data.minInsyncReplicas as number) || 2;
+      if (!wasInitialized)
+        this.kafkaCluster.initializeBrokers(Number(clusterNode.data.brokerCount ?? 3));
+      const topicName = String(clusterNode.data.activeTopic ?? 'purchases');
       const existingTopic = this.kafkaCluster.topics.get(topicName);
+      const pCount = Number(clusterNode.data.partitionCount ?? existingTopic?.partitions.size ?? 4);
+      const rf = Number(
+        clusterNode.data.replicationFactor ?? existingTopic?.replicationFactor ?? 3,
+      );
+      const minIsr = Number(
+        clusterNode.data.minInsyncReplicas ?? existingTopic?.minInsyncReplicas ?? 2,
+      );
       if (!existingTopic) {
         this.kafkaCluster.createTopic(topicName, pCount, rf, minIsr);
       } else {
         if (existingTopic.partitions.size !== pCount) {
           this.kafkaCluster.setPartitionCount(topicName, pCount);
         }
-        existingTopic.replicationFactor = rf;
+        if (existingTopic.replicationFactor !== rf && rf <= this.kafkaCluster.brokers.size)
+          this.kafkaCluster.reassignReplicas(topicName, rf);
         existingTopic.minInsyncReplicas = minIsr;
       }
     }
@@ -170,9 +241,6 @@ export class SimEngine {
     }
 
     // Add or update groups and trigger rebalance
-    const topic = this.kafkaCluster.topics.get('purchases');
-    const partitionCount = topic ? topic.partitions.size : 4;
-
     for (const [gId, memberIds] of nodeGroups.entries()) {
       let group = this.consumerGroups.get(gId);
       if (!group) {
@@ -180,6 +248,19 @@ export class SimEngine {
         this.consumerGroups.set(gId, group);
       }
 
+      group.topicName = String(this.nodes.get(memberIds[0])?.data.subscribedTopic ?? 'purchases');
+      const topic = this.kafkaCluster.topics.get(group.topicName);
+      const partitionCount = topic?.partitions.size ?? 0;
+      if (topic)
+        for (const part of topic.partitions.values())
+          if (!group.hasCommittedOffset(topic.name, part.partitionId))
+            group.seekNextOffset(
+              topic.name,
+              part.partitionId,
+              this.mechanicsConfig.autoOffsetReset === 'latest'
+                ? part.logEndOffset
+                : part.logStartOffset,
+            );
       // Sync members
       const currentMembers = new Set(group.members.keys());
       for (const mId of memberIds) {
@@ -209,7 +290,44 @@ export class SimEngine {
       }
     }
 
+    if (wasInitialized)
+      for (const topic of this.kafkaCluster.topics.values())
+        for (const part of topic.partitions.values()) {
+          const record = part.records[0];
+          if (record)
+            this.scheduleConsumerPoll(
+              topic.name,
+              part.partitionId,
+              record.offset,
+              record.message,
+              this.clock.virtualTimeMs,
+            );
+        }
     this.notifyStateUpdated();
+  }
+
+  public invalidateConsumerWork(groupId: string): void {
+    const group = this.consumerGroups.get(groupId);
+    if (!group) return;
+    const members = new Set(group.members.keys());
+    this.queue.removeWhere(
+      (event) => event.metadata?.groupId === groupId && !!event.metadata?.deliveryId,
+    );
+    this.inFlightTokens = this.inFlightTokens.filter(
+      (token) => !members.has(token.sourceNodeId) && !members.has(token.targetNodeId),
+    );
+    group.unlockAllPartitions();
+    for (const member of group.members.values()) {
+      member.deliveryId = undefined;
+      member.currentProcessingPartition = undefined;
+      member.currentProcessingOffset = undefined;
+      const node = this.nodes.get(member.id);
+      if (!node) continue;
+      node.data.currentProcessingPartition = undefined;
+      node.data.currentProcessingOffset = undefined;
+      if (node.data.status !== 'CRASHED')
+        node.data.status = node.data.isPaused ? 'PAUSED' : 'POLLING';
+    }
   }
 
   public dispatchProducerMessage(
@@ -356,7 +474,7 @@ export class SimEngine {
     for (const [id, strategy] of strategies) {
       const group = this.consumerGroups.get(id);
       group?.setAssignorStrategy(strategy);
-      group?.rebalance(this.kafkaCluster.topics.get('purchases')?.partitions.size ?? 0);
+      group?.rebalance(this.kafkaCluster.topics.get(group.topicName)?.partitions.size ?? 0);
       group?.members.forEach((member) => {
         const node = this.nodes.get(member.id);
         if (node) node.data.assignedPartitions = [...member.assignedPartitions];

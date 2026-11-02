@@ -9,6 +9,8 @@ import { OutboxCdcInspectorSection } from './sections/OutboxCdcInspectorSection'
 import { DatabaseDlqInspectorSection } from './sections/DatabaseDlqInspectorSection';
 
 interface SimNodeInspectorProps {
+  onScaleGroup?: (groupId: string, count: number) => void;
+  consumerReplicaCount?: number;
   selectedNode: SimCustomNode | null;
   onClose: () => void;
   onUpdateData: (nodeId: string, partial: Record<string, unknown>) => void;
@@ -52,6 +54,8 @@ interface SimNodeInspectorProps {
 }
 
 export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
+  onScaleGroup,
+  consumerReplicaCount,
   selectedNode,
   onClose,
   onUpdateData,
@@ -232,6 +236,8 @@ export const SimNodeInspector: React.FC<SimNodeInspectorProps> = ({
 
         {kind === 'consumer' && (
           <ConsumerInspectorSection
+            onScaleGroup={onScaleGroup}
+            consumerReplicaCount={consumerReplicaCount}
             selectedNode={selectedNode}
             onUpdateData={onUpdateData}
             onCrashConsumer={onCrashConsumer}

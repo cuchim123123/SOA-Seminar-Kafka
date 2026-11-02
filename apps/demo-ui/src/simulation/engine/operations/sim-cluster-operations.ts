@@ -17,6 +17,7 @@ export class SimClusterOperations {
     currentTime: number,
   ): void {
     for (const group of engine.consumerGroups.values()) {
+      if (group.topicName !== topicName) continue;
       if (group.isPartitionInFlight(partitionId)) {
         continue;
       }
@@ -151,7 +152,7 @@ export class SimClusterOperations {
     engine: SimEngine,
     group: SimConsumerGroupModel,
     partitionId: number,
-    topicName: string = 'purchases',
+    topicName: string = group.topicName,
   ): void {
     const partition = engine.kafkaCluster.getPartition(topicName, partitionId);
     if (!partition) return;
@@ -182,14 +183,17 @@ export class SimClusterOperations {
     nextOffset: number,
   ): boolean {
     const group = engine.consumerGroups.get(groupId);
-    const partition = engine.kafkaCluster.getPartition('purchases', partitionId);
-    if (!group || !partition) return false;
+    const partition = engine.kafkaCluster.getPartition(
+      group?.topicName ?? 'purchases',
+      partitionId,
+    );
+    if (!group || !partition || !Number.isSafeInteger(nextOffset)) return false;
 
-    // Release partition lock so seek takes effect immediately
-    group.unlockPartition(partitionId);
+    // Invalidate callbacks from the previous cursor before replaying records.
+    engine.invalidateConsumerWork(groupId);
 
-    const target = Math.min(Math.max(0, nextOffset), partition.logEndOffset);
-    group.seekNextOffset('purchases', partitionId, target);
+    const target = Math.min(Math.max(partition.logStartOffset, nextOffset), partition.logEndOffset);
+    group.seekNextOffset(group.topicName, partitionId, target);
     engine.recordEvent(
       createSimEvent(
         engine.clock.virtualTimeMs,
@@ -198,7 +202,9 @@ export class SimClusterOperations {
         `🎯 [OFFSET SEEK] Group ${groupId} next-read offset for P${partitionId} set to #${target} (LEO #${partition.logEndOffset}).`,
       ),
     );
-    this.resumePartitionBacklog(engine, group, partitionId, 'purchases');
+    for (const member of group.members.values())
+      for (const assigned of member.assignedPartitions)
+        this.resumePartitionBacklog(engine, group, assigned, group.topicName);
     engine.notifyStateUpdated();
     return true;
   }
@@ -212,9 +218,10 @@ export class SimClusterOperations {
     policy: 'earliest' | 'latest',
   ): void {
     const group = engine.consumerGroups.get(groupId);
-    const topic = engine.kafkaCluster.topics.get('purchases');
+    const topic = engine.kafkaCluster.topics.get(group?.topicName ?? 'purchases');
     if (!group || !topic) return;
 
+    engine.invalidateConsumerWork(groupId);
     // Reset unlocks all partitions and clears error status on consumers in this group
     group.unlockAllPartitions();
     for (const memberId of group.members.keys()) {
@@ -226,10 +233,10 @@ export class SimClusterOperations {
     }
 
     for (const [pId, part] of topic.partitions.entries()) {
-      const target = policy === 'earliest' ? 0 : part.logEndOffset;
-      group.seekNextOffset('purchases', pId, target);
+      const target = policy === 'earliest' ? part.logStartOffset : part.logEndOffset;
+      group.seekNextOffset(group.topicName, pId, target);
       if (policy === 'earliest') {
-        this.resumePartitionBacklog(engine, group, pId, 'purchases');
+        this.resumePartitionBacklog(engine, group, pId, group.topicName);
       }
     }
 
@@ -333,13 +340,14 @@ export class SimClusterOperations {
 
     const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
     const group = engine.consumerGroups.get(groupId);
-    const topic = engine.kafkaCluster.topics.get('purchases');
+    const topic = engine.kafkaCluster.topics.get(group?.topicName ?? 'purchases');
     const pCount = topic ? topic.partitions.size : 4;
 
     if (group) {
       if (activePartition !== undefined) {
         group.unlockPartition(Number(activePartition));
       }
+      engine.invalidateConsumerWork(groupId);
       group.crashMember(consumerNodeId, pCount);
 
       // Purge pending in-flight processing/start events for the crashed consumer
@@ -354,7 +362,7 @@ export class SimClusterOperations {
         const node = engine.nodes.get(memberId);
         if (node && node.data.kind === 'consumer' && node.id !== consumerNodeId) {
           node.data.assignedPartitions = [...instance.assignedPartitions];
-          if (node.data.status !== 'PAUSED') {
+          if (node.data.status !== 'PAUSED' && node.data.status !== 'CRASHED') {
             node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
           }
         }
@@ -398,10 +406,11 @@ export class SimClusterOperations {
 
     const groupId = (consumerNode.data.groupId as string) || 'loyalty-v1';
     const group = engine.consumerGroups.get(groupId);
-    const topic = engine.kafkaCluster.topics.get('purchases');
+    const topic = engine.kafkaCluster.topics.get(group?.topicName ?? 'purchases');
     const pCount = topic ? topic.partitions.size : 4;
 
     if (group) {
+      engine.invalidateConsumerWork(groupId);
       group.reviveMember(consumerNodeId, pCount);
 
       // Sync all members
@@ -409,7 +418,7 @@ export class SimClusterOperations {
         const node = engine.nodes.get(memberId);
         if (node && node.data.kind === 'consumer') {
           node.data.assignedPartitions = [...instance.assignedPartitions];
-          if (node.data.status !== 'PAUSED') {
+          if (node.data.status !== 'PAUSED' && node.data.status !== 'CRASHED') {
             node.data.status = instance.assignedPartitions.length > 0 ? 'POLLING' : 'IDLE';
           }
         }
@@ -443,6 +452,7 @@ export class SimClusterOperations {
   public static togglePauseConsumer(engine: SimEngine, consumerId: string): boolean {
     const consumerNode = engine.nodes.get(consumerId);
     if (!consumerNode || consumerNode.data.kind !== 'consumer') return false;
+    if (consumerNode.data.status === 'CRASHED') return false;
 
     const cData = consumerNode.data as unknown as {
       isPaused?: boolean;
@@ -478,7 +488,7 @@ export class SimClusterOperations {
     if (!cData.isPaused && group) {
       const assigned = cData.assignedPartitions || instance?.assignedPartitions || [];
       for (const p of assigned) {
-        this.resumePartitionBacklog(engine, group, p, 'purchases');
+        this.resumePartitionBacklog(engine, group, p, group.topicName);
       }
     }
 
@@ -523,7 +533,7 @@ export class SimClusterOperations {
     );
 
     if (isCurrentlyCut && group) {
-      this.resumePartitionBacklog(engine, group, partitionId, 'purchases');
+      this.resumePartitionBacklog(engine, group, partitionId, group.topicName);
     }
 
     engine.notifyStateUpdated();

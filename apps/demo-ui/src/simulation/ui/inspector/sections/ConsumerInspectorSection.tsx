@@ -2,6 +2,8 @@ import React from 'react';
 import type { SimCustomNode } from '../../../domain/types';
 
 interface ConsumerInspectorSectionProps {
+  onScaleGroup?: (groupId: string, count: number) => void;
+  consumerReplicaCount?: number;
   selectedNode: SimCustomNode;
   onUpdateData: (nodeId: string, partial: Record<string, unknown>) => void;
   onCrashConsumer?: (consumerId: string) => void;
@@ -13,6 +15,8 @@ interface ConsumerInspectorSectionProps {
 }
 
 export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> = ({
+  onScaleGroup,
+  consumerReplicaCount = 0,
   selectedNode,
   onUpdateData,
   onCrashConsumer,
@@ -26,6 +30,32 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
 
   return (
     <>
+      <section
+        aria-label="Consumer group scaling"
+        style={{ padding: 10, border: '1px solid #cbd5e1', borderRadius: 8 }}
+      >
+        <strong>
+          Group {String(data.groupId)} · {consumerReplicaCount} replicas
+        </strong>
+        <p style={{ fontSize: 12 }}>
+          Replicas share this group's topic, offsets and database sink. Scaling pauses execution;
+          use Resume when ready.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            disabled={!onScaleGroup || consumerReplicaCount >= 12}
+            onClick={() => onScaleGroup?.(String(data.groupId), consumerReplicaCount + 1)}
+          >
+            Add replica
+          </button>
+          <button
+            disabled={!onScaleGroup || consumerReplicaCount <= 1}
+            onClick={() => onScaleGroup?.(String(data.groupId), consumerReplicaCount - 1)}
+          >
+            Remove last replica
+          </button>
+        </div>
+      </section>
       {/* Quick Polling & Backlog Controls */}
       <div
         style={{
@@ -67,9 +97,7 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
         >
           <span>{data.isPaused ? '▶️' : '⏸️'}</span>
           <span>
-            {data.isPaused
-              ? 'Resume Polling (Drain Lag)'
-              : 'Pause Polling (Accumulate Backlog)'}
+            {data.isPaused ? 'Resume Polling (Drain Lag)' : 'Pause Polling (Accumulate Backlog)'}
           </span>
         </button>
 
@@ -170,18 +198,13 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
           ].map((p) => (
             <button
               key={p.title}
-              onClick={() =>
-                onUpdateData(id, { title: p.title, groupId: p.group, icon: p.icon })
-              }
+              onClick={() => onUpdateData(id, { title: p.title, groupId: p.group, icon: p.icon })}
               style={{
                 padding: '3px 7px',
                 borderRadius: '4px',
                 border:
-                  (data.groupId as string) === p.group
-                    ? '1px solid #7c3aed'
-                    : '1px solid #cbd5e1',
-                background:
-                  (data.groupId as string) === p.group ? '#f5f3ff' : '#ffffff',
+                  (data.groupId as string) === p.group ? '1px solid #7c3aed' : '1px solid #cbd5e1',
+                background: (data.groupId as string) === p.group ? '#f5f3ff' : '#ffffff',
                 color: (data.groupId as string) === p.group ? '#7c3aed' : '#475569',
                 fontSize: '0.625rem',
                 fontWeight: 600,
@@ -278,9 +301,7 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
               padding: '6px 8px',
               borderRadius: '6px',
               border:
-                assignorStrategy === 'round-robin'
-                  ? '1px solid #7c3aed'
-                  : '1px solid #cbd5e1',
+                assignorStrategy === 'round-robin' ? '1px solid #7c3aed' : '1px solid #cbd5e1',
               background: assignorStrategy === 'round-robin' ? '#f5f3ff' : '#ffffff',
               color: assignorStrategy === 'round-robin' ? '#7c3aed' : '#475569',
               fontWeight: 700,
@@ -296,8 +317,7 @@ export const ConsumerInspectorSection: React.FC<ConsumerInspectorSectionProps> =
               flex: 1,
               padding: '6px 8px',
               borderRadius: '6px',
-              border:
-                assignorStrategy === 'range' ? '1px solid #7c3aed' : '1px solid #cbd5e1',
+              border: assignorStrategy === 'range' ? '1px solid #7c3aed' : '1px solid #cbd5e1',
               background: assignorStrategy === 'range' ? '#f5f3ff' : '#ffffff',
               color: assignorStrategy === 'range' ? '#7c3aed' : '#475569',
               fontWeight: 700,

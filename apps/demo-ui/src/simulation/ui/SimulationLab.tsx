@@ -89,6 +89,9 @@ export const SimulationLab: React.FC = () => {
     createClusterTopic,
     setActiveClusterTopic,
     engine,
+    topologyIssues,
+    validationMessage,
+    scaleGroup,
   } = useSimulationStore();
 
   const [paletteOpen, setPaletteOpen] = useState(true);
@@ -246,6 +249,31 @@ export const SimulationLab: React.FC = () => {
       />
 
       {/* ── KAFKA STREAMING MECHANICS CONTROLS ── */}
+      {(validationMessage || topologyIssues.length > 0) && (
+        <section
+          aria-label="Simulation setup feedback"
+          style={{
+            padding: '8px 16px',
+            background: '#fffbeb',
+            color: '#92400e',
+            borderBottom: '1px solid #fde68a',
+            maxHeight: 130,
+            overflow: 'auto',
+          }}
+        >
+          {validationMessage && <p role="status">{validationMessage}</p>}
+          {topologyIssues.length > 0 && (
+            <>
+              <strong>Draft needs attention before Run or Step:</strong>
+              <ul>
+                {topologyIssues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
       <KafkaMechanicsToolbar
         config={mechanicsConfig}
         onSetAcks={setProducerAcks}
@@ -331,6 +359,10 @@ export const SimulationLab: React.FC = () => {
             onReviveConsumer={reviveConsumer}
             onTogglePauseConsumer={togglePauseConsumer}
             onTogglePauseConsumerPartition={togglePauseConsumerPartition}
+            onScaleGroup={scaleGroup}
+            consumerReplicaCount={
+              engine.consumerGroups.get(String(selectedNode?.data.groupId))?.members.size ?? 0
+            }
             onCreateClusterTopic={createClusterTopic}
             onSetActiveClusterTopic={setActiveClusterTopic}
             brokers={Array.from(engine.kafkaCluster.brokers.values())}

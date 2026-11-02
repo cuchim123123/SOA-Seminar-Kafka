@@ -3,7 +3,8 @@ import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { SimEngine } from '../engine/sim-engine';
 import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-registry';
-import { SimConsumerGroupModel } from '../domain/consumer-group';
+import { validateTopology } from '../domain/topology-validation';
+import { scaleConsumers } from '../domain/scale-consumers';
 import type {
   SimCustomNode,
   SimKafkaBrokerData,
@@ -17,12 +18,19 @@ import type { SimEvent } from '../domain/events';
 import { SYSTEM_BLUEPRINTS } from '../blueprints/systemBlueprints';
 
 let nextNodeId = 1;
+function allocateNodeId(kind: ComponentKind, nodes: SimCustomNode[]) {
+  let id: string;
+  do id = `node-${kind}-${++nextNodeId}`;
+  while (nodes.some((node) => node.id === id || node.data.instanceId === id));
+  return id;
+}
 
 export function useSimulationStore() {
   const engineRef = useRef<SimEngine | null>(null);
   if (!engineRef.current) engineRef.current = new SimEngine();
   const engine = engineRef.current;
 
+  const [validationMessage, setValidationMessage] = useState('');
   const [nodes, setNodes] = useState<SimCustomNode[]>([]);
   const [edges, setEdges] = useState<SimCustomEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -43,6 +51,27 @@ export function useSimulationStore() {
     setInFlightTokens([...engine.inFlightTokens]);
     setMechanicsConfig({ ...engine.mechanicsConfig });
   }, [engine]);
+
+  const pauseForEdit = useCallback(() => {
+    engine.clock.pause();
+    syncFromEngine();
+  }, [engine, syncFromEngine]);
+  const topologyIssues = validateTopology(nodes, edges, new Set(engine.kafkaCluster.topics.keys()));
+  const readyToExecute = useCallback(() => {
+    engine.setTopology(nodes, edges);
+    const issues = validateTopology(nodes, edges, new Set(engine.kafkaCluster.topics.keys()));
+    for (const topic of engine.kafkaCluster.topics.values())
+      if (topic.replicationFactor > engine.kafkaCluster.brokers.size)
+        issues.push(`Topic ${topic.name}: replication factor exceeds the visible broker count.`);
+    if (issues.length) {
+      engine.clock.pause();
+      setValidationMessage(issues.join(' '));
+      syncFromEngine();
+      return false;
+    }
+    setValidationMessage('');
+    return true;
+  }, [engine, nodes, edges, syncFromEngine]);
 
   // Animation frame loop when simulation is running
   useEffect(() => {
@@ -71,13 +100,22 @@ export function useSimulationStore() {
   }, [nodes, edges, engine]);
 
   // Node & Edge changes from React Flow
-  const onNodesChange = useCallback((changes: NodeChange<SimCustomNode>[]) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
-  }, []);
+  const onNodesChange = useCallback(
+    (changes: NodeChange<SimCustomNode>[]) => {
+      if (changes.some((change) => !['position', 'dimensions', 'select'].includes(change.type)))
+        pauseForEdit();
+      setNodes((nds) => applyNodeChanges(changes, nds));
+    },
+    [pauseForEdit],
+  );
 
-  const onEdgesChange = useCallback((changes: EdgeChange<SimCustomEdge>[]) => {
-    setEdges((eds) => applyEdgeChanges(changes, eds));
-  }, []);
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange<SimCustomEdge>[]) => {
+      if (changes.some((change) => change.type !== 'select')) pauseForEdit();
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [pauseForEdit],
+  );
 
   // Wire connection validation and creation
   const onConnect = useCallback(
@@ -91,12 +129,20 @@ export function useSimulationStore() {
 
       const isValid = isValidConnection(sourceNode.data.kind, targetNode.data.kind);
       if (!isValid) {
-        alert(
+        setValidationMessage(
           `Invalid connection: Cannot wire ${sourceNode.data.title} (${sourceNode.data.kind}) to ${targetNode.data.title} (${targetNode.data.kind}).`,
         );
         return;
       }
 
+      if (
+        edges.some((edge) => edge.source === connection.source && edge.target === connection.target)
+      ) {
+        setValidationMessage('These components are already connected.');
+        return;
+      }
+      pauseForEdit();
+      setValidationMessage('');
       const newEdge: SimCustomEdge = {
         id: `edge-${connection.source}-${connection.target}`,
         source: connection.source,
@@ -114,7 +160,7 @@ export function useSimulationStore() {
 
       setEdges((eds) => [...eds, newEdge]);
     },
-    [nodes],
+    [nodes, edges, pauseForEdit],
   );
 
   // Add node from Palette drag-and-drop
@@ -122,9 +168,9 @@ export function useSimulationStore() {
     (kind: ComponentKind, position: { x: number; y: number }) => {
       const def = COMPONENT_REGISTRY.find((c) => c.kind === kind);
       if (!def) return;
+      pauseForEdit();
 
-      nextNodeId += 1;
-      const id = `node-${kind}-${nextNodeId}`;
+      const id = allocateNodeId(kind, nodes);
 
       let nodeType = `${kind}Node`;
       if (kind === 'kafka-broker') nodeType = 'kafkaBrokerNode';
@@ -151,16 +197,6 @@ export function useSimulationStore() {
           title: `Broker B${nextBrokerId}`,
           isController: nextBrokerId === 1,
         };
-
-        // Ensure broker exists in engine's broker map
-        if (!engine.kafkaCluster.brokers.has(nextBrokerId)) {
-          engine.kafkaCluster.brokers.set(nextBrokerId, {
-            id: nextBrokerId,
-            host: `broker-${nextBrokerId}:9092`,
-            isController: nextBrokerId === 1,
-            status: 'ONLINE',
-          });
-        }
       }
 
       if (kind === 'consumer') {
@@ -183,7 +219,7 @@ export function useSimulationStore() {
       setNodes((nds) => [...nds, newNode]);
       setSelectedNodeId(id);
     },
-    [nodes, engine],
+    [nodes, engine, pauseForEdit],
   );
 
   // Duplicate a node with context-aware connection replication for consumers
@@ -191,9 +227,9 @@ export function useSimulationStore() {
     (nodeId: string) => {
       const sourceNode = nodes.find((n) => n.id === nodeId);
       if (!sourceNode) return;
+      pauseForEdit();
 
-      nextNodeId += 1;
-      const newId = `node-${sourceNode.data.kind}-${nextNodeId}`;
+      const newId = allocateNodeId(sourceNode.data.kind, nodes);
       const newPos = { x: sourceNode.position.x + 40, y: sourceNode.position.y + 40 };
 
       const newNode: SimCustomNode = {
@@ -207,27 +243,42 @@ export function useSimulationStore() {
         } as unknown as SimCustomNode['data'],
       };
 
+      if (sourceNode.data.kind === 'consumer') {
+        newNode.data.instanceId = newId;
+        newNode.data.status = 'POLLING';
+        newNode.data.assignedPartitions = [];
+        newNode.data.isPaused = false;
+        newNode.data.pausedPartitions = [];
+        newNode.data.currentProcessingPartition = undefined;
+        newNode.data.currentProcessingOffset = undefined;
+      }
+      if (sourceNode.data.kind === 'kafka-broker') {
+        const brokerId =
+          Math.max(
+            0,
+            ...nodes
+              .filter((node) => node.data.kind === 'kafka-broker')
+              .map((node) => Number(node.data.brokerId)),
+          ) + 1;
+        Object.assign(newNode.data, {
+          brokerId,
+          host: `broker-${brokerId}:9092`,
+          isController: false,
+          status: 'ACTIVE',
+          topicPartitions: [],
+        });
+      }
       // Context-aware replication: if duplicating a consumer, replicate inbound wire from Kafka
       const newEdges: SimCustomEdge[] = [];
       if (sourceNode.data.kind === 'consumer') {
-        const inboundWire = edges.find((e) => e.target === nodeId);
-        if (inboundWire) {
+        for (const edge of edges.filter(
+          (edge) => edge.source === nodeId || edge.target === nodeId,
+        )) {
           newEdges.push({
-            id: `edge-${inboundWire.source}-${newId}`,
-            source: inboundWire.source,
-            target: newId,
-            type: 'simFlowEdge',
-            data: { portType: 'dispatch' },
-          });
-        }
-        const outboundWire = edges.find((e) => e.source === nodeId);
-        if (outboundWire) {
-          newEdges.push({
-            id: `edge-${newId}-${outboundWire.target}`,
-            source: newId,
-            target: outboundWire.target,
-            type: 'simFlowEdge',
-            data: { portType: 'handler-action' },
+            ...structuredClone(edge),
+            id: `${edge.id}:${newId}`,
+            source: edge.source === nodeId ? newId : edge.source,
+            target: edge.target === nodeId ? newId : edge.target,
           });
         }
       }
@@ -238,57 +289,26 @@ export function useSimulationStore() {
       }
       setSelectedNodeId(newId);
     },
-    [nodes, edges],
+    [nodes, edges, pauseForEdit],
   );
 
   // Delete node and clean up connected edges
   const deleteNode = useCallback(
     (nodeId: string) => {
+      pauseForEdit();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
       if (selectedNodeId === nodeId) {
         setSelectedNodeId(null);
       }
     },
-    [selectedNodeId],
+    [selectedNodeId, pauseForEdit],
   );
 
   // Update node data from Inspector
   const updateNodeData = useCallback(
     (nodeId: string, partial: Record<string, unknown>) => {
-      // 1. Sync engine node representation
-      const engineNode = engine.nodes.get(nodeId);
-      if (engineNode) {
-        engineNode.data = { ...engineNode.data, ...partial };
-
-        // If groupId changed on a consumer node, migrate consumer groups in engine
-        if (engineNode.data.kind === 'consumer' && partial.groupId) {
-          const newGroupId = partial.groupId as string;
-          const topic = engine.kafkaCluster.topics.get('purchases');
-          const pCount = topic ? topic.partitions.size : 4;
-
-          // Unregister from old groups
-          for (const g of engine.consumerGroups.values()) {
-            if (g.groupId !== newGroupId) {
-              g.unregisterConsumer(nodeId);
-              g.rebalance(pCount);
-            }
-          }
-
-          // Register in new group
-          let targetGroup = engine.consumerGroups.get(newGroupId);
-          if (!targetGroup) {
-            targetGroup = new SimConsumerGroupModel(newGroupId);
-            engine.consumerGroups.set(newGroupId, targetGroup);
-          }
-          targetGroup.registerConsumer(
-            nodeId,
-            (engineNode.data.processingDelayMs as number) || 120,
-          );
-          targetGroup.rebalance(pCount);
-        }
-      }
-
+      pauseForEdit();
       // 2. Sync React Flow nodes
       setNodes((nds) =>
         nds.map((n) => {
@@ -304,14 +324,15 @@ export function useSimulationStore() {
 
       syncFromEngine();
     },
-    [engine, syncFromEngine],
+    [pauseForEdit, syncFromEngine],
   );
 
   // Simulation Playback Controls
   const play = useCallback(() => {
+    if (!readyToExecute()) return;
     engine.clock.start();
     syncFromEngine();
-  }, [engine, syncFromEngine]);
+  }, [engine, syncFromEngine, readyToExecute]);
 
   const pause = useCallback(() => {
     engine.clock.pause();
@@ -319,9 +340,11 @@ export function useSimulationStore() {
   }, [engine, syncFromEngine]);
 
   const step = useCallback(() => {
+    if (!readyToExecute()) return;
+    engine.clock.pause();
     engine.step();
     syncFromEngine();
-  }, [engine, syncFromEngine]);
+  }, [engine, syncFromEngine, readyToExecute]);
 
   const reset = useCallback(() => {
     engine.reset();
@@ -339,30 +362,46 @@ export function useSimulationStore() {
   // Dispatch message from Producer
   const dispatchMessage = useCallback(
     (producerId?: string, customKey?: string) => {
+      if (!readyToExecute()) return;
       const pNode = producerId
         ? nodes.find((n) => n.id === producerId)
         : nodes.find((n) => n.data.kind === 'producer');
 
       if (!pNode) {
-        alert('Please add a Producer to the canvas first.');
+        setValidationMessage('Add a Producer to the canvas first.');
         return;
       }
 
-      if (engine.clock.status === 'STOPPED') {
-        engine.clock.start();
-      }
       engine.dispatchProducerMessage(pNode.id, customKey);
       syncFromEngine();
     },
-    [nodes, engine, syncFromEngine],
+    [nodes, engine, syncFromEngine, readyToExecute],
   );
 
   const setTopicPartitionCount = useCallback(
     (count: number) => {
+      pauseForEdit();
+      const topic = engine.kafkaCluster.topics.get('purchases');
+      if (
+        !Number.isInteger(count) ||
+        count < 1 ||
+        count > 12 ||
+        (topic && count < topic.partitions.size)
+      ) {
+        setValidationMessage(
+          'Kafka partitions can only increase (up to 12 in this simulator). Restore a scenario to start over.',
+        );
+        return;
+      }
+      for (const group of engine.consumerGroups.values())
+        if (group.topicName === 'purchases') engine.invalidateConsumerWork(group.groupId);
       engine.kafkaCluster.setPartitionCount('purchases', count);
       // Rebalance all consumer groups
       for (const group of engine.consumerGroups.values()) {
+        if (group.topicName !== 'purchases') continue;
         group.rebalance(count);
+        for (const member of group.members.values())
+          for (const part of member.assignedPartitions) engine.resumePartitionBacklog(group, part);
       }
       // Sync to nodes
       setNodes((nds) =>
@@ -386,7 +425,12 @@ export function useSimulationStore() {
               data: {
                 ...n.data,
                 assignedPartitions: [...partitions],
-                status: partitions.length > 0 ? 'POLLING' : 'IDLE',
+                status:
+                  n.data.status === 'CRASHED' || n.data.isPaused
+                    ? n.data.status
+                    : partitions.length > 0
+                      ? 'POLLING'
+                      : 'IDLE',
               },
             };
           }
@@ -395,16 +439,19 @@ export function useSimulationStore() {
       );
       syncFromEngine();
     },
-    [engine, syncFromEngine],
+    [engine, syncFromEngine, pauseForEdit],
   );
 
   const setAssignorStrategy = useCallback(
     (strategy: 'round-robin' | 'range') => {
+      pauseForEdit();
       for (const group of engine.consumerGroups.values()) {
+        engine.invalidateConsumerWork(group.groupId);
         group.setAssignorStrategy(strategy);
-        const topic = engine.kafkaCluster.topics.get('purchases');
-        const pCount = topic ? topic.partitions.size : 4;
-        group.rebalance(pCount);
+        const topic = engine.kafkaCluster.topics.get(group.topicName);
+        group.rebalance(topic?.partitions.size ?? 0);
+        for (const member of group.members.values())
+          for (const part of member.assignedPartitions) engine.resumePartitionBacklog(group, part);
       }
       // Sync to nodes
       setNodes((nds) =>
@@ -419,7 +466,12 @@ export function useSimulationStore() {
               data: {
                 ...n.data,
                 assignedPartitions: [...partitions],
-                status: partitions.length > 0 ? 'POLLING' : 'IDLE',
+                status:
+                  n.data.status === 'CRASHED' || n.data.isPaused
+                    ? n.data.status
+                    : partitions.length > 0
+                      ? 'POLLING'
+                      : 'IDLE',
               },
             };
           }
@@ -428,16 +480,22 @@ export function useSimulationStore() {
       );
       syncFromEngine();
     },
-    [engine, syncFromEngine],
+    [engine, syncFromEngine, pauseForEdit],
   );
 
   const setTopicReplicationFactor = useCallback(
     (rf: number) => {
+      pauseForEdit();
       const topic = engine.kafkaCluster.topics.get('purchases');
       if (topic) {
         // Re-distribute replicas without replacing partition logs.
         engine.clock.pause();
-        engine.kafkaCluster.reassignReplicas('purchases', rf);
+        try {
+          engine.kafkaCluster.reassignReplicas('purchases', rf);
+        } catch (error) {
+          setValidationMessage((error as Error).message);
+          return;
+        }
       }
       engine.notifyStateUpdated();
       syncFromEngine();
@@ -447,6 +505,7 @@ export function useSimulationStore() {
 
   const setTopicMinIsr = useCallback(
     (minIsr: number) => {
+      pauseForEdit();
       const topic = engine.kafkaCluster.topics.get('purchases');
       if (topic) {
         topic.minInsyncReplicas = minIsr;
@@ -609,16 +668,43 @@ export function useSimulationStore() {
       partitionCount: number = 4,
       replicationFactor: number = 3,
     ) => {
-      engine.kafkaCluster.createTopic(topicName, partitionCount, replicationFactor);
+      pauseForEdit();
+      if (!topicName.trim() || engine.kafkaCluster.topics.has(topicName)) {
+        setValidationMessage(
+          'Choose a new, non-empty topic name. Existing topic records are preserved.',
+        );
+        return;
+      }
+      if (
+        !Number.isInteger(partitionCount) ||
+        partitionCount < 1 ||
+        partitionCount > 12 ||
+        !Number.isInteger(replicationFactor) ||
+        replicationFactor < 1 ||
+        replicationFactor > engine.kafkaCluster.brokers.size
+      ) {
+        setValidationMessage(
+          'Use 1–12 partitions and a replication factor within the broker count.',
+        );
+        return;
+      }
+      engine.kafkaCluster.createTopic(
+        topicName,
+        partitionCount,
+        replicationFactor,
+        Math.min(2, replicationFactor),
+      );
       const allTopics = Array.from(engine.kafkaCluster.topics.keys());
       updateNodeData(clusterNodeId, {
         topicsList: allTopics,
         activeTopic: topicName,
         partitionCount,
+        replicationFactor,
+        minInsyncReplicas: Math.min(2, replicationFactor),
       });
       syncFromEngine();
     },
-    [engine, updateNodeData, syncFromEngine],
+    [engine, updateNodeData, syncFromEngine, pauseForEdit],
   );
 
   const setActiveClusterTopic = useCallback(
@@ -628,6 +714,8 @@ export function useSimulationStore() {
       updateNodeData(clusterNodeId, {
         activeTopic: topicName,
         partitionCount: topic.partitions.size,
+        replicationFactor: topic.replicationFactor,
+        minInsyncReplicas: topic.minInsyncReplicas,
       });
       syncFromEngine();
     },
@@ -665,13 +753,11 @@ export function useSimulationStore() {
 
   const dispatchPoisonPill = useCallback(
     (options?: { targetFailedConsumerIds?: string[]; targetFailedGroupIds?: string[] }) => {
+      if (!readyToExecute()) return;
       const pNode = nodes.find((n) => n.data.kind === 'producer');
       if (!pNode) {
-        alert('Please add a Producer to the canvas first.');
+        setValidationMessage('Add a Producer to the canvas first.');
         return;
-      }
-      if (engine.clock.status === 'STOPPED') {
-        engine.clock.start();
       }
       engine.dispatchProducerMessage(pNode.id, 'POISON_PILL', {
         purchaseId: 'POISON-ERR-999',
@@ -681,7 +767,7 @@ export function useSimulationStore() {
       });
       syncFromEngine();
     },
-    [nodes, engine, syncFromEngine],
+    [nodes, engine, syncFromEngine, readyToExecute],
   );
 
   const setProducerAcks = useCallback(
@@ -744,9 +830,10 @@ export function useSimulationStore() {
   );
 
   const dispatchDuplicateMessage = useCallback(() => {
+    if (!readyToExecute()) return;
     const pNode = nodes.find((n) => n.data.kind === 'producer');
     if (!pNode) {
-      alert('Please add a Producer to the canvas first.');
+      setValidationMessage('Add a Producer to the canvas first.');
       return;
     }
     if (engine.clock.status === 'STOPPED') {
@@ -755,25 +842,43 @@ export function useSimulationStore() {
     const customKey = (pNode.data.messageKey as string) || 'U001';
     engine.dispatchDuplicateMessage(customKey);
     syncFromEngine();
-  }, [nodes, engine, syncFromEngine]);
+  }, [nodes, engine, syncFromEngine, readyToExecute]);
 
   const dispatchOrderedBurst = useCallback(
     (count = 5, customerId = 'U001') => {
+      if (!readyToExecute()) return;
       const pNode = nodes.find((n) => n.data.kind === 'producer');
       if (!pNode) {
-        alert('Please add a Producer to the canvas first.');
+        setValidationMessage('Add a Producer to the canvas first.');
         return;
-      }
-      if (engine.clock.status === 'STOPPED') {
-        engine.clock.start();
       }
       engine.dispatchOrderedBurst(customerId, count);
       syncFromEngine();
     },
-    [nodes, engine, syncFromEngine],
+    [nodes, engine, syncFromEngine, readyToExecute],
+  );
+
+  const scaleGroup = useCallback(
+    (groupId: string, count: number) => {
+      try {
+        const next = scaleConsumers(nodes, edges, groupId, count, () =>
+          allocateNodeId('consumer', nodes),
+        );
+        pauseForEdit();
+        setNodes(next.nodes);
+        setEdges(next.edges);
+        setValidationMessage('');
+      } catch (error) {
+        setValidationMessage(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [nodes, edges, pauseForEdit],
   );
 
   return {
+    topologyIssues,
+    validationMessage,
+    scaleGroup,
     engine,
     nodes,
     edges,
