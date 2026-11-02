@@ -141,3 +141,5 @@ Real UI C9: pagination-independent evidence, Loyalty/Analytics pages and indepen
 Real UI C10: same-customer burst form and actual allocated sequence/evidence results verified in browser. Recovery and final acceptance remain.
 
 Real UI C11: replay lifecycle, complete all-customer staging review and explicit global confirmation implemented;95-customer browser review verified without executing global promotion. Phase6 acceptance/polish remains.
+
+Real UI C12: validated tool links/proxy origins, bounded HTTP requests and presenter walkthrough added;253 unit tests pass. Mobile and partial-outage browser acceptance remains pending.

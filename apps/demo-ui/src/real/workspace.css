@@ -129,11 +129,13 @@
   .workspace-sidebar {
     position: fixed;
     left: -260px;
+    visibility: hidden;
     z-index: 50;
     width: 240px;
     transition: left 0.15s;
   }
   .workspace-sidebar.open {
+    visibility: visible;
     left: 0;
   }
   .workspace-sidebar.compact {
@@ -168,4 +170,15 @@
   .workspace-sidebar {
     transition: none;
   }
+}
+
+.real-workspace select {
+  padding: 10px;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+.real-workspace input[type='checkbox'] {
+  width: auto;
 }

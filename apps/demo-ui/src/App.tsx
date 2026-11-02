@@ -102,7 +102,7 @@ export function App() {
         )}
 
         {/* 3. Primary Views (Simulation Lab, Benchmark, Guide) */}
-        <main>
+        <main tabIndex={-1}>
           {activeTab === 'real' && <RealApplication key={route.customerId} route={route} />}
 
           {activeTab === 'simulation' && <SimulationLab />}

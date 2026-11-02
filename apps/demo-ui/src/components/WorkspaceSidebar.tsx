@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WorkspaceRoute } from '../real/state/routes';
 import { routeHash } from '../real/state/routes';
+import { uiConfig } from '../config/ui-config';
 
 export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
   const [open, setOpen] = useState(false);
@@ -36,6 +37,12 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
   }, [open]);
   const link = (page: WorkspaceRoute['page'], label: string, real = false) => (
     <a
+      onClick={() => {
+        if (open) {
+          setOpen(false);
+          document.querySelector<HTMLElement>('main')?.focus();
+        }
+      }}
       key={page}
       href={routeHash({ ...route, page, real })}
       aria-current={route.page === page && route.real === real ? 'page' : undefined}
@@ -91,6 +98,27 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
         {link('recovery', 'Replay & Correction', true)}
         {link('benchmark', 'Purchase Benchmark')}
         {link('guide', 'Architecture Guide')}
+        <h2 className="sidebar-label">External tools</h2>
+        <a
+          href={uiConfig.VITE_KAFBAT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Kafbat (opens new tab)"
+          title="Kafbat"
+        >
+          <span aria-hidden="true">K</span>
+          <span className="sidebar-label">Kafbat ↗</span>
+        </a>
+        <a
+          href={uiConfig.VITE_GRAFANA_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Grafana (opens new tab)"
+          title="Grafana"
+        >
+          <span aria-hidden="true">G</span>
+          <span className="sidebar-label">Grafana ↗</span>
+        </a>
       </nav>
     </>
   );

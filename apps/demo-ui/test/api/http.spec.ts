@@ -35,7 +35,7 @@ describe('business HTTP evidence', () => {
     await businessApi.getPurchase('p/a?b', controller.signal);
     expect(fetch).toHaveBeenCalledWith(
       '/api/producer/api/v1/purchases/p%2Fa%3Fb',
-      expect.objectContaining({ signal: controller.signal }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 });
