@@ -10,6 +10,7 @@ import {
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import './simulation.css';
 
 import { useSimulationStore } from '../store/useSimulationStore';
 import { SimProducerNode } from './nodes/SimProducerNode';
@@ -21,6 +22,7 @@ import { SimDlqNode } from './nodes/SimDlqNode';
 import { SimOutboxTableNode } from './nodes/SimOutboxTableNode';
 import { SimCdcRelayNode } from './nodes/SimCdcRelayNode';
 import { SimFlowEdge } from './canvas/SimFlowEdge';
+import { SimulationClockContext } from './canvas/SimulationClockContext';
 import { SimConsumerGroupContainerNode } from './nodes/SimConsumerGroupContainerNode';
 import {
   buildGroupContainerNodes,
@@ -92,6 +94,7 @@ export const SimulationLab: React.FC = () => {
     topologyIssues,
     validationMessage,
     scaleGroup,
+    frameClock,
   } = useSimulationStore();
 
   const [paletteOpen, setPaletteOpen] = useState(true);
@@ -142,20 +145,23 @@ export const SimulationLab: React.FC = () => {
 
   // Attach in-flight tokens to edges for visual particle animation
   const animatedEdges = useMemo(() => {
+    const tokensByEdge = new Map<string, typeof inFlightTokens>();
+    for (const token of inFlightTokens) {
+      const group = tokensByEdge.get(token.edgeId) ?? [];
+      group.push(token);
+      tokensByEdge.set(token.edgeId, group);
+    }
     return edges.map((edge) => {
-      const tokensForEdge = inFlightTokens.filter((t) => t.edgeId === edge.id);
-      return {
-        ...edge,
-        data: {
-          ...edge.data,
-          inFlightTokens: tokensForEdge,
-        },
-      };
+      const tokens = tokensByEdge.get(edge.id);
+      return tokens ? { ...edge, data: { ...edge.data, inFlightTokens: tokens } } : edge;
     });
   }, [edges, inFlightTokens]);
 
   // View-only wrapper rectangles grouping consumers of the same consumer group
-  const canvasNodes = [...buildGroupContainerNodes(nodes, engine), ...nodes];
+  const canvasNodes = useMemo(
+    () => [...buildGroupContainerNodes(nodes, engine), ...nodes],
+    [nodes, engine],
+  );
 
   // Dragging a group box moves every consumer of that group by the same delta
   const handleNodesChange = useCallback(
@@ -309,38 +315,40 @@ export const SimulationLab: React.FC = () => {
           onDragOver={onDragOver}
           onDrop={onDrop}
         >
-          <ReactFlow
-            nodes={canvasNodes}
-            edges={animatedEdges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            onNodeClick={(_, node) => selectNode(node.id)}
-            onPaneClick={() => selectNode(null)}
-            onInit={setReactFlowInstance}
-            fitView
-            minZoom={0.2}
-            maxZoom={2.0}
-            defaultEdgeOptions={{ type: 'simFlowEdge' }}
-          >
-            <Background gap={16} size={1} color="#e2e8f0" />
-            <Controls />
-            <MiniMap
-              nodeColor={(n) => {
-                if (n.data?.kind === 'producer') return '#7c3aed';
-                if (n.data?.kind === 'kafka-cluster') return '#0284c7';
-                if (n.data?.kind === 'consumer') return '#059669';
-                if (n.data?.kind === 'database') return '#10b981';
-                if (n.data?.kind === 'dead-letter-queue') return '#ef4444';
-                if (n.data?.kind === 'outbox-table') return '#ea580c';
-                if (n.data?.kind === 'cdc-relay') return '#0891b2';
-                return '#94a3b8';
-              }}
-              style={{ bottom: 12, right: 12 }}
-            />
-          </ReactFlow>
+          <SimulationClockContext.Provider value={frameClock}>
+            <ReactFlow
+              nodes={canvasNodes}
+              edges={animatedEdges}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onNodeClick={(_, node) => selectNode(node.id)}
+              onPaneClick={() => selectNode(null)}
+              onInit={setReactFlowInstance}
+              fitView
+              minZoom={0.2}
+              maxZoom={2.0}
+              defaultEdgeOptions={{ type: 'simFlowEdge' }}
+            >
+              <Background gap={16} size={1} color="#e2e8f0" />
+              <Controls />
+              <MiniMap
+                nodeColor={(n) => {
+                  if (n.data?.kind === 'producer') return '#7c3aed';
+                  if (n.data?.kind === 'kafka-cluster') return '#0284c7';
+                  if (n.data?.kind === 'consumer') return '#059669';
+                  if (n.data?.kind === 'database') return '#10b981';
+                  if (n.data?.kind === 'dead-letter-queue') return '#ef4444';
+                  if (n.data?.kind === 'outbox-table') return '#ea580c';
+                  if (n.data?.kind === 'cdc-relay') return '#0891b2';
+                  return '#94a3b8';
+                }}
+                style={{ bottom: 12, right: 12 }}
+              />
+            </ReactFlow>
+          </SimulationClockContext.Provider>
 
           {/* Context-Aware Node Inspector Drawer */}
           <SimNodeInspector

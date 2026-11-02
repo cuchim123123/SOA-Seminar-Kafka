@@ -1,16 +1,14 @@
 import React from 'react';
-import {
-  BaseEdge,
-  getBezierPath,
-  type EdgeProps,
-} from '@xyflow/react';
-import type { SimEdgeData, SimInFlightToken } from '../../domain/types';
+import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react';
+import type { SimEdgeData } from '../../domain/types';
+import { useVirtualTime } from './SimulationClockContext';
+import { tokenProgress } from '../../store/virtual-clock-store';
 
 interface SimFlowEdgeProps extends EdgeProps {
   data?: SimEdgeData;
 }
 
-export const SimFlowEdge: React.FC<SimFlowEdgeProps> = ({
+export const SimFlowEdge = React.memo(function SimFlowEdge({
   sourceX,
   sourceY,
   targetX,
@@ -20,8 +18,8 @@ export const SimFlowEdge: React.FC<SimFlowEdgeProps> = ({
   style = {},
   markerEnd,
   data,
-}) => {
-  const [edgePath] = getBezierPath({
+}: SimFlowEdgeProps) {
+  const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
     sourcePosition,
@@ -31,14 +29,15 @@ export const SimFlowEdge: React.FC<SimFlowEdgeProps> = ({
   });
 
   const tokens = data?.inFlightTokens || [];
+  const now = useVirtualTime(tokens.length > 0);
+  const active = tokens
+    .map((token) => ({ token, progress: tokenProgress(token.startTime, token.arriveTime, now) }))
+    .filter((item) => item.progress !== null);
+  const visible = active.slice(0, 6);
   const portType = data?.portType || 'publish';
 
   const strokeColor =
-    portType === 'publish'
-      ? '#38bdf8'
-      : portType === 'dispatch'
-        ? '#fbbf24'
-        : '#10b981';
+    portType === 'publish' ? '#38bdf8' : portType === 'dispatch' ? '#fbbf24' : '#10b981';
 
   return (
     <>
@@ -55,22 +54,28 @@ export const SimFlowEdge: React.FC<SimFlowEdgeProps> = ({
         }}
       />
 
-      {/* Render in-flight message tokens traveling along this edge */}
-      {tokens.map((token: SimInFlightToken) => (
+      {/* No independent SVG timer: pause, speed changes and Step share virtual time. */}
+      {visible.map(({ token, progress }) => (
         <circle
+          className="simulation-token"
           key={token.id}
           r={5}
           fill={token.color || strokeColor}
-          filter="drop-shadow(0 0 4px rgba(255, 255, 255, 0.8))"
+          style={{
+            offsetPath: `path('${edgePath}')`,
+            offsetDistance: `${Number(progress) * 100}%`,
+          }}
         >
-          <animateMotion
-            path={edgePath}
-            dur={`${Math.max(0.1, (token.arriveTime - token.startTime) / 1000)}s`}
-            repeatCount="1"
-            fill="freeze"
-          />
+          <title>
+            {token.messageKey} · {token.messageId}
+          </title>
         </circle>
       ))}
+      {active.length > visible.length && (
+        <text x={labelX} y={labelY - 10} textAnchor="middle" fill={strokeColor} fontSize={12}>
+          +{active.length - visible.length} records
+        </text>
+      )}
     </>
   );
-};
+});

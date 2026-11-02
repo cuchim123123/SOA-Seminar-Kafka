@@ -132,4 +132,4 @@ until their tickets are selected. Report commands actually run.
 
 See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.
 
-Simulation Playground enhancement: S1 correctness and S2 validated topology editing are implemented. Replica scaling pauses and reconciles pending deliveries; independent groups can use separate topics/database sinks. Invalid drafts cannot run. Rendering, presenter layout and session persistence remain in progress. See SIMULATION-PLAYGROUND-ENHANCEMENT-PLAN.md.
+Simulation Playground enhancement: S1 correctness, S2 validated paused scaling and S3 virtual-clock rendering are implemented. Engine/view data are separated; panels publish at 10 Hz and particles follow Pause/Step/speed. Presenter layout and session persistence remain in progress. See SIMULATION-PLAYGROUND-ENHANCEMENT-PLAN.md.

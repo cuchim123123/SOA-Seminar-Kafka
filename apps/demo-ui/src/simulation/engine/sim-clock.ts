@@ -25,11 +25,13 @@ export class SimClock {
   }
 
   public setSpeed(multiplier: number): void {
+    if (!Number.isFinite(multiplier)) return;
     this.speedMultiplier = Math.max(0.1, Math.min(10.0, multiplier));
   }
 
   public advance(realDeltaMs: number): number {
     if (this.status !== 'RUNNING') return this.virtualTimeMs;
+    if (!Number.isFinite(realDeltaMs) || realDeltaMs < 0) return this.virtualTimeMs;
     const virtualDelta = realDeltaMs * this.speedMultiplier;
     this.virtualTimeMs += virtualDelta;
     return this.virtualTimeMs;

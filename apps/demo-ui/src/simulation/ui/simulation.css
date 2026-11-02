@@ -1,0 +1,5 @@
+@media (prefers-reduced-motion: reduce) {
+  .simulation-token {
+    offset-distance: 50% !important;
+  }
+}

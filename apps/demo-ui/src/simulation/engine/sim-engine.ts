@@ -44,6 +44,7 @@ export class SimEngine {
   public roundRobinIndex: number = 0;
   public lastDispatchedMessage: SimMessage | null = null;
   private tokenSequence: number = 0;
+  public stateVersion = 0;
   private topologySignature = '';
 
   private listeners: SimEngineListener[] = [];
@@ -70,6 +71,7 @@ export class SimEngine {
   }
 
   public setTopology(nodes: SimCustomNode[], edges: SimCustomEdge[]): void {
+    const hadNodes = this.nodes.size > 0;
     const oldConsumers = new Set(
       Array.from(this.nodes.values())
         .filter((node) => node.data.kind === 'consumer')
@@ -111,7 +113,7 @@ export class SimEngine {
         .sort((a, b) => a.id.localeCompare(b.id)),
     });
     if (signature === this.topologySignature) return;
-    const wasInitialized = !!this.topologySignature;
+    const wasInitialized = !!this.topologySignature && hadNodes;
     this.topologySignature = signature;
     if (wasInitialized) {
       this.clock.pause();
@@ -359,27 +361,29 @@ export class SimEngine {
   public tick(realDeltaMs: number): void {
     if (this.clock.status !== 'RUNNING') return;
 
-    const currentVirtualTime = this.clock.advance(realDeltaMs);
-
-    let executionBudget = 20;
+    if (!Number.isFinite(realDeltaMs) || realDeltaMs < 0) return;
+    const target = this.clock.virtualTimeMs + realDeltaMs * this.clock.speedMultiplier;
+    let executionBudget = 200;
+    let executed = false;
     while (this.queue.size() > 0 && executionBudget > 0) {
-      const nextEvent = this.queue.peek();
-      if (!nextEvent || nextEvent.scheduledTime > currentVirtualTime) break;
-
-      const event = this.queue.pop()!;
-      this.executeEvent(event);
+      const next = this.queue.peek()!;
+      if (next.scheduledTime > target) break;
+      this.clock.jumpTo(next.scheduledTime);
+      this.executeEvent(this.queue.pop()!);
+      executed = true;
       executionBudget -= 1;
     }
-
-    // Clean up expired in-flight tokens
+    // If a busy frame exhausts its budget, slow virtual time rather than skip logical work.
+    if (!this.queue.peek() || this.queue.peek()!.scheduledTime > target) this.clock.jumpTo(target);
+    const previousCount = this.inFlightTokens.length;
     this.inFlightTokens = this.inFlightTokens.filter(
-      (token) => token.arriveTime > currentVirtualTime,
+      (token) => token.arriveTime > this.clock.virtualTimeMs,
     );
-
-    this.notifyStateUpdated();
+    if (executed || previousCount !== this.inFlightTokens.length) this.notifyStateUpdated();
   }
 
   public step(): SimEvent | null {
+    this.clock.pause();
     if (this.queue.size() === 0) return null;
 
     const nextEvent = this.queue.pop()!;
@@ -549,6 +553,7 @@ export class SimEngine {
   }
 
   public notifyStateUpdated(): void {
+    this.stateVersion += 1;
     // Calculate live per-partition lag and attach to Kafka Cluster nodes
     const primaryGroup =
       this.consumerGroups.get('loyalty-v1') || Array.from(this.consumerGroups.values())[0];

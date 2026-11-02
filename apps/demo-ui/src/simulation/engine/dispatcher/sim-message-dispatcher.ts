@@ -18,10 +18,6 @@ export class SimMessageDispatcher {
       targetFailedGroupIds?: string[];
     },
   ): SimMessage | null {
-    if (engine.clock.status === 'STOPPED') {
-      engine.clock.start();
-    }
-
     const producerNode = engine.nodes.get(producerNodeId);
     if (!producerNode) return null;
 
@@ -189,10 +185,6 @@ export class SimMessageDispatcher {
    * Dispatch duplicate message to test consumer idempotency filter vs phantom writes
    */
   public static dispatchDuplicateMessage(engine: SimEngine, customKey?: string): SimMessage | null {
-    if (engine.clock.status === 'STOPPED') {
-      engine.clock.start();
-    }
-
     const producerNode = Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
     if (!producerNode) return null;
 
@@ -319,10 +311,6 @@ export class SimMessageDispatcher {
     customerKey: string = 'U001',
     count: number = 3,
   ): void {
-    if (engine.clock.status === 'STOPPED') {
-      engine.clock.start();
-    }
-
     const producerNode = Array.from(engine.nodes.values()).find((n) => n.data.kind === 'producer');
     if (!producerNode) return;
 

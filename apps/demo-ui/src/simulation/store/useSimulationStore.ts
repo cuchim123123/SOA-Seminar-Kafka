@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Connection, EdgeChange, NodeChange } from '@xyflow/react';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { SimEngine } from '../engine/sim-engine';
+import { applyDiagram, captureNodeData, projectNodeViews } from './diagram-state';
+import { VirtualClockStore } from './virtual-clock-store';
 import { COMPONENT_REGISTRY, isValidConnection } from '../registry/component-registry';
 import { validateTopology } from '../domain/topology-validation';
 import { scaleConsumers } from '../domain/scale-consumers';
 import type {
   SimCustomNode,
+  SimNodeData,
   SimKafkaBrokerData,
   SimCustomEdge,
   ComponentKind,
@@ -29,6 +32,9 @@ export function useSimulationStore() {
   const engineRef = useRef<SimEngine | null>(null);
   if (!engineRef.current) engineRef.current = new SimEngine();
   const engine = engineRef.current;
+  const [frameClock] = useState(() => new VirtualClockStore());
+  const [runtimeData, setRuntimeData] = useState<ReadonlyMap<string, SimNodeData>>(new Map());
+  const snapshotVersion = useRef(-1);
 
   const [validationMessage, setValidationMessage] = useState('');
   const [nodes, setNodes] = useState<SimCustomNode[]>([]);
@@ -47,18 +53,39 @@ export function useSimulationStore() {
     setVirtualTimeMs(engine.clock.virtualTimeMs);
     setPlaybackStatus(engine.clock.status);
     setSpeedMultiplier(engine.clock.speedMultiplier);
-    setEventLog([...engine.eventLog]);
-    setInFlightTokens([...engine.inFlightTokens]);
-    setMechanicsConfig({ ...engine.mechanicsConfig });
-  }, [engine]);
+    frameClock.publish(engine.clock.virtualTimeMs);
+    if (snapshotVersion.current === engine.stateVersion) return;
+    snapshotVersion.current = engine.stateVersion;
+    setRuntimeData((previous) => captureNodeData(engine, previous));
+    setEventLog((previous) =>
+      previous.length === engine.eventLog.length &&
+      previous.every((event, index) => event === engine.eventLog[index])
+        ? previous
+        : [...engine.eventLog],
+    );
+    setInFlightTokens((previous) =>
+      previous.length === engine.inFlightTokens.length &&
+      previous.every((token, index) => token === engine.inFlightTokens[index])
+        ? previous
+        : [...engine.inFlightTokens],
+    );
+    setMechanicsConfig((previous) =>
+      JSON.stringify(previous) === JSON.stringify(engine.mechanicsConfig)
+        ? previous
+        : { ...engine.mechanicsConfig },
+    );
+  }, [engine, frameClock]);
 
   const pauseForEdit = useCallback(() => {
     engine.clock.pause();
     syncFromEngine();
   }, [engine, syncFromEngine]);
-  const topologyIssues = validateTopology(nodes, edges, new Set(engine.kafkaCluster.topics.keys()));
+  const topologyIssues = useMemo(
+    () => validateTopology(nodes, edges, new Set(engine.kafkaCluster.topics.keys())),
+    [nodes, edges, engine, runtimeData],
+  );
   const readyToExecute = useCallback(() => {
-    engine.setTopology(nodes, edges);
+    applyDiagram(engine, nodes, edges);
     const issues = validateTopology(nodes, edges, new Set(engine.kafkaCluster.topics.keys()));
     for (const topic of engine.kafkaCluster.topics.values())
       if (topic.replicationFactor > engine.kafkaCluster.brokers.size)
@@ -73,31 +100,54 @@ export function useSimulationStore() {
     return true;
   }, [engine, nodes, edges, syncFromEngine]);
 
-  // Animation frame loop when simulation is running
+  // Full panels publish at 10 Hz; only the frame-clock subscribers animate every RAF.
   useEffect(() => {
-    let animId: number;
+    if (playbackStatus !== 'RUNNING') return;
+    let animationId: number;
     let lastRealTime = performance.now();
-
-    const loop = (currentTime: number) => {
-      const deltaMs = currentTime - lastRealTime;
-      lastRealTime = currentTime;
-
-      if (engine.clock.status === 'RUNNING') {
-        engine.tick(deltaMs);
+    let lastPanelTime = lastRealTime;
+    const loop = (now: number) => {
+      if (engine.clock.status !== 'RUNNING') return;
+      engine.tick(Math.min(100, Math.max(0, now - lastRealTime)));
+      lastRealTime = now;
+      frameClock.publish(engine.clock.virtualTimeMs);
+      if (now - lastPanelTime >= 100) {
         syncFromEngine();
+        lastPanelTime = now;
       }
-
-      animId = requestAnimationFrame(loop);
+      animationId = requestAnimationFrame(loop);
     };
+    const onVisibilityChange = () => {
+      if (!document.hidden) return;
+      engine.clock.pause();
+      syncFromEngine();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    animationId = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(animationId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [engine, frameClock, playbackStatus, syncFromEngine]);
 
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
-  }, [engine, syncFromEngine]);
-
-  // Sync topology to engine whenever nodes or edges change
+  // Diagram owns geometry/configuration. Engine owns independent mutable runtime data.
   useEffect(() => {
-    engine.setTopology(nodes, edges);
-  }, [nodes, edges, engine]);
+    applyDiagram(engine, nodes, edges);
+    syncFromEngine();
+  }, [nodes, edges, engine, syncFromEngine]);
+
+  useEffect(
+    () => () => {
+      engine.clock.pause();
+    },
+    [engine],
+  );
+
+  const projectedNodes = useRef<SimCustomNode[]>([]);
+  const viewNodes = useMemo(() => {
+    projectedNodes.current = projectNodeViews(nodes, runtimeData, projectedNodes.current);
+    return projectedNodes.current;
+  }, [nodes, runtimeData]);
 
   // Node & Edge changes from React Flow
   const onNodesChange = useCallback(
@@ -531,8 +581,10 @@ export function useSimulationStore() {
       setSelectedNodeId(null);
       setActiveBlueprintId(blueprintId);
 
+      engine.nodes.clear();
+      engine.edges.clear();
       engine.reset(false);
-      engine.setTopology(clonedNodes, clonedEdges);
+      applyDiagram(engine, clonedNodes, clonedEdges);
       syncFromEngine();
     },
     [engine, syncFromEngine],
@@ -543,7 +595,7 @@ export function useSimulationStore() {
     loadBlueprint('full-enterprise-production');
   }, [loadBlueprint]);
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
+  const selectedNode = viewNodes.find((n) => n.id === selectedNodeId) || null;
 
   const crashBroker = useCallback(
     (brokerId: number) => {
@@ -836,9 +888,6 @@ export function useSimulationStore() {
       setValidationMessage('Add a Producer to the canvas first.');
       return;
     }
-    if (engine.clock.status === 'STOPPED') {
-      engine.clock.start();
-    }
     const customKey = (pNode.data.messageKey as string) || 'U001';
     engine.dispatchDuplicateMessage(customKey);
     syncFromEngine();
@@ -879,8 +928,9 @@ export function useSimulationStore() {
     topologyIssues,
     validationMessage,
     scaleGroup,
+    frameClock,
     engine,
-    nodes,
+    nodes: viewNodes,
     edges,
     selectedNode,
     selectedNodeId,
