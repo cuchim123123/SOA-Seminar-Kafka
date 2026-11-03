@@ -46,10 +46,6 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  const handleTabChange = (tab: string) => {
-    window.location.hash = tab;
-  };
-
   const fetchTelemetry = useCallback(async () => {
     try {
       const [h, meta, lLag, aLag, aStat, summ] = await Promise.all([
@@ -120,7 +116,7 @@ export function App() {
               />
             )}
 
-            {activeTab === 'guide' && <UserGuide onNavigateToTab={handleTabChange} />}
+            {activeTab === 'guide' && <UserGuide />}
           </main>
 
           {/* Footer */}
