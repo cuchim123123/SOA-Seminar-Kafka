@@ -10,6 +10,12 @@ The root `.env` supplies public `VITE_KAFBAT_URL`, `VITE_GRAFANA_URL` and `VITE_
 
 The production build creates static assets, but it does **not** bundle Vite's proxy. A static deployment needs an explicitly configured reverse proxy for the existing relative API prefixes, health routes and CDC status. SSE responses need streaming without buffering and suitable idle timeouts. No hosted deployment is configured by this feature.
 
+## Presenter preflight
+
+1. Keep one Real Application tab open. Check that the Debezium connector and its task are both running.
+2. Open Consumer Controls and select **Refresh evidence**. Both worker status feeds should be live and both Kafka lag snapshots should have observation times. Note any existing pause, delay or backlog before starting.
+3. Use a fresh synthetic customer. For the first purchase, wait for separate Loyalty and Analytics receipts before starting the pause or replay exercise.
+
 ## Purchase and projection demonstration
 
 1. Choose a fresh synthetic customer ID in the real workspace. Purchases accepts an amount in currency units with at most two decimal places;100.00 becomes10,000 cents exactly.
@@ -20,7 +26,7 @@ The production build creates static assets, but it does **not** bundle Vite's pr
 
 ## Independent groups
 
-Open Consumer Controls. Note current pause and delay settings before changing them. Pause Analytics, submit a small purchase and inspect independent Loyalty/Analytics evidence. A handler already in flight may finish after pause. Resume Analytics and observe catch-up; restore original delay and pause settings before finishing. Process-local controls are not broker administration or separately deployed replicas. No real poison injection/DLQ redrive feature is exposed.
+Open Consumer Controls. Note current pause and delay settings before changing them. Pause Analytics, submit a small purchase and inspect independent Loyalty/Analytics evidence. A handler already in flight may finish after pause. Select **Refresh evidence** to compare broker lag snapshots after CDC publishes the purchase. Resume Analytics and refresh again once the receipts arrive to observe catch-up. Restore original delay and pause settings before finishing. Process-local controls are not broker administration or separately deployed replicas. No real poison injection/DLQ redrive feature is exposed.
 
 ## Correction and replay
 

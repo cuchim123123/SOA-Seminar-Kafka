@@ -133,3 +133,5 @@ until their tickets are selected. Report commands actually run.
 See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.
 
 Simulation Playground enhancement: approved S1–S6 implementation is complete: correctness boundaries, validated paused editing/scaling, independent projections/topics, presenter controls, frame-clock rendering and retained/persisted sessions. Final checks: 314 unit tests (92 simulation), strict typecheck, lint, format, frontend build and Kafka verification passed. See docs/simulation-playground.md and docs/simulation-performance.md for usage, measured results and limits.
+
+Presenter UI follow-up: the Architecture Guide links to current real workflows, Consumer Controls shows on-demand Kafka lag evidence, and the workspace gives replay start, recovery, and global cutover distinct sections. See the presenter walkthrough for preflight and verification steps.

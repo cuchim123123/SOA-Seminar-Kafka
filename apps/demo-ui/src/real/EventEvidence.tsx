@@ -15,7 +15,6 @@ export function EventEvidence({ route }: { route: WorkspaceRoute }) {
   );
   return (
     <>
-      <h2>Event evidence</h2>
       <form
         onSubmit={(event) => {
           event.preventDefault();

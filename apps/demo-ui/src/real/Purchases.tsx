@@ -114,7 +114,7 @@ export function Purchases({ route }: { route: WorkspaceRoute }) {
               required
             />
           </label>
-          <button disabled={busy || !route.customerId || !key.trim()}>
+          <button className="real-primary" disabled={busy || !route.customerId || !key.trim()}>
             Submit / retry same intent
           </button>
           <button

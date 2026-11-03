@@ -44,7 +44,7 @@ export function WorkspaceSidebar({ route }: { route: WorkspaceRoute }) {
         }
       }}
       key={page}
-      href={routeHash({ ...route, page, real })}
+      href={routeHash({ ...route, page, real, runId: page === route.page ? route.runId : '' })}
       aria-current={route.page === page && route.real === real ? 'page' : undefined}
       title={label}
       aria-label={label}

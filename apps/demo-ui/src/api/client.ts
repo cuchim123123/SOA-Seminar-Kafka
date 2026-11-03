@@ -425,9 +425,11 @@ export const api = {
   getConsumerLag: async (
     groupId: string,
     topic: string = 'purchase.events',
+    signal?: AbortSignal,
   ): Promise<ConsumerGroupLag> => {
     return request<ConsumerGroupLag>(
-      `/api/producer/api/v1/ops/kafka/groups/${groupId}/lag?topic=${topic}`,
+      `/api/producer/api/v1/ops/kafka/groups/${encodeURIComponent(groupId)}/lag?topic=${encodeURIComponent(topic)}`,
+      { signal },
     );
   },
 

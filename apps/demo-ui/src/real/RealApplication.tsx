@@ -10,7 +10,20 @@ import { useLiveResource } from './hooks/useLiveResource';
 import { routeHash } from './state/routes';
 import type { WorkspaceRoute } from './state/routes';
 
+const pageTitles = {
+  overview: 'Overview',
+  purchases: 'Purchases',
+  loyalty: 'Loyalty Accounts',
+  analytics: 'Sales Analytics',
+  events: 'Event Evidence',
+  consumers: 'Consumer Controls',
+  recovery: 'Replay & Correction',
+};
+
 export function RealApplication({ route }: { route: WorkspaceRoute }) {
+  const showCustomer = ['overview', 'purchases', 'loyalty'].includes(route.page);
+  const title =
+    route.page in pageTitles ? pageTitles[route.page as keyof typeof pageTitles] : 'Overview';
   const [customer, setCustomer] = useState(route.customerId);
   const purchases = useLiveResource(
     'producer',
@@ -34,34 +47,33 @@ export function RealApplication({ route }: { route: WorkspaceRoute }) {
   );
   return (
     <section className="real-workspace">
-      <header>
-        <span className="badge-mono badge-emerald">Live backend</span>
-        <h1>Real Application</h1>
-        <p>
-          Source purchases and independent business projections. Updates arrive through service
-          event streams.
-        </p>
+      <header className="real-page-header">
+        <span className="real-workspace-label">Real Application</span>
+        <h1>{title}</h1>
+        {route.page === 'overview' && <p>Source purchases and independent business projections.</p>}
+        {showCustomer && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              window.location.hash = routeHash({
+                ...route,
+                customerId: customer.trim(),
+                purchaseId: '',
+              });
+            }}
+          >
+            <label>
+              Customer ID{' '}
+              <input
+                value={customer}
+                onChange={(event) => setCustomer(event.target.value)}
+                placeholder="Enter a customer ID"
+              />
+            </label>
+            <button type="submit">Select customer</button>
+          </form>
+        )}
       </header>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          window.location.hash = routeHash({
-            ...route,
-            customerId: customer.trim(),
-            purchaseId: '',
-          });
-        }}
-      >
-        <label>
-          Customer ID{' '}
-          <input
-            value={customer}
-            onChange={(event) => setCustomer(event.target.value)}
-            placeholder="Enter a customer ID"
-          />
-        </label>
-        <button type="submit">Select customer</button>
-      </form>
       {route.page === 'purchases' ? (
         <Purchases route={route} />
       ) : route.page === 'recovery' ? (

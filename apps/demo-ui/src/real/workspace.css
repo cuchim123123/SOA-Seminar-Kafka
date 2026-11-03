@@ -199,3 +199,57 @@
 .real-workspace input[type='checkbox'] {
   width: auto;
 }
+
+.real-page-header {
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.real-workspace-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.real-page-header h1 {
+  margin: 4px 0 12px;
+}
+.real-workspace button.real-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: 600;
+}
+.real-workspace button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.real-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.consumer-card form {
+  margin-top: 16px;
+}
+.consumer-evidence {
+  padding: 12px;
+  margin: 12px 0;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+}
+.consumer-evidence p {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+}
+.real-workspace article.real-cutover {
+  border-left: 4px solid var(--color-amber);
+}
+.real-guide {
+  padding: 24px;
+}
+.real-guide ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+.real-guide li + li {
+  margin-top: 8px;
+}

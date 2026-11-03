@@ -5,7 +5,7 @@ import { observeResource } from '../state/resource-observer';
 import type { ResourceState } from '../state/resource-observer';
 
 export function useLiveResource<T>(
-  service: LiveService,
+  service: LiveService | null,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
   enabled = true,
@@ -42,6 +42,13 @@ export function useLiveResource<T>(
     refresh.current = () => {
       void observer.refresh();
     };
+    if (!service) {
+      void observer.refresh();
+      return () => {
+        observer.stop();
+        refresh.current = () => undefined;
+      };
+    }
     const unsubscribe = changeSubscriptions.subscribe(service, {
       changed: () => {
         void observer.refresh();
@@ -62,7 +69,7 @@ export function useLiveResource<T>(
       ? { data: undefined, loading: true, error: null, observedAt: null }
       : {}),
     connection,
-    stale: connection !== 'live' || state.error !== null,
+    stale: (service !== null && connection !== 'live') || state.error !== null,
     refresh: () => refresh.current(),
   };
 }

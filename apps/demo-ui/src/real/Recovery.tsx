@@ -113,7 +113,7 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
   return (
     <>
       <article>
-        <h2>Replay &amp; Correction</h2>
+        <h2>Start a replay</h2>
         <p>
           Selected purchase:{' '}
           {route.purchaseId || 'Select and invalidate a purchase in Purchases first.'}
@@ -127,43 +127,52 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
               : 'Not yet observed'}
           . {barrier.stale && 'May be stale.'}
         </p>
-        <button onClick={barrier.refresh}>Refresh barrier</button>
-        <p>New replay run ID: {intent}</p>
-        <button
-          disabled={busy || !!route.runId || !barrier.data || barrier.stale || barrier.loading}
-          onClick={async () => {
-            const isCurrent = captureAction();
-            setBusy(true);
-            setMessage(
-              'Replay request in progress. The server scan continues if you leave this page.',
-            );
-            window.location.hash = routeHash({ ...route, runId: intent });
-            try {
-              await api.startReplay({ runId: intent });
-              if (!isCurrent() || !stillViewingRun(intent)) return;
-              setMessage('Replay request completed; read persisted run and staging.');
-            } catch (error) {
-              if (!isCurrent() || !stillViewingRun(intent)) return;
+        <div className="real-actions">
+          <button onClick={barrier.refresh}>Refresh barrier</button>
+          <button
+            className="real-primary"
+            disabled={busy || !!route.runId || !barrier.data || barrier.stale || barrier.loading}
+            onClick={async () => {
+              const isCurrent = captureAction();
+              setBusy(true);
               setMessage(
-                `Replay request failed or outcome unknown: ${error instanceof Error ? error.message : String(error)}. Recover the retained run ID; do not start a duplicate.`,
+                'Replay request in progress. The server scan continues if you leave this page.',
               );
-            } finally {
-              setBusy(false);
-              if (isCurrent() && stillViewingRun(intent)) refresh.current();
-            }
-          }}
-        >
-          Start bounded replay after observed invalidation
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            setIntent(crypto.randomUUID());
-            window.location.hash = routeHash({ ...route, runId: '' });
-          }}
-        >
-          Prepare new run
-        </button>
+              window.location.hash = routeHash({ ...route, runId: intent });
+              try {
+                await api.startReplay({ runId: intent });
+                if (!isCurrent() || !stillViewingRun(intent)) return;
+                setMessage('Replay request completed; read persisted run and staging.');
+              } catch (error) {
+                if (!isCurrent() || !stillViewingRun(intent)) return;
+                setMessage(
+                  `Replay request failed or outcome unknown: ${error instanceof Error ? error.message : String(error)}. Recover the retained run ID; do not start a duplicate.`,
+                );
+              } finally {
+                setBusy(false);
+                if (isCurrent() && stillViewingRun(intent)) refresh.current();
+              }
+            }}
+          >
+            Start bounded replay
+          </button>
+          {route.runId && (
+            <button
+              disabled={busy}
+              onClick={() => {
+                setIntent(crypto.randomUUID());
+                window.location.hash = routeHash({ ...route, runId: '' });
+              }}
+            >
+              Prepare new run
+            </button>
+          )}
+        </div>
+        {route.runId && <p>Selected run: {route.runId}</p>}
+        <p role="status">{message}</p>
+      </article>
+      <article>
+        <h2>Recover an existing run</h2>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -187,7 +196,6 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
           automatically launch another replay. Scanned count is persisted state, not continuous
           progress.
         </p>
-        <p role="status">{message}</p>
       </article>
       <article>
         <h2>Persisted replay state</h2>
@@ -227,7 +235,7 @@ export function Recovery({ route }: { route: WorkspaceRoute }) {
           <p>No selected-customer staging comparison observed for this run.</p>
         )}
       </article>
-      <article>
+      <article className="real-cutover">
         <h2>Global cutover for this replay run</h2>
         <p>
           All staged customers: {rows.length} · Expected eligible: {eligible} · Expected skipped:{' '}
