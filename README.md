@@ -408,14 +408,3 @@ pnpm monitoring:down
 ### Kafbat UI migration (2026-11-01)
 
 Both single-broker and replicated Compose profiles use Kafbat UI (`ghcr.io/kafbat/kafka-ui:v1.5.0`). Configure `KAFKA_UI_IMAGE` and `KAFKA_UI_PORT` in `.env`; the default UI address is http://localhost:8080. Service name: `kafbat-ui`. Run `docker compose up -d kafbat-ui` for the single-broker profile, or use `-f docker-compose.cluster.yml` for the replicated profile. If an older UI container remains after upgrading, stop and remove only that old UI container before starting Kafbat; do not delete broker or database volumes.
-
-
-## Real Application workspace
-
-The local seminar workspace is implemented: purchases and HTTP idempotency, paginated source history, independent event receipts, Loyalty/Analytics projections and observation snapshots, consumer controls, same-customer bursts, and replay with explicit all-customer cutover review. Existing Simulation, Purchase Benchmark and Guide routes remain available.
-
-Read the [presenter walkthrough](docs/real-application-walkthrough.md) for setup and scenarios. [Implementation evidence](docs/real-application-implementation-progress.md) records browser acceptance,257 unit tests, focused live integration checks and operational limits. Use one active Demo UI tab on the local Vite HTTP/1 workflow; production reverse-proxy deployment is not configured. Global cutover always covers every eligible staged customer, regardless of selected customer.
-
-Simulation Playground enhancement: approved S1–S6 implementation is complete: correctness boundaries, validated paused editing/scaling, independent projections/topics, presenter controls, frame-clock rendering and retained/persisted sessions. Final checks: 314 unit tests (92 simulation), strict typecheck, lint, format, frontend build and Kafka verification passed. See docs/simulation-playground.md and docs/simulation-performance.md for usage, measured results and limits.
-
-Presenter UI follow-up: the Architecture Guide links to current real workflows, Consumer Controls shows on-demand Kafka lag evidence, and the workspace gives replay start, recovery, and global cutover distinct sections. See the presenter walkthrough for preflight and verification steps.

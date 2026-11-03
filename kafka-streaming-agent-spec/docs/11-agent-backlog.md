@@ -121,17 +121,3 @@ until their tickets are selected. Report commands actually run.
 - [x] **ING-06 Shared Monitoring Integration**: Prometheus target (`job_name: ingress-benchmark` on port 3006) and Grafana dashboard (`ingress-benchmark.json`).
 - [x] **ING-07 Matrix Execution & Reasonableness Analysis**: 3 repetitions per cell across concurrencies 1, 16, 64 with 1 KiB payload. Complete Little's Law, RTT, and mechanical bottleneck analysis.
 
-
-
-## Milestone: Real Application workspace — local scope delivered
-
-- [x] REAL-01: bounded source history and exact purchase lookup; context-owned event receipts and HTTP error evidence.
-- [x] REAL-02: transactional server push, shared visible-page subscriptions, reconnect/resnapshot and interrupted Vite SSE regression.
-- [x] REAL-03: responsive sidebar, business/event pages, idempotency/burst exercises, observations and independent worker controls.
-- [x] REAL-04: approved coordinated cutover locking, complete global review/confirmation, isolated partial-promotion and failure acceptance; browser keyboard/layout/outage/navigation checks.
-
-See `docs/real-application-walkthrough.md` and consolidated C13 in `docs/real-application-implementation-progress.md`. Production deployment/cross-tab streaming are outside the delivered local scope; existing non-fatal bundle warnings remain.
-
-Simulation Playground enhancement: approved S1–S6 implementation is complete: correctness boundaries, validated paused editing/scaling, independent projections/topics, presenter controls, frame-clock rendering and retained/persisted sessions. Final checks: 314 unit tests (92 simulation), strict typecheck, lint, format, frontend build and Kafka verification passed. See docs/simulation-playground.md and docs/simulation-performance.md for usage, measured results and limits.
-
-Presenter UI follow-up: the Architecture Guide links to current real workflows, Consumer Controls shows on-demand Kafka lag evidence, and the workspace gives replay start, recovery, and global cutover distinct sections. See the presenter walkthrough for preflight and verification steps.
